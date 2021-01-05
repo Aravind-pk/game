@@ -22,10 +22,11 @@
 
     var e = jQuery.Event("keyup");
     // e.which is used to set the keycode
-    e.which = 40; // it is down
+    e.which = 13; // it is down
     var i;
     for (i = 0; i < 50; i++) {
         $("id_to_element").trigger(e);
+        console.log('enter');
     }
    
 </script>
