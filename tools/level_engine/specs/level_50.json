@@ -1,0 +1,201 @@
+{
+ "id": "50",
+ "title": "North Gate Stands",
+ "map": "05",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 500,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   13,
+   18,
+   1,
+   3
+  ],
+  [
+   15,
+   18,
+   2,
+   2
+  ],
+  [
+   15,
+   25,
+   2,
+   1
+  ],
+  [
+   4,
+   28,
+   1,
+   2
+  ],
+  [
+   7,
+   17,
+   2,
+   2
+  ],
+  [
+   12,
+   28,
+   1,
+   1
+  ],
+  [
+   3,
+   22,
+   1,
+   2
+  ]
+ ],
+ "no_build": [
+  [
+   10,
+   24,
+   5,
+   3
+  ],
+  [
+   3,
+   26,
+   4,
+   4
+  ],
+  [
+   12,
+   17,
+   3,
+   4
+  ],
+  [
+   9,
+   27,
+   3,
+   2
+  ],
+  [
+   9,
+   16,
+   3,
+   3
+  ]
+ ],
+ "fixed": [
+  {
+   "type": "mg",
+   "level": 1,
+   "ammo": 49,
+   "cell": [
+    9,
+    22
+   ]
+  },
+  {
+   "type": "mg",
+   "level": 1,
+   "ammo": 49,
+   "cell": [
+    14,
+    28
+   ]
+  }
+ ],
+ "hotspots": [
+  {
+   "name": "Northwest",
+   "cell": [
+    4,
+    6
+   ],
+   "delay": 0,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 2,
+     "count": 4,
+     "interval": 0.91
+    },
+    {
+     "type": "brute",
+     "level": 4,
+     "count": 1,
+     "interval": 3.5
+    }
+   ]
+  },
+  {
+   "name": "West",
+   "cell": [
+    1,
+    15
+   ],
+   "delay": 7,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 2,
+     "count": 4,
+     "interval": 0.79
+    },
+    {
+     "type": "brute",
+     "level": 4,
+     "count": 1,
+     "interval": 3.9
+    }
+   ]
+  },
+  {
+   "name": "North",
+   "cell": [
+    3,
+    9
+   ],
+   "delay": 4,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 3,
+     "count": 4,
+     "interval": 1.01
+    },
+    {
+     "type": "brute",
+     "level": 4,
+     "count": 1,
+     "interval": 3
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 2,
+   "count": 2,
+   "ammo": 162
+  },
+  {
+   "type": "cannon",
+   "level": 2,
+   "count": 1,
+   "ammo": 20
+  }
+ ],
+ "design": {
+  "target_win": 0.003,
+  "min_zone": 4,
+  "gate_margin": 0.12
+ }
+}
