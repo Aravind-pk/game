@@ -436,7 +436,7 @@ func _refresh() -> void:
 	if level == null:
 		return
 	_wave_title.text = "NORTH GATE"
-	_wave_sub.text = "Level %s · %s" % [level.id, level.title]
+	_wave_sub.text = "Level %s" % level.id
 	for gi in _cards.size():
 		UiKit.set_card_state(_cards[gi], held == gi, _dep_of_gun(gi) >= 0)
 	_refresh_hud()

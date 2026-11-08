@@ -44,6 +44,19 @@ the Forward Mobile renderer (software Vulkan), which is the same renderer phones
   saved progress.
 - 5 levels in `godot/levels/*.json`, one of them the spec's "Eastern Breach". All of it is data-driven.
 
+### Web build (playable prototype)
+
+```bash
+godot --headless --path godot --export-release "Web" ../build/web/index.html   # needs 4.5.1 export templates
+python tools/web/package_web.py build/web build/web_split                       # 9 MB chunks + loader shim
+```
+
+The Web preset (`godot/export_presets.cfg`) is single-threaded and uses the Compatibility renderer
+(the only one Godot supports on the web). Unused colour schemes and the showcase scene are left out.
+`package_web.py` splits the engine (`.wasm`) and data pack (`.pck`) into chunks for hosts with
+a per-file size limit and adds a small fetch shim that reassembles them. It writes both a standalone
+`index.html` and `artifact.html`, a fragment for hosts that supply their own page skeleton.
+
 ### Tests & balance
 
 ```bash

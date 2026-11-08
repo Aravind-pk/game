@@ -183,7 +183,7 @@ static func button(label: String, cb: Callable, variant := "secondary", icon_nam
 	else:
 		var l2 := text(label, "plate")
 		l2.add_theme_font_size_override("font_size", px(font_pt))
-		min_w = l2.get_minimum_size().x + px(32) + (px(28) if icon_name != "" else 0)
+		min_w = l2.get_minimum_size().x + px(40) + (px(30) if icon_name != "" else 0)
 		b.custom_minimum_size = Vector2(maxf(min_w, px(44)), px(64) if size == "lg" else px(44))
 	return b
 
