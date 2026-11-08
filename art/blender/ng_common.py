@@ -78,9 +78,10 @@ MONSTER_PALETTES = {
     },
 }
 
-EMISSIVE_ROLES = {"glow": 6.0, "seams": 5.0, "eyes": 4.0}
-METALLIC_ROLES = {"metal": 0.85, "frame": 0.4}
-ROUGHNESS = {"claws": 0.45, "glow": 0.3, "metal": 0.35, "secondary": 0.5,
+EMISSIVE_ROLES = {"glow": 6.0, "seams": 5.0, "eyes": 4.0, "lamp": 5.0}
+METALLIC_ROLES = {"metal": 0.85, "frame": 0.4, "steel": 0.5, "glass": 0.3}
+ROUGHNESS = {"glass": 0.15, "steel": 0.45, "concrete": 0.92, "foliage": 0.9,
+             "claws": 0.45, "glow": 0.3, "metal": 0.35, "secondary": 0.5,
              "armor": 0.85, "primary": 0.7, "joints": 0.75}
 
 

@@ -33,6 +33,7 @@ var _press_pos := Vector2.ZERO
 var _dragging := false
 var _wreck_mat: StandardMaterial3D
 var _interp := 1.0
+var _env_root: Node3D
 
 
 # ================================================================== setup
@@ -51,6 +52,8 @@ func build(lv: LevelData) -> void:
 	_wreck_mat = StandardMaterial3D.new()
 	_wreck_mat.albedo_color = Color(0.13, 0.12, 0.12)
 	_wreck_mat.roughness = 1.0
+	_env_root = Node3D.new()
+	add_child(_env_root)
 	_build_environment()
 	_build_ground()
 	_build_wall()
@@ -71,25 +74,57 @@ func cell3(c: Vector2i, h := 0.0) -> Vector3:
 
 
 func _build_environment() -> void:
+	# golden-hour key light: low, warm, long soft shadows
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-52, -40, 0)
-	sun.light_energy = 0.95
-	sun.light_color = Color(1.0, 0.94, 0.86)
+	sun.rotation_degrees = Vector3(-34, -38, 0)
+	sun.light_energy = 1.45
+	sun.light_color = Color(1.0, 0.9, 0.76)
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 120.0
+	sun.shadow_blur = 1.6
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	sun.directional_shadow_max_distance = 110.0
 	add_child(sun)
+	# cool fill from the opposite side keeps shadows blue-violet instead of black
+	var fill := DirectionalLight3D.new()
+	fill.rotation_degrees = Vector3(-50, 140, 0)
+	fill.light_energy = 0.45
+	fill.light_color = Color(0.55, 0.65, 0.95)
+	add_child(fill)
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
-	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color("#1b2430")
-	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color("#8d9bb0")
-	e.ambient_light_energy = 0.45
+	var sky_mat := ProceduralSkyMaterial.new()
+	sky_mat.sky_top_color = Color("#3a4a72")
+	sky_mat.sky_horizon_color = Color("#d9b49a")
+	sky_mat.ground_horizon_color = Color("#7f8a7a")
+	sky_mat.ground_bottom_color = Color("#2a2a30")
+	sky_mat.sun_angle_max = 30.0
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
+	e.sky = sky
+	e.background_mode = Environment.BG_SKY
+	e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	e.ambient_light_energy = 1.1
+	e.ambient_light_sky_contribution = 0.85
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	e.tonemap_exposure = 1.05
+	e.tonemap_white = 6.0
 	e.glow_enabled = true
-	e.glow_intensity = 0.5
-	e.glow_bloom = 0.08
-	e.glow_hdr_threshold = 1.1
+	e.glow_intensity = 0.7
+	e.glow_strength = 1.1
+	e.glow_bloom = 0.06
+	e.glow_hdr_threshold = 1.0
+	e.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
+	e.fog_enabled = true
+	e.fog_light_color = Color("#b8b4a8")
+	e.fog_light_energy = 0.9
+	e.fog_density = 0.0016
+	e.fog_sky_affect = 0.3
+	e.fog_height = 6.0
+	e.fog_height_density = 0.0
+	e.adjustment_enabled = true
+	e.adjustment_contrast = 1.08
+	e.adjustment_saturation = 1.18
+	e.adjustment_brightness = 1.0
 	env.environment = e
 	add_child(env)
 
@@ -101,9 +136,9 @@ func _build_camera() -> void:
 	camera.fov = 38.0
 	var vr := level.view_rect
 	var w := float(vr.size.x) * Defs.CELL
-	var centre := Vector2(vr.position.x + vr.size.x * 0.5, vr.position.y + vr.size.y * 0.56) * Defs.CELL
+	var centre := Vector2(vr.position.x + vr.size.x * 0.5, vr.position.y + vr.size.y * 0.6) * Defs.CELL
 	var target := to3(centre)
-	var pitch := deg_to_rad(54.0)
+	var pitch := deg_to_rad(47.0)
 	var dist := (w * 0.5 + 1.0) / tan(deg_to_rad(camera.fov * 0.5))
 	camera.rotation = Vector3(-pitch, 0, 0)
 	camera.position = target + Vector3(0, sin(pitch), cos(pitch)) * dist
@@ -153,189 +188,328 @@ func _hash(i: int) -> float:
 	return x - floor(x)
 
 
+func _prop(name: String, pos: Vector3, yaw := 0.0, scale := 1.0, outline := 0.035) -> Node3D:
+	var n := _load_model("res://assets/models/props/%s.glb" % name)
+	n.position = pos
+	n.rotation.y = yaw
+	n.scale = Vector3.ONE * scale
+	Stylize.apply(n, outline)
+	_env_root.add_child(n)
+	return n
+
+
 func _build_ground() -> void:
 	var ws := level.world_size()
 	var plane := PlaneMesh.new()
-	plane.size = ws + Vector2(80, 80)
+	plane.size = ws + Vector2(120, 120)
+	plane.subdivide_width = 1
 	var sh := Shader.new()
 	sh.code = """
 shader_type spatial;
-uniform vec3 grass : source_color = vec3(0.33, 0.42, 0.24);
-uniform vec3 dry : source_color = vec3(0.47, 0.46, 0.34);
-uniform vec3 dirt : source_color = vec3(0.36, 0.31, 0.25);
+render_mode diffuse_toon, specular_disabled;
+uniform vec3 grass_a : source_color = vec3(0.30, 0.42, 0.22);
+uniform vec3 grass_b : source_color = vec3(0.42, 0.50, 0.26);
+uniform vec3 dry : source_color = vec3(0.58, 0.52, 0.34);
+uniform vec3 dirt : source_color = vec3(0.42, 0.34, 0.25);
+uniform vec3 scorch : source_color = vec3(0.16, 0.13, 0.12);
+uniform vec4 hotspots[8];
+uniform int hotspot_count = 0;
 varying vec3 wp;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
 	vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
 	return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
 }
-float fbm(vec2 p) { float v = 0.0; float a = 0.5; for (int i = 0; i < 5; i++) { v += a * noise(p); p *= 2.03; a *= 0.5; } return v; }
+float fbm(vec2 p) { float v = 0.0; float a = 0.5; for (int i = 0; i < 5; i++) { v += a * noise(p); p *= 2.07; a *= 0.5; } return v; }
 void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment() {
-	float n = fbm(wp.xz * 0.06);
-	float m = fbm(wp.xz * 0.23 + 7.0);
-	float f = fbm(wp.xz * 1.7);
-	vec3 c = mix(dirt, grass, smoothstep(0.38, 0.62, n));
-	c = mix(c, dry, smoothstep(0.6, 0.85, m) * 0.45);
-	c *= 0.86 + 0.24 * f;
+	vec2 p = wp.xz;
+	float n = fbm(p * 0.045);
+	float m = fbm(p * 0.13 + 11.0);
+	float tuft = fbm(p * 0.9 + 3.0);
+	float fine = noise(p * 6.0);
+	vec3 g = mix(grass_a, grass_b, smoothstep(0.3, 0.75, m));
+	vec3 c = mix(dirt, g, smoothstep(0.26, 0.46, n));
+	c = mix(c, dry, smoothstep(0.66, 0.86, fbm(p * 0.07 + 5.0)) * 0.4);
+	c *= 0.82 + 0.28 * tuft;
+	c *= 0.94 + 0.08 * fine;
+	for (int i = 0; i < hotspot_count; i++) {
+		float d = distance(p, hotspots[i].xy);
+		c = mix(c, scorch, (1.0 - smoothstep(1.5, 4.5 + 1.5 * fbm(p * 0.6), d)) * 0.85);
+	}
 	ALBEDO = c;
-	ROUGHNESS = 0.97;
+	ROUGHNESS = 1.0;
 }
 """
 	var mat := ShaderMaterial.new()
 	mat.shader = sh
+	var hs := []
+	for h in level.hotspots:
+		var p3 := to3(level.hotspot_pos(h))
+		hs.append(Vector4(p3.x, p3.z, 0, 0))
+	while hs.size() < 8:
+		hs.append(Vector4(9999, 9999, 0, 0))
+	mat.set_shader_parameter("hotspots", hs)
+	mat.set_shader_parameter("hotspot_count", mini(level.hotspots.size(), 8))
 	_mesh(plane, mat)
+	_build_grass()
+
+
+func _build_grass() -> void:
+	# stylised grass tufts: three crossed blades per instance, swaying in the wind
+	var blade := ArrayMesh.new()
+	var verts := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	for k in 3:
+		var a := k * PI / 3.0
+		var d := Vector3(cos(a), 0, sin(a)) * 0.13
+		verts.append_array([-d, d, Vector3(0, 0.34, 0) + d * 0.3])
+		uvs.append_array([Vector2(0, 1), Vector2(1, 1), Vector2(0.5, 0)])
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = verts
+	arr[Mesh.ARRAY_TEX_UV] = uvs
+	blade.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	var sh := Shader.new()
+	sh.code = """
+shader_type spatial;
+render_mode cull_disabled, diffuse_toon, specular_disabled;
+uniform vec3 base : source_color = vec3(0.24, 0.36, 0.18);
+uniform vec3 tip : source_color = vec3(0.50, 0.60, 0.30);
+void vertex() {
+	float h = 1.0 - UV.y;
+	vec3 wpos = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+	VERTEX.x += sin(TIME * 1.7 + wpos.x * 0.4 + wpos.z * 0.3) * 0.08 * h;
+	NORMAL = vec3(0.0, 1.0, 0.0);
+}
+void fragment() {
+	ALBEDO = mix(base, tip, 1.0 - UV.y);
+	ROUGHNESS = 1.0;
+}
+"""
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	blade.surface_set_material(0, mat)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = blade
+	var ws := level.world_size()
+	var pts := []
+	var i := 0
+	while pts.size() < 9000 and i < 30000:
+		i += 1
+		var p := Vector2(_hash(i * 3 + 1000) * ws.x, _hash(i * 3 + 1001) * (level.wall_row * Defs.CELL - 1.0))
+		# clumpy distribution
+		if _hash(floori(p.x / 3.0) * 97 + floori(p.y / 3.0) * 13) < 0.35:
+			continue
+		var c := Vector2i(floori(p.x / Defs.CELL), floori(p.y / Defs.CELL))
+		if level.is_obstacle(c):
+			continue
+		pts.append(p)
+	mm.instance_count = pts.size()
+	for k in pts.size():
+		var s := 0.7 + _hash(k + 7000) * 0.9
+		var t := Transform3D(Basis(Vector3.UP, _hash(k + 9000) * TAU).scaled(Vector3(s, s * (0.8 + _hash(k) * 0.6), s)),
+			to3(pts[k]))
+		mm.set_instance_transform(k, t)
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mmi)
 
 
 func _build_wall() -> void:
 	var ws := level.world_size()
-	var concrete := _mat(Color("#5d6672"), 0.85)
-	var dark := _mat(Color("#2e3a48"), 0.7, 0.3)
-	var steel := _mat(Color("#3b4552"), 0.5, 0.6)
-	var stripe_y := _emissive(Color("#f5c56b"), 0.4)
-	var lamp := _emissive(Color("#ffcf73"), 4.0)
-	var cyan := _emissive(Color("#4fd6e0"), 3.0)
+	_env_root = _env_root if _env_root else Node3D.new()
 	var wall_z := to3(Vector2(0, level.wall_row * Defs.CELL + Defs.CELL * 0.5)).z
 	var gx0 := level.gate_cols.x * Defs.CELL - ws.x * 0.5
 	var gx1 := (level.gate_cols.y + 1) * Defs.CELL - ws.x * 0.5
-	var x := -ws.x * 0.5 - 20.0
-	var seg := 4.0
-	var idx := 0
-	while x < ws.x * 0.5 + 20.0:
-		var x1 := x + seg
-		if x1 <= gx0 - 1.0 or x >= gx1 + 1.0:
-			var h := 3.6 + (0.4 if idx % 3 == 0 else 0.0)
-			_box(Vector3(seg - 0.15, h, 1.6), concrete, Vector3(x + seg * 0.5, h * 0.5, wall_z))
-			_box(Vector3(seg - 0.1, 0.25, 1.75), dark, Vector3(x + seg * 0.5, h + 0.12, wall_z))
-			_box(Vector3(seg - 0.6, 0.18, 0.05), stripe_y, Vector3(x + seg * 0.5, 1.0, wall_z + 0.82))
-			if idx % 2 == 0:
-				_box(Vector3(0.7, h + 0.9, 2.0), dark, Vector3(x, (h + 0.9) * 0.5, wall_z))
-				_box(Vector3(0.3, 0.2, 0.2), lamp, Vector3(x, h + 1.0, wall_z + 0.9))
-		x = x1
-		idx += 1
-	# gate: towers, doors with hazard stripes, status lights
-	for side in [gx0 - 1.4, gx1 + 1.4]:
-		_box(Vector3(2.8, 7.0, 3.0), dark, Vector3(side, 3.5, wall_z))
-		_box(Vector3(3.1, 0.5, 3.3), concrete, Vector3(side, 7.25, wall_z))
-		_box(Vector3(0.5, 1.4, 0.1), cyan, Vector3(side, 4.6, wall_z + 1.52))
-		_box(Vector3(0.5, 0.35, 0.35), lamp, Vector3(side, 7.7, wall_z + 1.1))
-		_box(Vector3(2.4, 0.3, 0.06), stripe_y, Vector3(side, 2.0, wall_z + 1.52))
-	var gw := gx1 - gx0
-	var doors := Node3D.new()
+	var gcx := (gx0 + gx1) * 0.5
+	var doors := _prop("gate_doors", Vector3(gcx, 0, wall_z), 0.0, (gx1 - gx0) / 8.0)
 	doors.name = "GateDoors"
-	add_child(doors)
-	_box(Vector3(gw, 5.2, 0.9), steel, Vector3((gx0 + gx1) * 0.5, 2.6, wall_z), doors)
-	_box(Vector3(gw, 1.0, 0.06), _mat(Color("#1b222b")), Vector3((gx0 + gx1) * 0.5, 0.55, wall_z + 0.47), doors)
-	for k in 9:
-		var sx := gx0 + 0.5 + k * (gw - 1.0) / 8.0
-		var s := _box(Vector3(0.38, 1.3, 0.05), _emissive(Color("#f5c56b"), 0.7), Vector3(sx, 0.55, wall_z + 0.5), doors)
-		s.rotation.z = deg_to_rad(35)
-	_box(Vector3(gw * 0.5, 0.7, 0.06), _emissive(Color("#4fd6e0"), 1.2), Vector3((gx0 + gx1) * 0.5, 4.3, wall_z + 0.48), doors)
-	var sign := Label3D.new()
-	sign.text = "G-01  NORTH GATE"
-	sign.font_size = 64
-	sign.pixel_size = 0.012
-	sign.modulate = Color("#0f1722")
-	sign.position = Vector3((gx0 + gx1) * 0.5, 4.3, wall_z + 0.53)
-	doors.add_child(sign)
-	_box(Vector3(0.08, 4.2, 0.06), dark, Vector3((gx0 + gx1) * 0.5, 2.2, wall_z + 0.47), doors)
-	# settlement behind the wall
-	for i in 14:
-		var bx := -ws.x * 0.5 + 3.0 + i * (ws.x - 6.0) / 13.0
-		var bh := 4.0 + _hash(i + 50) * 6.0
-		_box(Vector3(3.2, bh, 3.0), _mat(Color("#3a4350").lerp(Color("#566170"), _hash(i)), 0.8),
-			Vector3(bx, bh * 0.5, wall_z + 6.0 + _hash(i + 9) * 3.0))
+	_prop("gate_tower", Vector3(gx0 - 1.6, 0, wall_z), 0.0)
+	_prop("gate_tower", Vector3(gx1 + 1.6, 0, wall_z), 0.0)
+	# modular wall sections outward from the towers
+	var idx := 0
+	var x := gx1 + 3.1 + 2.0
+	while x < ws.x * 0.5 + 24.0:
+		_prop("logo_wall" if idx == 1 else "wall_segment", Vector3(x, 0, wall_z), 0.0)
+		x += 4.0
+		idx += 1
+	idx = 0
+	x = gx0 - 3.1 - 2.0
+	while x > -ws.x * 0.5 - 24.0:
+		_prop("wall_segment", Vector3(x, 0, wall_z), 0.0)
+		x -= 4.0
+		idx += 1
+	# lamp posts in front of the wall, warm pools of light
+	for lx in [gx0 - 6.0, gx1 + 6.0, -ws.x * 0.5 + 5.0, ws.x * 0.5 - 5.0]:
+		var lp := _prop("lamp_post", Vector3(lx, 0, wall_z - 2.6), PI * 0.5 if lx < 0 else -PI * 0.5)
+		var light := OmniLight3D.new()
+		light.light_color = Color("#ffc070")
+		light.light_energy = 2.0
+		light.omni_range = 9.0
+		light.position = Vector3(lx, 4.6, wall_z - 2.6)
+		_env_root.add_child(light)
+	# settlement silhouettes behind the wall
+	for i in 12:
+		var bx := -ws.x * 0.5 - 6.0 + i * (ws.x + 12.0) / 11.0
+		var bh := 6.0 + _hash(i + 50) * 9.0
+		var b := _box(Vector3(5.0, bh, 4.0), _mat(Color("#3b4350").lerp(Color("#59606a"), _hash(i)), 0.9),
+			Vector3(bx, bh * 0.5, wall_z + 7.0 + _hash(i + 9) * 4.0), _env_root)
+		Stylize.apply(b, 0.0)
 
 
+## Obstacle rectangles (cells) -> ruins / containers / wrecks that fill the footprint.
 func _build_obstacles() -> void:
-	var concrete := _mat(Color("#7c8189"), 0.9)
-	var rubble := _mat(Color("#62666c"), 0.95)
-	var rust := _mat(Color("#7a4a33"), 0.8, 0.2)
 	for i in level.obstacles.size():
 		var r: Rect2i = level.obstacles[i]
 		var centre := (Vector2(r.position) + Vector2(r.size) * 0.5) * Defs.CELL
-		var size := Vector2(r.size) * Defs.CELL
 		var p := to3(centre)
-		var kind := i % 3
-		if kind == 0:  # broken concrete ruin
-			var h := 1.6 + _hash(i) * 1.6
-			_box(Vector3(size.x * 0.9, h, size.y * 0.8), concrete, p + Vector3(0, h * 0.5, 0))
-			_box(Vector3(size.x * 0.5, h * 0.6, 0.4), concrete, p + Vector3(-size.x * 0.2, h * 1.25, 0))
-			var chunk := _box(Vector3(0.8, 0.5, 0.7), rubble, p + Vector3(size.x * 0.45, 0.25, size.y * 0.45))
-			chunk.rotation.y = 0.6
-		elif kind == 1:  # rock outcrop
-			for k in 3:
-				var s := SphereMesh.new()
-				s.radius = 0.9 + _hash(i * 3 + k) * 0.5
-				s.height = s.radius * 1.4
-				s.radial_segments = 7
-				s.rings = 4
-				var mi := _mesh(s, rubble, p + Vector3((k - 1) * size.x * 0.28, 0.4, (_hash(k + i) - 0.5) * size.y * 0.5))
-				mi.rotation = Vector3(_hash(k) * 2.0, _hash(k + 1) * 3.0, 0)
-		else:  # abandoned container / vehicle
-			_box(Vector3(size.x * 0.85, 1.5, size.y * 0.75), rust, p + Vector3(0, 0.75, 0))
-			_box(Vector3(size.x * 0.86, 0.1, size.y * 0.76), _mat(Color("#5a3626")), p + Vector3(0, 1.52, 0))
+		var long_x := r.size.x >= r.size.y
+		var yaw := 0.0 if long_x else PI * 0.5
+		var span := maxi(r.size.x, r.size.y)
+		var flip := PI if _hash(i + 3) > 0.5 else 0.0
+		if r.size.x >= 2 and r.size.y >= 2:
+			_prop("ruin_corner" if i % 2 == 0 else "block_pile", p, _hash(i) * TAU, 1.0)
+		elif span >= 3:
+			_prop("container", p, yaw + flip, float(span) * Defs.CELL / 6.2)
+		elif span == 2:
+			_prop(["ruin_wall", "car", "barrier"][i % 3], p, yaw + flip, 1.0)
+		else:
+			_prop(["ruin_pillar", "rocks", "block_pile"][i % 3], p, _hash(i) * TAU, 0.6 if i % 3 == 2 else 0.8)
 
 
+## Set dressing: dense ruins and pine woods around the edges, sparse low clutter in the field.
 func _build_scatter() -> void:
 	var ws := level.world_size()
-	var rock := _mat(Color("#6b6f73"), 0.95)
-	var trunk := _mat(Color("#4a3b2e"), 0.9)
-	var leaf := _mat(Color("#33452b"), 0.9)
-	for i in 70:
-		var p := Vector2(_hash(i * 2) * ws.x, _hash(i * 2 + 1) * (level.wall_row - 1) * Defs.CELL)
+	var vr := level.view_rect
+	var field := Rect2(Vector2(vr.position) * Defs.CELL, Vector2(vr.size) * Defs.CELL).grow(-0.5)
+	var big := ["pine", "pine", "pine", "ruin_wall", "ruin_pillar", "block_pile", "container", "car", "ruin_corner"]
+	var placed := []
+	var tries := 0
+	while placed.size() < 70 and tries < 900:
+		tries += 1
+		var p := Vector2(_hash(tries * 5) * (ws.x + 20.0) - 10.0, _hash(tries * 5 + 1) * (level.wall_row * Defs.CELL - 4.0))
+		if field.has_point(p):
+			continue
+		var near := false
+		for h in level.hotspots:
+			if p.distance_to(level.hotspot_pos(h)) < 4.5:
+				near = true
+		for q in placed:
+			if p.distance_to(q) < 3.2:
+				near = true
+		if near:
+			continue
+		placed.append(p)
+		var kind: String = big[int(_hash(tries * 5 + 2) * big.size()) % big.size()]
+		var s := 0.8 + _hash(tries * 5 + 3) * 0.5
+		_prop(kind, to3(p), _hash(tries * 5 + 4) * TAU, s)
+	# inside the field: only low clutter that doesn't read as an obstacle
+	for k in 26:
+		var p := Vector2(field.position.x + _hash(k * 7 + 500) * field.size.x,
+			field.position.y + _hash(k * 7 + 501) * (field.size.y - 4.0))
 		var c := Vector2i(floori(p.x / Defs.CELL), floori(p.y / Defs.CELL))
-		if level.view_rect.has_point(c) and _hash(i + 300) < 0.75:
-			continue  # keep the playfield readable; mostly decorate the edges
-		if i % 4 == 0:
-			_box(Vector3(0.18, 1.8, 0.18), trunk, to3(p, 0.9))
-			var s := SphereMesh.new()
-			s.radius = 1.0
-			s.height = 1.6
-			_mesh(s, leaf, to3(p, 2.2))
-		else:
-			var s := SphereMesh.new()
-			s.radius = 0.25 + _hash(i + 77) * 0.35
-			s.height = s.radius * 1.2
-			s.radial_segments = 6
-			s.rings = 3
-			_mesh(s, rock, to3(p, 0.1))
+		if level.is_obstacle(c):
+			continue
+		_prop("bush" if k % 3 else "rocks", to3(p), _hash(k + 40) * TAU, 0.45 + _hash(k + 41) * 0.35, 0.02)
 
 
 func _build_hotspots() -> void:
-	var sh := Shader.new()
-	sh.code = """
-shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_disabled;
-uniform float intensity = 0.25;
-uniform vec3 glow : source_color = vec3(1.0, 0.32, 0.12);
-vec2 h2(vec2 p) { p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
-float edge(vec2 p) {
-	vec2 i = floor(p); vec2 f = fract(p); float d1 = 8.0; float d2 = 8.0;
-	for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
-		vec2 g = vec2(float(x), float(y)); vec2 o = h2(i + g); float d = length(g + o - f);
-		if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
-	}
-	return d2 - d1;
-}
-void fragment() {
-	vec2 uv = UV - 0.5; float r = length(uv) * 2.0;
-	float cracks = 1.0 - smoothstep(0.0, 0.09, edge(uv * 7.0));
-	float fall = 1.0 - smoothstep(0.25, 1.0, r);
-	float a = cracks * fall;
-	ALBEDO = mix(vec3(0.08, 0.05, 0.04), glow * 2.5, intensity);
-	EMISSION = glow * a * intensity * 6.0;
-	ALPHA = clamp(a * (0.55 + intensity) + fall * 0.25 * intensity, 0.0, 1.0);
-}
-"""
 	for h in level.hotspots:
-		var plane := PlaneMesh.new()
-		plane.size = Vector2(5.5, 5.5)
-		var mat := ShaderMaterial.new()
-		mat.shader = sh
-		mat.set_shader_parameter("intensity", 0.22)
-		var mi := _mesh(plane, mat, to3(level.hotspot_pos(h), 0.03))
-		_hotspot_nodes.append(mi)
+		var p := to3(level.hotspot_pos(h))
+		var crater := _prop("crater", p, _hash(int(p.x * 10.0)) * TAU, 1.0, 0.02)
+		var mats := []
+		for mi in crater.find_children("*", "MeshInstance3D", true, false):
+			for s in (mi as MeshInstance3D).mesh.get_surface_count():
+				var m := (mi as MeshInstance3D).get_active_material(s) as StandardMaterial3D
+				if m and m.emission_enabled:
+					m = m.duplicate()
+					(mi as MeshInstance3D).set_surface_override_material(s, m)
+					mats.append(m)
+		var light := OmniLight3D.new()
+		light.light_color = Color("#ff6a2a")
+		light.light_energy = 1.2
+		light.omni_range = 7.0
+		light.position = p + Vector3(0, 1.0, 0)
+		_env_root.add_child(light)
+		var smoke := CPUParticles3D.new()
+		smoke.amount = 14
+		smoke.lifetime = 4.0
+		smoke.preprocess = 4.0
+		smoke.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+		smoke.emission_sphere_radius = 1.0
+		smoke.direction = Vector3(0.2, 1, 0)
+		smoke.spread = 15.0
+		smoke.initial_velocity_min = 0.6
+		smoke.initial_velocity_max = 1.1
+		smoke.gravity = Vector3(0.15, 0.1, 0)
+		smoke.scale_amount_min = 1.0
+		smoke.scale_amount_max = 2.2
+		var curve := Curve.new()
+		curve.add_point(Vector2(0, 0.4))
+		curve.add_point(Vector2(1, 1.6))
+		smoke.scale_amount_curve = curve
+		var grad := Gradient.new()
+		grad.set_color(0, Color(0.45, 0.4, 0.38, 0.0))
+		grad.add_point(0.15, Color(0.42, 0.38, 0.36, 0.45))
+		grad.set_color(grad.get_point_count() - 1, Color(0.5, 0.48, 0.48, 0.0))
+		smoke.color_ramp = grad
+		var q := QuadMesh.new()
+		q.size = Vector2(1.6, 1.6)
+		var sm := StandardMaterial3D.new()
+		sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		sm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		sm.vertex_color_use_as_albedo = true
+		sm.albedo_texture = _soft_dot()
+		q.material = sm
+		smoke.mesh = q
+		smoke.position = p + Vector3(0, 0.4, 0)
+		_env_root.add_child(smoke)
+		var embers := CPUParticles3D.new()
+		embers.amount = 10
+		embers.lifetime = 1.6
+		embers.preprocess = 2.0
+		embers.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+		embers.emission_sphere_radius = 0.9
+		embers.direction = Vector3(0, 1, 0)
+		embers.spread = 25.0
+		embers.initial_velocity_min = 1.0
+		embers.initial_velocity_max = 2.2
+		embers.gravity = Vector3(0, -0.5, 0)
+		var eq := QuadMesh.new()
+		eq.size = Vector2(0.12, 0.12)
+		eq.material = _emissive(Color("#ff8a3a"), 6.0)
+		(eq.material as StandardMaterial3D).billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		embers.mesh = eq
+		embers.position = p + Vector3(0, 0.2, 0)
+		_env_root.add_child(embers)
+		_hotspot_nodes.append({"mats": mats, "light": light})
+	_set_hotspot_intensity(0.35)
+
+
+func _set_hotspot_intensity(v: float) -> void:
+	for h in _hotspot_nodes:
+		for m in h.mats:
+			(m as StandardMaterial3D).emission_energy_multiplier = 1.5 + v * 6.0
+		(h.light as OmniLight3D).light_energy = 0.6 + v * 2.5
+
+
+var _dot_tex: Texture2D
+
+
+func _soft_dot() -> Texture2D:
+	if _dot_tex:
+		return _dot_tex
+	var img := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+	for y in 64:
+		for x in 64:
+			var d := Vector2(x - 31.5, y - 31.5).length() / 32.0
+			img.set_pixel(x, y, Color(1, 1, 1, clampf(1.0 - d, 0.0, 1.0) ** 1.8))
+	_dot_tex = ImageTexture.create_from_image(img)
+	return _dot_tex
 
 
 func _build_grid() -> void:
@@ -458,8 +632,7 @@ func show_deployment(deployment: Array) -> void:
 	_clear_dynamic()
 	for i in deployment.size():
 		_add_gun_node(i, deployment[i])
-	for h in _hotspot_nodes:
-		(h.material_override as ShaderMaterial).set_shader_parameter("intensity", 0.22)
+	_set_hotspot_intensity(0.35)
 
 
 func _clear_dynamic() -> void:
@@ -476,6 +649,7 @@ func _add_gun_node(id: int, d: Dictionary) -> Node3D:
 	root.position = cell3(d.cell)
 	var model := gun_model(d.type)
 	model.scale = Vector3.ONE * GUN_SCALE
+	Stylize.apply(model, 0.025)
 	root.add_child(model)
 	var head := _head_of(model)
 	if head:
@@ -511,6 +685,7 @@ func set_held(type: String) -> void:
 	_ghost = Node3D.new()
 	var model := gun_model(type)
 	model.scale = Vector3.ONE * GUN_SCALE
+	Stylize.apply(model, 0.025)
 	_ghost.add_child(model)
 	var head := _head_of(model)
 	if head:
@@ -624,6 +799,7 @@ func _spawn_monster_node(m: Dictionary) -> Node3D:
 	var root := Node3D.new()
 	var model := monster_model(m.type)
 	model.scale = Vector3.ONE * float(Defs.MONSTERS[m.type].model_scale) * MONSTER_SCALE
+	Stylize.apply(model, 0.025)
 	root.add_child(model)
 	var bar := _bar(1.2, Color("#ff6b63"))
 	bar.name = "HP"
@@ -674,10 +850,12 @@ func _fade_free(node: Node3D, time: float, grow := 1.0) -> void:
 
 
 func _fx_warning(hi: int) -> void:
-	var mi: MeshInstance3D = _hotspot_nodes[hi]
-	var mat := mi.material_override as ShaderMaterial
+	var h: Dictionary = _hotspot_nodes[hi]
 	var tw := create_tween()
-	tw.tween_method(func(v): mat.set_shader_parameter("intensity", v), 0.22, 1.0, Defs.EMERGE_WARN)
+	tw.tween_method(func(v: float):
+		for m in h.mats:
+			(m as StandardMaterial3D).emission_energy_multiplier = 1.5 + v * 6.0
+		(h.light as OmniLight3D).light_energy = 0.6 + v * 2.5, 0.35, 1.0, Defs.EMERGE_WARN)
 	# dust puffs while the ground shakes
 	for k in 5:
 		var p := level.hotspot_pos(level.hotspots[hi]) + Vector2(cos(k * 1.3), sin(k * 1.3)) * 1.4
@@ -820,10 +998,13 @@ func _fx_gun_destroyed(id: int) -> void:
 
 
 func shake_gate() -> void:
-	var doors := get_node_or_null("GateDoors") as Node3D
+	var doors := find_child("GateDoors", true, false) as Node3D
 	if doors == null:
 		return
+	if not doors.has_meta("x0"):
+		doors.set_meta("x0", doors.position.x)
+	var x0: float = doors.get_meta("x0")
 	var tw := create_tween()
-	tw.tween_property(doors, "position:x", 0.12, 0.04)
-	tw.tween_property(doors, "position:x", -0.12, 0.04)
-	tw.tween_property(doors, "position:x", 0.0, 0.04)
+	tw.tween_property(doors, "position:x", x0 + 0.12, 0.04)
+	tw.tween_property(doors, "position:x", x0 - 0.12, 0.04)
+	tw.tween_property(doors, "position:x", x0, 0.04)

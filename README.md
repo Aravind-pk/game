@@ -18,6 +18,16 @@ tap the field; tap a placed turret to pick it up, drag to move) → **DEFEND** (
 
 ![Game flow](docs/screenshots/flow.png)
 
+**Look:** anime cel shading (toon diffuse + ink outlines, `scripts/game/stylize.gd`), golden-hour
+key light with a cool fill, a dusk sky for ambient light, light haze, colour grading and glow. The
+battlefield is dressed with procedural props (`art/blender/ng_props.py` → `assets/models/props/`):
+ruined walls and pillars with rebar, block piles, barriers, containers, wrecked cars, pine woods,
+lamp posts, smoking spawn craters and a modular fortified wall and gate. Grass is a wind-swayed
+MultiMesh. Obstacles in the level data become ruins, wrecks or containers. Screenshots are rendered with
+the Forward Mobile renderer (software Vulkan), which is the same renderer phones use.
+
+![Battlefield](docs/screenshots/battlefield.png)
+
 ### What's implemented (MVP)
 
 - Deterministic fixed-step simulation (`scripts/sim/battle_sim.gd`), fully separate from visuals.
@@ -47,7 +57,7 @@ prove the level is solvable. Current curve, as the share of random deployments t
 L1 62% · L2 22% · L3 22% · L4 22% · L5 8%.
 
 Screenshots, rendered headless with Xvfb:
-`godot --path godot --rendering-driver opengl3 -- level=05 phase=combat shot=out.png shot_time=20`
+`godot --path godot --rendering-method mobile -- level=05 phase=combat shot=out.png shot_time=20`
 (phases: briefing, deploy, radar, combat, result).
 
 ## Repository layout
@@ -62,7 +72,7 @@ godot/
   assets/ui/icons/   Generated model icons
 art/
   concepts/          Concept sheets
-  blender/           Procedural model scripts (source of truth), see below
+  blender/           Procedural model scripts (source of truth): units (build_all.py), props (build_props.py)
   previews/          Renders, colour-study sheets, TripoSR comparison
 tools/triposr/       CPU TripoSR runner used for the comparison
 ```

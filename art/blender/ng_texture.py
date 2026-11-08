@@ -18,6 +18,7 @@ import bpy
 from ng_common import EMISSIVE_ROLES
 
 STONE_ROLES = {"armor", "primary", "joints"}  # monster surfaces that get rock grain
+PROP_STONE = {"concrete", "concrete_dark", "rock"}  # prop surfaces that get cracks
 
 
 def _meshes():
@@ -72,7 +73,7 @@ def _detail_graph(nt, kind, role):
     noise.inputs["Roughness"].default_value = 0.6
     L.new(tc.outputs["Object"], noise.inputs["Vector"])
     mottle = N.new("ShaderNodeMapRange")
-    lo, hi = (0.72, 1.08) if kind == "monster" else (0.88, 1.03)
+    lo, hi = {"monster": (0.72, 1.08), "prop": (0.7, 1.1)}.get(kind, (0.88, 1.03))
     mottle.inputs["From Min"].default_value = 0.35
     mottle.inputs["From Max"].default_value = 0.65
     mottle.inputs["To Min"].default_value = lo
@@ -80,7 +81,7 @@ def _detail_graph(nt, kind, role):
     L.new(noise.outputs["Fac"], mottle.inputs["Value"])
 
     val = mottle.outputs["Result"]
-    if kind == "monster" and role in STONE_ROLES:
+    if (kind == "monster" and role in STONE_ROLES) or (kind == "prop" and role in PROP_STONE):
         # thin dark crack lines from voronoi edges
         vor = N.new("ShaderNodeTexVoronoi")
         vor.feature = "DISTANCE_TO_EDGE"
@@ -122,7 +123,7 @@ def _height_graph(nt, kind, role):
     bump.inputs["Strength"].default_value = 0.45 if kind == "monster" else 0.12
     bump.inputs["Distance"].default_value = 0.02
     h = noise.outputs["Fac"]
-    if kind == "monster" and role in STONE_ROLES:
+    if (kind == "monster" and role in STONE_ROLES) or (kind == "prop" and role in PROP_STONE):
         vor = N.new("ShaderNodeTexVoronoi")
         vor.feature = "DISTANCE_TO_EDGE"
         vor.inputs["Scale"].default_value = 7.0
