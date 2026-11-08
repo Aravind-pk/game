@@ -20,9 +20,12 @@ func _init() -> void:
 	var dir := DirAccess.open("res://levels")
 	var files := Array(dir.get_files()).filter(func(f): return f.begins_with("level_") and f.ends_with(".json"))
 	files.sort()
+	if only != "":  # open only the requested file, so a level being rewritten elsewhere can't break the run
+		files = files.filter(func(f): return f == "level_%s.json" % only)
 	for f in files:
 		var lv := LevelData.load_file("res://levels/" + f)
-		if only != "" and lv.id != only:
+		if lv == null:
+			_failures += 1
 			continue
 		_check_level(lv, trials)
 	print("RESULT: %s" % ("PASS" if _failures == 0 else "FAIL (%d)" % _failures))
