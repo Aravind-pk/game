@@ -168,7 +168,7 @@ func _hash(i: int) -> float:
 ## behind the wall and ruins. Everything static lives in the image.
 const BG_SHADER := """
 shader_type spatial;
-render_mode ambient_light_disabled, specular_disabled, cull_back;
+render_mode ambient_light_disabled, specular_disabled, cull_back%s;
 uniform sampler2D bg : source_color, filter_linear;
 uniform float v_scale = 1.0;
 uniform float shadow_floor = 0.6;
@@ -181,8 +181,10 @@ void light() {
 }
 """
 
-var _bg_mat: ShaderMaterial
+var _bg_mat: ShaderMaterial      # occluders (writes depth)
+var _ground_mat: ShaderMaterial  # ground (no depth write, so sprite cards can sink below it)
 var _cam: Dictionary = {}
+var _sprites: Dictionary = {}
 
 
 func _load_cam() -> void:
@@ -190,20 +192,26 @@ func _load_cam() -> void:
 	_cam = JSON.parse_string(f.get_as_text())
 
 
-func _build_ground() -> void:
+func _projector(depth_mode: String) -> ShaderMaterial:
 	var sh := Shader.new()
-	sh.code = BG_SHADER
-	_bg_mat = ShaderMaterial.new()
-	_bg_mat.shader = sh
+	sh.code = BG_SHADER % depth_mode
+	var m := ShaderMaterial.new()
+	m.shader = sh
 	var p := "res://assets/backgrounds/level_%s.jpg" % level.id
-	_bg_mat.set_shader_parameter("bg", load(p) if ResourceLoader.exists(p) else null)
+	m.set_shader_parameter("bg", load(p) if ResourceLoader.exists(p) else null)
+	return m
+
+
+func _build_ground() -> void:
+	_bg_mat = _projector("")
+	_ground_mat = _projector(", depth_draw_never")
 	_update_bg_scale()
 	if not get_viewport().size_changed.is_connected(_update_bg_scale):
 		get_viewport().size_changed.connect(_update_bg_scale)
 	var ws := level.world_size()
 	var plane := PlaneMesh.new()
 	plane.size = ws + Vector2(160, 160)
-	var g := _mesh(plane, _bg_mat)
+	var g := _mesh(plane, _ground_mat)
 	g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
@@ -212,7 +220,8 @@ func _update_bg_scale() -> void:
 		return
 	var vs := get_viewport().get_visible_rect().size
 	var img_aspect := float(_cam.image_h) / float(_cam.image_w)
-	_bg_mat.set_shader_parameter("v_scale", (vs.y / vs.x) / img_aspect)
+	for m in [_bg_mat, _ground_mat]:
+		m.set_shader_parameter("v_scale", (vs.y / vs.x) / img_aspect)
 
 
 func _occluder(size: Vector3, pos: Vector3) -> void:
@@ -235,29 +244,58 @@ func _build_wall() -> void:
 		_occluder(Vector3(tw, 7.4 * s, tw), Vector3(tx, 0, zc))
 
 
-const OBSTACLE_HEIGHT := {"ruin_corner": 3.0, "block_pile": 1.8, "container": 2.5, "ruin_wall": 2.4,
-	"car": 1.4, "barrier": 0.8, "ruin_pillar": 2.6, "rocks": 0.7}
+## Gameplay obstacles are 2D sprites rendered from the game camera (render_prop_sprites.py).
+## Each is a camera-facing card centred on its ground point at the background's pixel density;
+## because the card's depth equals its ground point's depth, units north of it are hidden behind
+## it and units south of it draw over it.
+func _load_sprites() -> void:
+	if not _sprites.is_empty():
+		return
+	var f := FileAccess.open("res://assets/sprites/props/props.json", FileAccess.READ)
+	if f:
+		_sprites = JSON.parse_string(f.get_as_text())
 
 
-## Same kind rule as render_backgrounds.py::obstacle_kind; boxes approximate each prop.
+func _prop_sprite(name: String, ground: Vector2, scale := 1.0) -> void:
+	var path := "res://assets/sprites/props/%s.png" % name
+	if not ResourceLoader.exists(path):
+		return
+	var spr := Sprite3D.new()
+	spr.texture = load(path)
+	spr.pixel_size = 1.0 / float(_sprites.get("px_per_m", 40.0))
+	spr.shaded = false
+	spr.transparent = true
+	spr.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
+	spr.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	spr.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	spr.rotation = Vector3(-deg_to_rad(float(_cam.pitch_deg)), 0, 0)
+	spr.position = to3(ground)
+	spr.scale = Vector3.ONE * scale
+	_env_root.add_child(spr)
+
+
 func _build_obstacles() -> void:
+	_load_sprites()
 	for i in level.obstacles.size():
 		var r: Rect2i = level.obstacles[i]
 		var span := maxi(r.size.x, r.size.y)
-		var kind := ""
+		var vertical := r.size.y > r.size.x
+		var ab := "a" if i % 2 == 0 else "b"
+		var dir := "90" if vertical else "0"
+		var name := ""
 		var sc := 1.0
 		if r.size.x >= 2 and r.size.y >= 2:
-			kind = "ruin_corner" if i % 2 == 0 else "block_pile"
+			name = ("ruin_corner_" if i % 2 == 0 else "block_pile_") + ab
 		elif span >= 3:
-			kind = "container"
+			name = "container_" + dir
+			sc = span * Defs.CELL / 6.2
 		elif span == 2:
-			kind = ["ruin_wall", "car", "barrier"][i % 3]
+			name = ["ruin_wall_", "car_", "barrier_"][i % 3] + dir
 		else:
-			kind = ["ruin_pillar", "rocks", "block_pile"][i % 3]
+			name = ["ruin_pillar_", "rocks_", "block_pile_"][i % 3] + ab
 			sc = 0.6 if i % 3 == 2 else 0.8
 		var centre := (Vector2(r.position) + Vector2(r.size) * 0.5) * Defs.CELL
-		var fp := Vector2(r.size) * Defs.CELL * 0.75
-		_occluder(Vector3(fp.x, OBSTACLE_HEIGHT[kind] * sc, fp.y), to3(centre))
+		_prop_sprite(name, centre, sc)
 
 
 func _build_scatter() -> void:

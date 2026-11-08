@@ -317,16 +317,8 @@ def build_scene(lv, cam_cfg):
     scatter_grass(area, tuft_object())
     area.location.z = 0.002
 
-    # level obstacles (the only props inside the field)
-    for i, r in enumerate(lv.get("obstacles", [])):
-        kind, s = obstacle_kind(i, r)
-        cx = (r[0] + r[2] / 2) * CELL
-        cy = (r[1] + r[3] / 2) * CELL
-        long_x = r[2] >= r[3]
-        yaw = 0 if long_x else 90
-        if kind in ("ruin_corner", "block_pile", "ruin_pillar", "rocks"):
-            yaw = (i * 137) % 360
-        place(kind, None, B(cx, cy, lv), yaw, s)
+    # level obstacles are NOT baked: the game places them as sprites (render_prop_sprites.py)
+    # so level layouts stay data-driven and monsters can walk behind them.
 
     # craters at every hotspot
     for k, h in enumerate(lv["hotspots"]):
