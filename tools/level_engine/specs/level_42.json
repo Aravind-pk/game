@@ -1,0 +1,168 @@
+{
+ "id": "42",
+ "title": "Old Guard",
+ "map": "02",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 500,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   9,
+   24,
+   1,
+   1
+  ],
+  [
+   6,
+   25,
+   1,
+   2
+  ],
+  [
+   6,
+   18,
+   2,
+   1
+  ],
+  [
+   3,
+   25,
+   1,
+   3
+  ],
+  [
+   16,
+   16,
+   1,
+   1
+  ]
+ ],
+ "no_build": [
+  [
+   9,
+   18,
+   4,
+   3
+  ],
+  [
+   3,
+   29,
+   2,
+   2
+  ],
+  [
+   5,
+   25,
+   3,
+   4
+  ]
+ ],
+ "fixed": [
+  {
+   "type": "mg",
+   "level": 1,
+   "ammo": 49,
+   "cell": [
+    8,
+    26
+   ]
+  }
+ ],
+ "hotspots": [
+  {
+   "name": "Northeast",
+   "cell": [
+    16,
+    7
+   ],
+   "delay": 0,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 2,
+     "count": 4,
+     "interval": 0.7
+    },
+    {
+     "type": "brute",
+     "level": 3,
+     "count": 1,
+     "interval": 3.5
+    }
+   ]
+  },
+  {
+   "name": "East",
+   "cell": [
+    18,
+    19
+   ],
+   "delay": 3,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 3,
+     "count": 4,
+     "interval": 1.3
+    },
+    {
+     "type": "brute",
+     "level": 3,
+     "count": 1,
+     "interval": 3.9
+    }
+   ]
+  },
+  {
+   "name": "North",
+   "cell": [
+    14,
+    6
+   ],
+   "delay": 5,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 2,
+     "count": 4,
+     "interval": 0.99
+    },
+    {
+     "type": "brute",
+     "level": 3,
+     "count": 1,
+     "interval": 3.9
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 2,
+   "count": 2,
+   "ammo": 162
+  },
+  {
+   "type": "cannon",
+   "level": 2,
+   "count": 1,
+   "ammo": 20
+  }
+ ],
+ "design": {
+  "target_win": 0.0366,
+  "min_zone": 4,
+  "gate_margin": 0.12
+ }
+}

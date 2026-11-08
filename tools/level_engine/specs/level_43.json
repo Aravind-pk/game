@@ -1,0 +1,142 @@
+{
+ "id": "43",
+ "title": "Stand Fast",
+ "map": "03",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 500,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   6,
+   19,
+   1,
+   2
+  ],
+  [
+   4,
+   22,
+   2,
+   2
+  ],
+  [
+   11,
+   23,
+   2,
+   1
+  ],
+  [
+   13,
+   19,
+   3,
+   1
+  ],
+  [
+   5,
+   27,
+   3,
+   1
+  ]
+ ],
+ "fixed": [
+  {
+   "type": "cannon",
+   "level": 1,
+   "ammo": 3,
+   "cell": [
+    11,
+    24
+   ]
+  }
+ ],
+ "hotspots": [
+  {
+   "name": "North",
+   "cell": [
+    11,
+    8
+   ],
+   "delay": 0,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 3,
+     "count": 5,
+     "interval": 1.07
+    }
+   ]
+  },
+  {
+   "name": "Northwest",
+   "cell": [
+    3,
+    10
+   ],
+   "delay": 3,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 2,
+     "count": 8,
+     "interval": 0.88
+    }
+   ]
+  },
+  {
+   "name": "East",
+   "cell": [
+    18,
+    22
+   ],
+   "delay": 3,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 3,
+     "count": 4,
+     "interval": 1.07
+    },
+    {
+     "type": "brute",
+     "level": 3,
+     "count": 1,
+     "interval": 3.8
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 2,
+   "count": 2,
+   "ammo": 119
+  },
+  {
+   "type": "cannon",
+   "level": 2,
+   "count": 1,
+   "ammo": 15
+  },
+  {
+   "type": "decoy",
+   "level": 1,
+   "ammo": 0,
+   "count": 1
+  }
+ ],
+ "design": {
+  "target_win": 0.0268,
+  "min_zone": 4,
+  "gate_margin": 0.12
+ }
+}

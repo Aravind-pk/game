@@ -1,0 +1,131 @@
+{
+ "id": "36",
+ "title": "Killing Ground",
+ "map": "01",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 500,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   7,
+   18,
+   2,
+   1
+  ],
+  [
+   15,
+   15,
+   1,
+   1
+  ],
+  [
+   12,
+   14,
+   1,
+   2
+  ],
+  [
+   3,
+   24,
+   1,
+   2
+  ],
+  [
+   11,
+   18,
+   1,
+   2
+  ]
+ ],
+ "hotspots": [
+  {
+   "name": "West",
+   "cell": [
+    0,
+    21
+   ],
+   "delay": 0,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 3,
+     "count": 4,
+     "interval": 1.06
+    },
+    {
+     "type": "brute",
+     "level": 3,
+     "count": 1,
+     "interval": 3.3
+    }
+   ]
+  },
+  {
+   "name": "Northeast",
+   "cell": [
+    15,
+    8
+   ],
+   "delay": 2,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 3,
+     "count": 5,
+     "interval": 1.39
+    }
+   ]
+  },
+  {
+   "name": "Northwest",
+   "cell": [
+    2,
+    5
+   ],
+   "delay": 3,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 2,
+     "count": 7,
+     "interval": 0.94
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 2,
+   "count": 2,
+   "ammo": 115
+  },
+  {
+   "type": "cannon",
+   "level": 2,
+   "count": 1,
+   "ammo": 15
+  },
+  {
+   "type": "rigged",
+   "level": 1,
+   "ammo": 0,
+   "count": 2
+  }
+ ],
+ "design": {
+  "target_win": 0.0171,
+  "min_zone": 4,
+  "gate_margin": 0.12
+ }
+}

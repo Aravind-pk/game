@@ -1,0 +1,157 @@
+{
+ "id": "30",
+ "title": "The Pit Road",
+ "map": "05",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 500,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   12,
+   25,
+   1,
+   3
+  ],
+  [
+   4,
+   23,
+   3,
+   1
+  ],
+  [
+   11,
+   18,
+   3,
+   1
+  ],
+  [
+   6,
+   16,
+   1,
+   2
+  ],
+  [
+   5,
+   26,
+   1,
+   3
+  ],
+  [
+   9,
+   27,
+   1,
+   2
+  ]
+ ],
+ "no_build": [
+  [
+   5,
+   18,
+   2,
+   4
+  ],
+  [
+   10,
+   26,
+   2,
+   2
+  ],
+  [
+   5,
+   30,
+   3,
+   2
+  ]
+ ],
+ "hotspots": [
+  {
+   "name": "East",
+   "cell": [
+    19,
+    20
+   ],
+   "delay": 0,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 2,
+     "count": 6,
+     "interval": 0.71
+    }
+   ]
+  },
+  {
+   "name": "West",
+   "cell": [
+    0,
+    21
+   ],
+   "delay": 5,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 2,
+     "count": 4,
+     "interval": 1.05
+    },
+    {
+     "type": "brute",
+     "level": 3,
+     "count": 1,
+     "interval": 3.4
+    }
+   ]
+  },
+  {
+   "name": "Northeast",
+   "cell": [
+    18,
+    9
+   ],
+   "delay": 9,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 2,
+     "count": 4,
+     "interval": 0.98
+    },
+    {
+     "type": "brute",
+     "level": 3,
+     "count": 1,
+     "interval": 3.1
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 2,
+   "count": 2,
+   "ammo": 134
+  },
+  {
+   "type": "cannon",
+   "level": 1,
+   "count": 1,
+   "ammo": 17
+  }
+ ],
+ "design": {
+  "target_win": 0.006,
+  "min_zone": 5,
+  "gate_margin": 0.12
+ }
+}

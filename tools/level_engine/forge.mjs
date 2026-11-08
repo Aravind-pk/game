@@ -29,7 +29,7 @@ let CLIMB_ITERS = 250;
 let TIGHTEN_ROUNDS = 4;
 function useQuickSearch() {
   PRESSURES = [1, 1.25, 1.5, 1.8, 2.2];
-  SLACKS = [0.12, 0.05];
+  SLACKS = [0.25, 0.12, 0.05];
   TUNE_SAMPLES = 2000;
   FINAL_SAMPLES = 12000;
   CLIMB_ITERS = 130;
@@ -264,6 +264,7 @@ async function tune(pool, spec, log) {
   const design = spec.design;
   const seedBase = Number(spec.id) * 100000;
   let best = null;
+  let tooHard = false;
   for (const [pi, pressure] of PRESSURES.entries()) {
     const loose = applyPressure(spec, pressure);
     loose.gate_hp = spec.gate_hp;
@@ -301,13 +302,16 @@ async function tune(pool, spec, log) {
         + `gate ${level.gate_hp}, ammo [${level.guns.map((g) => g.ammo)}], min share ${(share * 100).toFixed(0)}%${viable ? '' : ' (rejected)'}`);
       if (!viable) continue;
       anyViable = true;
-      // closest to the target from below wins; otherwise the lowest rate seen so far
-      const meets = rate <= design.target_win;
-      const better = !best || (meets && (!best.meets || rate > best.rate)) || (!meets && !best.meets && rate < best.rate);
-      if (better) best = { level, dep, rate, pressure, slack, meets, seed };
-      if (meets) break;
+      // Settings are tried from easiest to hardest. Keep whichever lands closest to the target (on a
+      // log scale, so 2x too hard counts the same as 2x too easy) and stop once inside the band, or
+      // once a setting is already too hard, since everything after it is harder still.
+      const meets = inBand(rate, design.target_win);
+      const miss = missOf(rate, design.target_win);
+      if (!best || miss < best.miss) best = { level, dep, rate, pressure, slack, meets, miss, seed };
+      if (rate < design.target_win / BAND) tooHard = true;
+      if (meets || tooHard) break;
     }
-    if (best?.meets) break;
+    if (best?.meets || tooHard) break;
     if (!anyViable && best) break;
   }
   return best;
@@ -414,7 +418,14 @@ async function finalize(pool, spec, best, log) {
     + `zones [${solutions.map((s) => s.guns.map((g) => g.zone.length).join('/')).join(' | ')}]`);
 }
 
-/** Forges generated levels, re-rolling a layout (up to 6 tries) if it can't get near its target. */
+/** A tuned level is accepted when its random-win rate is within BAND times its target, either way. */
+const BAND = 2;
+const inBand = (rate, target) => rate <= target * BAND && rate >= target / BAND;
+
+/** How far a random-win rate is from its target, on a log scale (1 = on target, 2 = twice or half). */
+const missOf = (rate, target) => Math.exp(Math.abs(Math.log(Math.max(rate, 1e-5) / target)));
+
+/** Forges generated levels, re-rolling a layout (up to 5 tries) if it can't get near its target. */
 async function forgeCampaign(pool, from, to, log) {
   useQuickSearch();
   const failed = [];
@@ -423,14 +434,17 @@ async function forgeCampaign(pool, from, to, log) {
     if (existsSync(join(OUTPUT, name))) continue; // finished in an earlier run
     const t0 = performance.now();
     let chosen = null;
-    for (let variant = 0; variant < 6; variant++) {
+    // FORGE_VARIANT_OFFSET tries fresh layouts when re-forging a level whose first five missed.
+    const first = Number(process.env.FORGE_VARIANT_OFFSET) || 0;
+    for (let variant = first; variant < first + 5; variant++) {
       const spec = buildSpec(id, variant);
       log(`L${spec.id} ${spec.title} v${variant}: target ${(spec.design.target_win * 100).toFixed(2)}%`);
       const best = await tune(pool, spec, log);
       if (!best) continue;
-      const miss = best.rate / spec.design.target_win;
+      // Two-sided: a layout far harder than its target is as much an outlier as one far easier.
+      const miss = missOf(best.rate, spec.design.target_win);
       if (!chosen || miss < chosen.miss) chosen = { spec, best, miss };
-      if (miss <= 1.5) break;
+      if (inBand(best.rate, spec.design.target_win)) break;
     }
     if (!chosen) {
       log(`  !! L${id}: no viable layout found`);
@@ -446,7 +460,7 @@ async function forgeCampaign(pool, from, to, log) {
 
 async function main() {
   const only = new Set(process.argv.slice(2));
-  const pool = makePool(Math.max(1, availableParallelism() - 1));
+  const pool = makePool(Number(process.env.FORGE_WORKERS) || Math.max(1, availableParallelism() - 1));
   const log = (m) => console.log(m);
   if (only.has('--campaign')) {
     const range = campaignRange();

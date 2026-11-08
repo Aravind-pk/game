@@ -53,6 +53,10 @@ func update_turret(has_target: bool, aim_angle: float, dt: float) -> void:
 	_show("aim", _aim, false)
 
 
+func tint(color: Color) -> void:
+	_sprite.modulate = color
+
+
 func fired() -> void:
 	if _destroy_ms < 0.0:
 		_shot_ms = 0.0

@@ -1,0 +1,151 @@
+{
+ "id": "46",
+ "title": "Holdout Ridge",
+ "map": "01",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 500,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   4,
+   14,
+   2,
+   1
+  ],
+  [
+   9,
+   20,
+   3,
+   1
+  ],
+  [
+   13,
+   20,
+   1,
+   3
+  ],
+  [
+   4,
+   18,
+   1,
+   2
+  ],
+  [
+   9,
+   16,
+   1,
+   2
+  ],
+  [
+   12,
+   17,
+   1,
+   1
+  ]
+ ],
+ "fixed": [
+  {
+   "type": "cannon",
+   "level": 1,
+   "ammo": 3,
+   "cell": [
+    9,
+    18
+   ]
+  },
+  {
+   "type": "mg",
+   "level": 1,
+   "ammo": 34,
+   "cell": [
+    5,
+    17
+   ]
+  }
+ ],
+ "hotspots": [
+  {
+   "name": "Northwest",
+   "cell": [
+    4,
+    10
+   ],
+   "delay": 0,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 2,
+     "count": 4,
+     "interval": 0.84
+    },
+    {
+     "type": "brute",
+     "level": 4,
+     "count": 1,
+     "interval": 3.2
+    }
+   ]
+  },
+  {
+   "name": "Northeast",
+   "cell": [
+    16,
+    7
+   ],
+   "delay": 7,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 3,
+     "count": 5,
+     "interval": 1.38
+    }
+   ]
+  },
+  {
+   "name": "North",
+   "cell": [
+    8,
+    3
+   ],
+   "delay": 2,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 2,
+     "count": 8,
+     "interval": 0.94
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 2,
+   "count": 2,
+   "ammo": 111
+  },
+  {
+   "type": "cannon",
+   "level": 2,
+   "count": 1,
+   "ammo": 14
+  }
+ ],
+ "design": {
+  "target_win": 0.0105,
+  "min_zone": 4,
+  "gate_margin": 0.12
+ }
+}

@@ -43,3 +43,8 @@ func fired() -> void:
 
 func destroyed() -> void:
 	pass
+
+
+## Recolours the unit's body without touching its health bar or base markings.
+func tint(_color: Color) -> void:
+	pass

@@ -1,0 +1,161 @@
+{
+ "id": "41",
+ "title": "Dug In",
+ "map": "01",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 500,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   3,
+   18,
+   1,
+   3
+  ],
+  [
+   10,
+   22,
+   2,
+   2
+  ],
+  [
+   14,
+   19,
+   2,
+   1
+  ],
+  [
+   13,
+   28,
+   1,
+   1
+  ],
+  [
+   5,
+   24,
+   2,
+   2
+  ],
+  [
+   4,
+   16,
+   1,
+   1
+  ]
+ ],
+ "fixed": [
+  {
+   "type": "mg",
+   "level": 1,
+   "ammo": 40,
+   "cell": [
+    5,
+    18
+   ]
+  }
+ ],
+ "note": "New: Holdouts. Some turrets are already dug in. Build your plan around them.",
+ "hotspots": [
+  {
+   "name": "Northeast",
+   "cell": [
+    18,
+    9
+   ],
+   "delay": 0,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 2,
+     "count": 4,
+     "interval": 0.78
+    },
+    {
+     "type": "brute",
+     "level": 3,
+     "count": 1,
+     "interval": 3.5
+    }
+   ]
+  },
+  {
+   "name": "North",
+   "cell": [
+    5,
+    3
+   ],
+   "delay": 5,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 3,
+     "count": 5,
+     "interval": 1.21
+    }
+   ]
+  },
+  {
+   "name": "West",
+   "cell": [
+    0,
+    18
+   ],
+   "delay": 9,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 2,
+     "count": 4,
+     "interval": 0.85
+    },
+    {
+     "type": "brute",
+     "level": 3,
+     "count": 1,
+     "interval": 3.7
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 2,
+   "count": 2,
+   "ammo": 132
+  },
+  {
+   "type": "cannon",
+   "level": 2,
+   "count": 1,
+   "ammo": 17
+  },
+  {
+   "type": "decoy",
+   "level": 1,
+   "ammo": 0,
+   "count": 1
+  },
+  {
+   "type": "rigged",
+   "level": 1,
+   "ammo": 0,
+   "count": 1
+  }
+ ],
+ "design": {
+  "target_win": 0.05,
+  "min_zone": 4,
+  "gate_margin": 0.12
+ }
+}

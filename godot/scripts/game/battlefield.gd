@@ -24,6 +24,7 @@ const MONSTER_BAR_HEIGHT_M := {"burrower": 2.7, "stalker": 2.7, "brute": 4.2}
 const TURRET_BAR_HEIGHT_M := 3.6
 const DEPLOY_DRAG_PX := 14.0
 const CRATER_WIDTH_M := 6.5
+const DECOY_TINT := Color(0.52, 0.57, 0.7)   # decoys wear dark steel so they never pass for a live turret
 const GATE_HIT_TREMOR_PX := 7.0
 const TURRET_HIT_TREMOR_PX := 3.5
 const TREMOR_DECAY := 0.002       # share of the tremor left after one second
@@ -85,6 +86,7 @@ func build(lv: LevelData) -> void:
 	painting.texture = load(BACKGROUND)
 	_world.add_child(painting)
 	_build_hotspots()
+	_build_unstable()
 	_grid = _make_grid()
 	_grid.visible = false
 	_build_gate()
@@ -252,6 +254,20 @@ func _soft_dot() -> Texture2D:
 
 # ================================================================== deployment view
 
+## Unstable ground is always shown, not only while a turret is held: the player plans around it.
+func _build_unstable() -> void:
+	if level.no_build.is_empty():
+		return
+	var ground := UnstableGround.new()
+	for r in level.no_build:
+		for y in range(r.position.y, r.end.y):
+			for x in range(r.position.x, r.end.x):
+				var c := Vector2i(x, y)
+				if level.view_rect.has_point(c):
+					ground.add_cell(c, _cell_rect(c))
+	_world.add_child(ground)
+
+
 func _make_grid() -> CellOverlay:
 	var overlay := CellOverlay.new()
 	var vr := level.view_rect
@@ -298,11 +314,16 @@ func _add_gun_node(id: int, d: Dictionary) -> UnitView:
 	var view := _make_gun_view(d.type)
 	view.ground = level.cell_center(d.cell)
 	view.position = to_world(view.ground)
-	if Defs.GUNS[d.type].damage <= 0.0:  # decoys get a coloured base so they read apart from real turrets
+	if Defs.GUNS[d.type].damage <= 0.0:  # decoys get dark steel and a coloured base so they read apart from real turrets
+		view.tint(DECOY_TINT)
 		var ring := RangeRing.new()
 		ring.setup(1.4 * PX_PER_M, DEPTH, Color("#ff6b63") if Defs.GUNS[d.type].blast > 0.0 else Color("#f2b13a"))
-		ring.z_index = -1
 		view.add_child(ring)
+		view.move_child(ring, 0)
+	if int(d.get("gun", 0)) < 0:  # holdout: dug in behind a ring of sandbags, so it reads as part of the map
+		var bags := SandbagRing.new()
+		view.add_child(bags)
+		view.move_child(bags, 0)
 	view.add_bar(1.6, TURRET_BAR_HEIGHT_M, Color("#5ee08a"))
 	_entities.add_child(view)
 	_gun_nodes[id] = view
@@ -702,3 +723,63 @@ class RangeRing extends Node2D:
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, _depth))
 		draw_circle(Vector2.ZERO, _radius, Color(_color, 0.1))
 		draw_arc(Vector2.ZERO, _radius, 0.0, TAU, 96, Color(_color, 0.95), 3.0, true)
+
+
+## Cracked, rust-red tiles with a hazard-striped outer border, so it never reads as plain dirt.
+class UnstableGround extends Node2D:
+	const STRIPE_LENGTH := 12.0
+	const STRIPE_WIDTH := 7.0
+	var _cells := {}
+
+	func add_cell(cell: Vector2i, rect: Rect2) -> void:
+		_cells[cell] = rect
+		queue_redraw()
+
+	func _draw() -> void:
+		var rng := RandomNumberGenerator.new()
+		for cell in _cells:
+			var rect: Rect2 = _cells[cell]
+			draw_rect(rect, Color(0.62, 0.2, 0.12, 0.42))
+			rng.seed = hash(cell)
+			for _k in 3:
+				var at := rect.position + rect.size * Vector2(rng.randf(), rng.randf())
+				var crack := PackedVector2Array([at])
+				for _s in 3:
+					at = (at + Vector2(rng.randf_range(-20.0, 20.0), rng.randf_range(-13.0, 13.0))).clamp(rect.position, rect.end)
+					crack.append(at)
+				draw_polyline(crack, Color(0.16, 0.06, 0.04, 0.85), 2.0)
+		for cell in _cells:
+			var rect: Rect2 = _cells[cell]
+			if not _cells.has(cell + Vector2i.UP):
+				_stripes(rect.position, Vector2.RIGHT, rect.size.x, Vector2.DOWN)
+			if not _cells.has(cell + Vector2i.DOWN):
+				_stripes(Vector2(rect.position.x, rect.end.y - STRIPE_WIDTH), Vector2.RIGHT, rect.size.x, Vector2.DOWN)
+			if not _cells.has(cell + Vector2i.LEFT):
+				_stripes(rect.position, Vector2.DOWN, rect.size.y, Vector2.RIGHT)
+			if not _cells.has(cell + Vector2i.RIGHT):
+				_stripes(Vector2(rect.end.x - STRIPE_WIDTH, rect.position.y), Vector2.DOWN, rect.size.y, Vector2.RIGHT)
+
+	func _stripes(start: Vector2, along: Vector2, length: float, across: Vector2) -> void:
+		var travelled := 0.0
+		var hot := true
+		while travelled < length:
+			var piece := minf(STRIPE_LENGTH, length - travelled)
+			var corner := start + along * travelled
+			var size := along * piece + across * STRIPE_WIDTH
+			draw_rect(Rect2(corner, size), Color(0.95, 0.3, 0.18, 0.9) if hot else Color(0.15, 0.05, 0.03, 0.9))
+			travelled += piece
+			hot = not hot
+
+
+class SandbagRing extends Node2D:
+	const BAGS := 12
+	const RADIUS_PX := 66.0
+	const BAG := Rect2(-17.0, -9.0, 34.0, 18.0)
+
+	func _draw() -> void:
+		for k in BAGS:
+			var angle := TAU * float(k) / float(BAGS)
+			var at := Vector2(cos(angle), sin(angle) * UnitView.DEPTH) * RADIUS_PX
+			draw_set_transform(at, angle + PI * 0.5, Vector2(1.0, 0.8))
+			draw_rect(BAG, Color("#c2a46a"))
+			draw_rect(BAG, Color("#7d6638"), false, 2.0)
