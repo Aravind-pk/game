@@ -125,8 +125,8 @@ ordering levels, not a measure of how hard they feel; it still needs playtesting
 |---:|---|---|---:|---:|
 | 1 | First Contact | Basics | 27.02% | 26% |
 | 2 | Two Fronts | Basics | 12.73% | 12% |
-| 3 | Fast Movers | Basics | 9.12% | 2% |
-| 4 | Heavy Footsteps | Basics | 0.25% | 1% |
+| 3 | Fast Movers | Basics | 3.3% | 2% |
+| 4 | Heavy Footsteps | Basics | 0.74% | 1% |
 | 5 | The Eastern Breach | Basics | 0.63% | 0.5% |
 | 6 | Dust Line | Basics | 9.76% | 6% |
 | 7 | The Long Ditch | Basics | 3.34% | 4.01% |
@@ -151,7 +151,7 @@ ordering levels, not a measure of how hard they feel; it still needs playtesting
 | 26 | No Footing | Unstable ground | 0.82% | 2% |
 | 27 | Undermined | Unstable ground | 1.5% | 1.48% |
 | 28 | Collapse Point | Unstable ground | 0.64% | 1.1% |
-| 29 | (being remade) | | | |
+| 29 | Thin Crust | Unstable ground | 1.36% | 0.81% |
 | 30 | The Pit Road | Unstable ground | 0.93% | 0.6% |
 | 31 | Short Fuse | Rigged decoys | 14.76% | 8% |
 | 32 | Powder Keg | Rigged decoys | 8.38% | 5.88% |
@@ -166,12 +166,12 @@ ordering levels, not a measure of how hard they feel; it still needs playtesting
 | 41 | Dug In | Holdouts | 6.92% | 5% |
 | 42 | Old Guard | Holdouts | 6.63% | 3.66% |
 | 43 | Stand Fast | Holdouts | 1.9% | 2.68% |
-| 44 | (being remade) | | | |
+| 44 | The Forgotten Post | Holdouts | 3.93% | 1.96% |
 | 45 | Iron Will | Holdouts | 2.55% | 1.43% |
 | 46 | Holdout Ridge | Holdouts | 1.88% | 1.05% |
 | 47 | No Retreat | Holdouts | 0.61% | 0.77% |
 | 48 | Siege of Embers | Holdouts | 1.03% | 0.56% |
-| 49 | (being remade) | | | |
+| 49 | The Final Watch | Holdouts | 0.48% | 0.41% |
 | 50 | North Gate Stands | Holdouts | 0.18% | 0.3% |
 <!-- curve:end -->
 
