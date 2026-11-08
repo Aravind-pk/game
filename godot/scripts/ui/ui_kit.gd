@@ -162,7 +162,7 @@ static func button(label: String, cb: Callable, variant := "secondary", icon_nam
 		sb.content_margin_right = px(16)
 		b.add_theme_stylebox_override(st, sb if st != "focus" else StyleBoxEmpty.new())
 	var font_pt := 22.0 if size == "lg" else 16.0
-	var content := vbox(4) if stacked else hbox(8)
+	var content: BoxContainer = vbox(4) if stacked else hbox(8)
 	content.alignment = BoxContainer.ALIGNMENT_CENTER
 	content.set_anchors_preset(Control.PRESET_FULL_RECT)
 	if icon_name != "":
