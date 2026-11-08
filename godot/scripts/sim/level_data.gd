@@ -12,8 +12,14 @@ var gate_max_hp: float
 var gate_cols: Vector2i          # first/last column of the gate opening
 var wall_row: int                # row occupied by the settlement wall
 var obstacles: Array[Rect2i] = []
+var no_build: Array[Rect2i] = []  # unstable ground: monsters cross it, turrets can't be built on it
+var fixed: Array = []            # [{type, level, ammo, cell}] holdout turrets already in place
+var map_id: String               # which painted background this level uses
+var note: String                 # one-line briefing note, usually introducing a mechanic
 var hotspots: Array = []         # [{name, cell: Vector2, delay, groups: [{type, level, count, interval}]}]
 var guns: Array = []             # [{type, level, ammo, count}]
+var intel: Array = []            # plain-language clues written by the level forge
+var solutions: Array = []        # [{gate_left, ammo_left, guns: [{type, cell: Vector2i, zone: [Vector2i]}]}]
 
 
 static func load_file(path: String) -> LevelData:
@@ -29,6 +35,8 @@ static func from_dict(d: Dictionary) -> LevelData:
 	var L := LevelData.new()
 	L.id = str(d.id)
 	L.title = str(d.title)
+	L.map_id = str(d.get("map", d.id))
+	L.note = str(d.get("note", ""))
 	L.cols = int(d.cols)
 	L.rows = int(d.rows)
 	var v: Array = d.view
@@ -38,6 +46,11 @@ static func from_dict(d: Dictionary) -> LevelData:
 	L.wall_row = L.rows - 1
 	for o in d.get("obstacles", []):
 		L.obstacles.append(Rect2i(int(o[0]), int(o[1]), int(o[2]), int(o[3])))
+	for o in d.get("no_build", []):
+		L.no_build.append(Rect2i(int(o[0]), int(o[1]), int(o[2]), int(o[3])))
+	for g in d.get("fixed", []):
+		L.fixed.append({"type": str(g.type), "level": int(g.level), "ammo": int(g.ammo),
+			"cell": Vector2i(int(g.cell[0]), int(g.cell[1]))})
 	for h in d.hotspots:
 		var groups := []
 		for g in h.groups:
@@ -48,6 +61,16 @@ static func from_dict(d: Dictionary) -> LevelData:
 	for g in d.guns:
 		L.guns.append({"type": str(g.type), "level": int(g.level), "ammo": int(g.ammo),
 			"count": int(g.get("count", 1))})
+	for line in d.get("intel", []):
+		L.intel.append(str(line))
+	for s in d.get("solutions", []):
+		var slots := []
+		for g in s.guns:
+			var zone := []
+			for z in g.zone:
+				zone.append(Vector2i(int(z[0]), int(z[1])))
+			slots.append({"type": str(g.type), "cell": Vector2i(int(g.cell[0]), int(g.cell[1])), "zone": zone})
+		L.solutions.append({"gate_left": int(s.gate_left), "ammo_left": int(s.ammo_left), "guns": slots})
 	return L
 
 
@@ -78,6 +101,12 @@ func is_wall(c: Vector2i) -> bool:
 func is_deployable(c: Vector2i) -> bool:
 	if not view_rect.has_point(c) or is_wall(c) or is_obstacle(c):
 		return false
+	for r in no_build:
+		if r.has_point(c):
+			return false
+	for g in fixed:
+		if g.cell == c:
+			return false
 	for h in hotspots:
 		if Vector2(c).distance_to(h.cell) < 1.5:
 			return false  # can't build on a spawn fissure

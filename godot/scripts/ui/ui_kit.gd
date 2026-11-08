@@ -229,15 +229,14 @@ static func action(label: String, cb: Callable, variant := "primary", icon_name 
 ## Small square tool tile: icon over a caption (RADAR / BRIEFING / CLEAR).
 static func tool_tile(label: String, cb: Callable, icon_name: String) -> Button:
 	var b := _button_base(cb, PANEL, LINE, 1.0)
-	b.custom_minimum_size = Vector2(px(52), px(66))
-	var v := vbox(4)
-	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	_fill_rect(v)
-	var g := glyph(icon_name, 22)
-	g.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	v.add_child(g)
-	v.add_child(text(label, "small", INK, HORIZONTAL_ALIGNMENT_CENTER))
-	b.add_child(v)
+	b.custom_minimum_size.y = px(30)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var h := hbox(5)
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
+	_fill_rect(h)
+	h.add_child(glyph(icon_name, 15))
+	h.add_child(text(label, "small", INK, HORIZONTAL_ALIGNMENT_CENTER))
+	b.add_child(h)
 	return b
 
 
@@ -422,7 +421,7 @@ static func set_ammo_chip(p: PanelContainer, ammo: int, max_ammo: int) -> void:
 static func turret_card(label_text: String, art: Texture2D, cb: Callable) -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(px(58), px(66))
+	b.custom_minimum_size = Vector2(px(58), px(58))
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.pressed.connect(cb)
 	var v := vbox(0)
@@ -431,7 +430,7 @@ static func turret_card(label_text: String, art: Texture2D, cb: Callable) -> But
 	v.offset_top = px(3)
 	v.offset_bottom = -px(3)
 	b.add_child(v)
-	var img := image(art, 54, 42)
+	var img := image(art, 54, 36)
 	img.name = "Art"
 	v.add_child(img)
 	var n := text(label_text, "small", INK, HORIZONTAL_ALIGNMENT_CENTER)

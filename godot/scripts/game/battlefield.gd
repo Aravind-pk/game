@@ -21,6 +21,7 @@ var _gun_nodes := {}        # deployment index / sim gun id -> Node3D
 var _monster_nodes := {}    # monster id -> Node3D
 var _hotspot_nodes := []    # fissure meshes
 var _grid: MeshInstance3D
+var _hint: MeshInstance3D
 var _ghost: Node3D
 var _ghost_ring: MeshInstance3D
 var _ghost_type := ""
@@ -203,7 +204,7 @@ func _projector(depth_mode: String) -> ShaderMaterial:
 	sh.code = BG_SHADER % depth_mode
 	var m := ShaderMaterial.new()
 	m.shader = sh
-	var p := "res://assets/backgrounds/level_%s.jpg" % level.id
+	var p := "res://assets/backgrounds/level_%s.jpg" % level.map_id
 	m.set_shader_parameter("bg", load(p) if ResourceLoader.exists(p) else null)
 	return m
 
@@ -553,6 +554,8 @@ func _add_gun_node(id: int, d: Dictionary) -> Node3D:
 	var head := _head_of(model)
 	if head:
 		head.rotation.y = PI  # face north, toward the threat
+	if Defs.GUNS[d.type].damage <= 0.0:  # decoys get a coloured base so they read apart from real turrets
+		root.add_child(_ring(1.4, Color("#ff6b63") if Defs.GUNS[d.type].blast > 0.0 else Color("#f2b13a")))
 	var bar := _bar(1.6, Color("#5ee08a"))
 	bar.name = "HP"
 	bar.position.y = 3.6
@@ -580,8 +583,52 @@ func set_held(type: String) -> void:
 		head.rotation.y = PI
 	_ghost_ring = _ring(Defs.GUNS[type].range, Color("#4fd6e0"))
 	_ghost.add_child(_ghost_ring)
+	var min_range: float = Defs.GUNS[type].min_range
+	if min_range > 0.0:
+		_ghost.add_child(_ring(min_range, Color("#ff6b63")))  # the blind zone around the turret
 	_ghost.visible = false
 	_dynamic_root.add_child(_ghost)
+
+
+## Pulsing amber tiles on the field: an area, or a single tile for the most direct hint.
+func show_hint(cells: Array, exact: bool) -> void:
+	clear_hint()
+	var vr := level.view_rect
+	var img := Image.create(vr.size.x, vr.size.y, false, Image.FORMAT_L8)
+	for c in cells:
+		img.set_pixel(c.x - vr.position.x, c.y - vr.position.y, Color.WHITE)
+	var sh := Shader.new()
+	sh.code = """
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled;
+uniform sampler2D mask : filter_nearest;
+uniform vec2 cells;
+uniform float strength = 0.4;
+void fragment() {
+	if (texture(mask, UV).r < 0.5) { discard; }
+	vec2 f = fract(UV * cells);
+	float edge = 1.0 - smoothstep(0.0, 0.09, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
+	float pulse = 0.72 + 0.28 * sin(TIME * 4.0);
+	ALBEDO = vec3(1.0, 0.72, 0.22);
+	ALPHA = clamp((edge * 0.9 + strength) * pulse, 0.0, 1.0);
+}
+"""
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	mat.set_shader_parameter("mask", ImageTexture.create_from_image(img))
+	mat.set_shader_parameter("cells", Vector2(vr.size))
+	mat.set_shader_parameter("strength", 0.55 if exact else 0.28)
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(vr.size) * Defs.CELL
+	var centre := (Vector2(vr.position) + Vector2(vr.size) * 0.5) * Defs.CELL
+	_hint = _mesh(plane, mat, to3(centre, 0.06))
+	_hint.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+func clear_hint() -> void:
+	if is_instance_valid(_hint):
+		_hint.queue_free()
+	_hint = null
 
 
 func update_ghost(cell: Vector2i, valid: bool) -> void:

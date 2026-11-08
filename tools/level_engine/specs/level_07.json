@@ -1,0 +1,93 @@
+{
+ "id": "07",
+ "title": "The Long Ditch",
+ "map": "02",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 500,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   10,
+   26,
+   3,
+   1
+  ],
+  [
+   11,
+   24,
+   3,
+   1
+  ],
+  [
+   13,
+   19,
+   2,
+   1
+  ],
+  [
+   6,
+   23,
+   1,
+   2
+  ],
+  [
+   5,
+   15,
+   2,
+   1
+  ],
+  [
+   9,
+   15,
+   2,
+   1
+  ]
+ ],
+ "hotspots": [
+  {
+   "name": "East",
+   "cell": [
+    18,
+    15
+   ],
+   "delay": 0,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 2,
+     "count": 10,
+     "interval": 1.16
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 1,
+   "count": 2,
+   "ammo": 58
+  },
+  {
+   "type": "sniper",
+   "level": 1,
+   "count": 1,
+   "ammo": 6
+  }
+ ],
+ "design": {
+  "target_win": 0.0401,
+  "min_zone": 6,
+  "gate_margin": 0.12
+ }
+}

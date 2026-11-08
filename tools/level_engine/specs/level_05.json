@@ -1,0 +1,130 @@
+{
+ "id": "05",
+ "title": "The Eastern Breach",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 1000,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   5,
+   17,
+   2,
+   2
+  ],
+  [
+   11,
+   19,
+   1,
+   1
+  ],
+  [
+   14,
+   22,
+   2,
+   1
+  ],
+  [
+   7,
+   24,
+   1,
+   2
+  ],
+  [
+   4,
+   29,
+   1,
+   1
+  ],
+  [
+   15,
+   28,
+   1,
+   1
+  ]
+ ],
+ "hotspots": [
+  {
+   "name": "Northeast",
+   "cell": [
+    16,
+    4
+   ],
+   "delay": 0.0,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 1,
+     "count": 10,
+     "interval": 0.8
+    },
+    {
+     "type": "brute",
+     "level": 3,
+     "count": 2,
+     "interval": 4.0
+    }
+   ]
+  },
+  {
+   "name": "Northwest",
+   "cell": [
+    3,
+    6
+   ],
+   "delay": 3.0,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 1,
+     "count": 6,
+     "interval": 0.9
+    }
+   ]
+  },
+  {
+   "name": "East",
+   "cell": [
+    18,
+    17
+   ],
+   "delay": 8.0,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 2,
+     "count": 6,
+     "interval": 1.2
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 1,
+   "ammo": 75,
+   "count": 2
+  },
+  {
+   "type": "cannon",
+   "level": 1,
+   "ammo": 7,
+   "count": 1
+  }
+ ],
+ "design": {
+  "target_win": 0.005,
+  "min_zone": 4,
+  "gate_margin": 0.08
+ }
+}

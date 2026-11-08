@@ -1,0 +1,125 @@
+{
+ "id": "19",
+ "title": "Dead Reckoning",
+ "map": "04",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 500,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   4,
+   16,
+   2,
+   2
+  ],
+  [
+   12,
+   19,
+   2,
+   1
+  ],
+  [
+   12,
+   21,
+   1,
+   1
+  ],
+  [
+   14,
+   25,
+   1,
+   2
+  ]
+ ],
+ "hotspots": [
+  {
+   "name": "West",
+   "cell": [
+    1,
+    22
+   ],
+   "delay": 0,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 2,
+     "count": 4,
+     "interval": 1.28
+    },
+    {
+     "type": "brute",
+     "level": 3,
+     "count": 1,
+     "interval": 3
+    }
+   ]
+  },
+  {
+   "name": "Northwest",
+   "cell": [
+    4,
+    5
+   ],
+   "delay": 4,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 2,
+     "count": 4,
+     "interval": 1.15
+    }
+   ]
+  },
+  {
+   "name": "East",
+   "cell": [
+    18,
+    22
+   ],
+   "delay": 5,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 2,
+     "count": 4,
+     "interval": 1.25
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 1,
+   "count": 2,
+   "ammo": 106
+  },
+  {
+   "type": "sniper",
+   "level": 1,
+   "count": 1,
+   "ammo": 9
+  },
+  {
+   "type": "decoy",
+   "level": 1,
+   "ammo": 0,
+   "count": 2
+  }
+ ],
+ "design": {
+  "target_win": 0.0132,
+  "min_zone": 5,
+  "gate_margin": 0.12
+ }
+}

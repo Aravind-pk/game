@@ -1,0 +1,102 @@
+{
+ "id": "02",
+ "title": "Two Fronts",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 400,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   4,
+   18,
+   2,
+   2
+  ],
+  [
+   14,
+   18,
+   2,
+   2
+  ],
+  [
+   9,
+   22,
+   2,
+   1
+  ],
+  [
+   6,
+   26,
+   1,
+   1
+  ],
+  [
+   13,
+   27,
+   1,
+   1
+  ]
+ ],
+ "hotspots": [
+  {
+   "name": "Northwest",
+   "cell": [
+    3,
+    5
+   ],
+   "delay": 0.0,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 1,
+     "count": 11,
+     "interval": 0.9
+    }
+   ]
+  },
+  {
+   "name": "Northeast",
+   "cell": [
+    16,
+    5
+   ],
+   "delay": 4.0,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 1,
+     "count": 11,
+     "interval": 0.9
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 1,
+   "ammo": 36,
+   "count": 2
+  },
+  {
+   "type": "cannon",
+   "level": 1,
+   "ammo": 4,
+   "count": 1
+  }
+ ],
+ "design": {
+  "target_win": 0.12,
+  "min_zone": 8,
+  "gate_margin": 0.15
+ }
+}

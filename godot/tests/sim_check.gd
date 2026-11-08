@@ -37,7 +37,7 @@ func _expect(cond: bool, msg: String) -> void:
 
 func _run(lv: LevelData, dep: Array) -> BattleSim:
 	var sim := BattleSim.new()
-	sim.setup(lv, dep)
+	sim.setup(lv, BattleSim.canonical_order(dep + lv.fixed))
 	sim.run_to_end()
 	return sim
 
@@ -102,9 +102,59 @@ func _hill_climb(lv: LevelData, dep: Array, score: float, rng: RandomNumberGener
 	return {"dep": cur, "summary": cur_sm}
 
 
+func _solution_deployment(lv: LevelData, sol: Dictionary) -> Array:
+	var dep := []
+	var ammo := {}
+	var gun_level := {}
+	for g in lv.guns:
+		ammo[g.type] = g.ammo
+		gun_level[g.type] = g.level
+	for slot in sol.guns:
+		dep.append({"type": slot.type, "level": gun_level[slot.type], "ammo": ammo[slot.type], "cell": slot.cell})
+	return dep
+
+
+## Hints promise that solutions win, so every baked solution and zone tile is replayed here.
+func _check_solutions(lv: LevelData) -> void:
+	_expect(not lv.solutions.is_empty(), "level has no baked solutions")
+	_expect(not lv.intel.is_empty(), "level has no intel lines")
+	var roster := {}
+	for g in lv.guns:
+		roster[g.type] = int(g.count)
+	var zone_runs := 0
+	for si in lv.solutions.size():
+		var sol: Dictionary = lv.solutions[si]
+		var dep := _solution_deployment(lv, sol)
+		var counts := {}
+		for slot in sol.guns:
+			_expect(lv.is_deployable(slot.cell), "solution %d uses an unbuildable tile" % si)
+			counts[slot.type] = int(counts.get(slot.type, 0)) + 1
+		_expect(counts == roster, "solution %d does not use the level's turrets" % si)
+		var sim := _run(lv, dep)
+		_expect(sim.state == BattleSim.State.VICTORY, "solution %d must win" % si)
+		for gi in dep.size():
+			if dep[gi].ammo <= 0:
+				var without := dep.duplicate(true)
+				without.remove_at(gi)
+				_expect(_run(lv, without).state != BattleSim.State.VICTORY, "solution %d must need its decoy" % si)
+		print("  solution %d: %s, gate %.0f/%.0f, ammo left %d" % [si,
+			"win" if sim.state == BattleSim.State.VICTORY else "LOSS", sim.gate_hp, lv.gate_max_hp, sim.summary().ammo_left])
+		for gi in dep.size():
+			for z in sol.guns[gi].zone:
+				var cand := dep.duplicate(true)
+				cand[gi].cell = z
+				zone_runs += 1
+				_expect(_run(lv, cand).state == BattleSim.State.VICTORY, "zone tile %s of gun %d must win" % [z, gi])
+	print("  zone tiles replayed: %d" % zone_runs)
+	_expect(not LevelHints.next_step(lv, []).get("solved", true), "an empty field must not count as solved")
+	_expect(LevelHints.next_step(lv, _solution_deployment(lv, lv.solutions[0])).get("solved", false),
+		"a full solution must count as solved")
+
+
 func _check_level(lv: LevelData, trials: int) -> void:
 	var t0 := Time.get_ticks_msec()
 	print("Level %s — %s  (%d enemies)" % [lv.id, lv.title, lv.total_enemies()])
+	_check_solutions(lv)
 	var empty := _run(lv, [])
 	_expect(empty.state == BattleSim.State.DEFEAT, "undefended gate should fall")
 	print("  no defence: %s at t=%.1fs" % ["defeat" if empty.state == BattleSim.State.DEFEAT else "VICTORY?", empty.time])

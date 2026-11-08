@@ -1,0 +1,169 @@
+{
+ "id": "28",
+ "title": "Collapse Point",
+ "map": "03",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 500,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   6,
+   25,
+   1,
+   1
+  ],
+  [
+   4,
+   14,
+   2,
+   2
+  ],
+  [
+   14,
+   20,
+   2,
+   1
+  ],
+  [
+   13,
+   29,
+   2,
+   2
+  ],
+  [
+   4,
+   19,
+   1,
+   2
+  ],
+  [
+   11,
+   24,
+   1,
+   1
+  ]
+ ],
+ "no_build": [
+  [
+   4,
+   21,
+   3,
+   4
+  ],
+  [
+   13,
+   19,
+   3,
+   4
+  ],
+  [
+   11,
+   15,
+   2,
+   3
+  ],
+  [
+   8,
+   23,
+   5,
+   3
+  ]
+ ],
+ "hotspots": [
+  {
+   "name": "West",
+   "cell": [
+    0,
+    20
+   ],
+   "delay": 0,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 2,
+     "count": 4,
+     "interval": 0.75
+    },
+    {
+     "type": "brute",
+     "level": 3,
+     "count": 1,
+     "interval": 3.4
+    }
+   ]
+  },
+  {
+   "name": "Northeast",
+   "cell": [
+    17,
+    8
+   ],
+   "delay": 8,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 2,
+     "count": 6,
+     "interval": 0.81
+    }
+   ]
+  },
+  {
+   "name": "East",
+   "cell": [
+    18,
+    23
+   ],
+   "delay": 9,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 2,
+     "count": 4,
+     "interval": 1.01
+    },
+    {
+     "type": "brute",
+     "level": 3,
+     "count": 1,
+     "interval": 3.8
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 2,
+   "count": 2,
+   "ammo": 134
+  },
+  {
+   "type": "cannon",
+   "level": 1,
+   "count": 1,
+   "ammo": 17
+  },
+  {
+   "type": "decoy",
+   "level": 1,
+   "ammo": 0,
+   "count": 1
+  }
+ ],
+ "design": {
+  "target_win": 0.011,
+  "min_zone": 5,
+  "gate_margin": 0.12
+ }
+}

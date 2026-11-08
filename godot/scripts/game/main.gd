@@ -5,7 +5,7 @@ extends Node
 ##
 ## Screenshot/automation flags (after `--`):
 ##   level=05  phase=briefing|deploy|radar|combat|result|pause  shot=/path.png  shot_time=6
-##   hold  auto_deploy  unlock_all
+##   hold  auto_deploy  unlock_all  hint=3 (presses Hint that many times once deployment is open)
 
 enum Phase { BRIEFING, DEPLOYMENT, COMBAT, RESULT }
 
@@ -23,6 +23,8 @@ const GUN_UI := {
 	"mg": {"name": "MG Turret", "short": "MG", "ammo": "Rounds"},
 	"cannon": {"name": "Cannon", "short": "Cannon", "ammo": "Shells"},
 	"sniper": {"name": "Sniper", "short": "Sniper", "ammo": "Rounds"},
+	"decoy": {"name": "Decoy", "short": "Decoy", "ammo": ""},
+	"rigged": {"name": "Rigged Decoy", "short": "Rigged", "ammo": ""},
 }
 const MONSTER_UI := {
 	"burrower": {"one": "Burrower", "many": "Burrowers", "desc": "Fast diggers. Emerge in groups."},
@@ -75,6 +77,13 @@ var _drag_from := Vector2.ZERO
 var _drag_scroll := 0
 var _dragging_sheet := false
 
+# hints: the first taps give written clues, then a marked area, then the exact tile
+var _hint_slot := {}          # the solution slot currently marked on the field
+var _hint_text := ""
+var _hint_dep_hash := 0       # the layout a written clue was given for
+var _hints_used := 0
+var _intel_shown := 0
+
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -110,8 +119,13 @@ func start_level(i: int) -> void:
 		for k in int(g.count):
 			guns.append({"type": g.type, "level": g.level, "ammo": g.ammo})
 	deployment.clear()
+	for g in level.fixed:  # holdouts are part of the layout from the start; gun -1 means not movable
+		deployment.append({"type": g.type, "level": g.level, "ammo": g.ammo, "cell": g.cell, "gun": -1})
 	held = -1
 	sim = null
+	_hints_used = 0
+	_intel_shown = 0
+	_clear_hint_mark()
 	_rebuild_cards()
 	_set_phase(Phase.BRIEFING)
 
@@ -140,11 +154,14 @@ func begin_deployment() -> void:
 
 
 func defend() -> void:
-	if deployment.is_empty():
+	if _placed_count() == 0:
 		_toast_msg("Deploy at least one turret.", UiKit.THREAT)
 		return
 	held = -1
 	battlefield.set_held("")
+	_clear_hint_mark()
+	deployment = BattleSim.canonical_order(deployment)
+	battlefield.show_deployment(deployment)  # turret nodes are numbered like the sim's turrets
 	sim = BattleSim.new()
 	sim.setup(level, deployment)
 	battlefield.begin_battle(sim)
@@ -219,6 +236,10 @@ func _valid_cell(c: Vector2i) -> bool:
 	return level.is_deployable(c) and _dep_at(c) < 0
 
 
+func _placed_count() -> int:
+	return deployment.filter(func(d): return d.gun >= 0).size()
+
+
 func _dep_at(c: Vector2i) -> int:
 	for i in deployment.size():
 		if deployment[i].cell == c:
@@ -275,7 +296,9 @@ func _on_cell_tapped(c: Vector2i) -> void:
 			_toast_msg("Invalid tile", UiKit.THREAT)
 	else:
 		var di := _dep_at(c)
-		if di >= 0:
+		if di >= 0 and deployment[di].gun < 0:
+			_toast_msg("This holdout is dug in.")
+		elif di >= 0:
 			var d: Dictionary = deployment[di]
 			deployment.remove_at(di)
 			held = d.gun
@@ -293,7 +316,7 @@ func _on_cell_dragged(from: Vector2i, to: Vector2i) -> void:
 		_on_cell_tapped(to)
 		return
 	var di := _dep_at(from)
-	if di < 0:
+	if di < 0 or deployment[di].gun < 0:
 		return
 	if _valid_cell(to):
 		deployment[di].cell = to
@@ -309,11 +332,63 @@ func _on_hover(c: Vector2i) -> void:
 
 
 func clear_deployment() -> void:
-	deployment.clear()
+	deployment = deployment.filter(func(d): return d.gun < 0)
 	held = -1
 	battlefield.show_deployment(deployment)
 	battlefield.set_held("")
 	_refresh()
+
+
+# ================================================================== hints
+
+func _clear_hint_mark() -> void:
+	_hint_slot = {}
+	_hint_text = ""
+	battlefield.clear_hint()
+
+
+func _say_hint(line: String) -> void:
+	_hint_slot = {}
+	battlefield.clear_hint()
+	_hint_text = line
+	_hint_dep_hash = deployment.hash()
+	_refresh()
+
+
+func request_hint() -> void:
+	if phase != Phase.DEPLOYMENT:
+		return
+	var step := LevelHints.next_step(level, deployment)
+	if step.is_empty():
+		_toast_msg("No hints for this wave.")
+		return
+	if step.solved:
+		_say_hint("This layout holds the gate. Press Defend.")
+		return
+	_hints_used += 1
+	if _intel_shown < mini(level.intel.size(), 2):
+		_intel_shown += 1
+		_say_hint(level.intel[_intel_shown - 1])
+		return
+	# a second tap on the same target narrows the marked area down to the exact tile
+	var slot: Dictionary = step.slot
+	var exact: bool = not _hint_slot.is_empty() and _hint_slot.cell == slot.cell
+	_hint_slot = slot
+	var verb := "Move" if step.move else "Place"
+	_hint_text = "%s %s %s %s." % [verb, "an" if slot.type == "mg" else "a", GUN_UI[slot.type].name,
+		"on the marked tile" if exact else "inside the marked area"]
+	battlefield.show_hint([slot.cell] if exact else slot.zone, exact)
+	_refresh()
+
+
+## A hint stops applying once the player has acted on it.
+func _sync_hint() -> void:
+	if not _hint_slot.is_empty():
+		var step := LevelHints.next_step(level, deployment)
+		if step.is_empty() or step.solved or step.slot.cell != _hint_slot.cell:
+			_clear_hint_mark()
+	elif _hint_text != "" and deployment.hash() != _hint_dep_hash:
+		_hint_text = ""
 
 
 # ================================================================== UI construction
@@ -366,6 +441,8 @@ func _build_ui() -> void:
 	hint.add_child(hint_row)
 	hint_row.add_child(UiKit.glyph("info", 15, UiKit.FRIENDLY))
 	_hint_label = UiKit.text("", "caption")
+	_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hint_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hint_row.add_child(_hint_label)
 	_set_panel_fill(hint)
 	_tray.add_child(hint)
@@ -374,12 +451,13 @@ func _build_ui() -> void:
 	row.add_child(UiKit.tool_tile("Radar", _show_radar, "pin"))
 	row.add_child(UiKit.tool_tile("Briefing", _show_briefing, "doc"))
 	row.add_child(UiKit.tool_tile("Clear", clear_deployment, "close"))
+	row.add_child(UiKit.tool_tile("Hint", request_hint, "info"))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	scroll.custom_minimum_size.y = UiKit.px(66)
-	row.add_child(scroll)
+	scroll.custom_minimum_size.y = UiKit.px(58)
+	_tray.add_child(scroll)
 	_cards_box = UiKit.hbox(5)
 	_cards_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_cards_box)
@@ -483,7 +561,8 @@ func _rebuild_cards() -> void:
 	_cards.clear()
 	for gi in guns.size():
 		var g: Dictionary = guns[gi]
-		var c := UiKit.turret_card("%s · %d" % [GUN_UI[g.type].short, g.ammo], _art(Defs.GUNS[g.type].model),
+		var label: String = GUN_UI[g.type].short if g.ammo <= 0 else "%s · %d" % [GUN_UI[g.type].short, g.ammo]
+		var c := UiKit.turret_card(label, _art(Defs.GUNS[g.type].model),
 			select_card.bind(gi))
 		_cards_box.add_child(c)
 		_cards.append(c)
@@ -495,7 +574,11 @@ func _refresh() -> void:
 	_wave_sub.text = "WAVE %s · %s" % [level.id, level.title.trim_prefix("The ").to_upper()]
 	for gi in _cards.size():
 		UiKit.set_card_state(_cards[gi], held == gi, _dep_of_gun(gi) >= 0)
-	_hint_label.text = "Tap an open tile to place it." if held >= 0 else "Select a turret. Tap an open tile."
+	_sync_hint()
+	if _hint_text != "":
+		_hint_label.text = _hint_text
+	else:
+		_hint_label.text = "Tap an open tile to place it." if held >= 0 else "Select a turret. Tap an open tile."
 	_refresh_hud()
 	_layout_gate_pill.call_deferred()
 
@@ -515,7 +598,7 @@ func _refresh_hud() -> void:
 	else:
 		_skull_val.text = str(level.total_enemies())
 		_skull_cap.text = "INCOMING"
-		_turret_val.text = "%d / %d" % [deployment.size(), guns.size()]
+		_turret_val.text = "%d / %d" % [_placed_count(), guns.size()]
 		_turret_cap.text = "DEPLOYED"
 		UiKit.set_gate(_gate_bar, _gate_val, level.gate_max_hp, level.gate_max_hp)
 
@@ -535,8 +618,8 @@ func _refresh_chips() -> void:
 			_chips_layer.add_child(made)
 			_ammo_chips[g.id] = made
 		var chip: PanelContainer = _ammo_chips[g.id]
-		chip.visible = g.alive
-		if not g.alive:
+		chip.visible = g.alive and g.max_ammo > 0
+		if not chip.visible:
 			continue
 		UiKit.set_ammo_chip(chip, g.ammo, g.max_ammo)
 		var s := chip.get_combined_minimum_size()
@@ -655,8 +738,16 @@ func _show_briefing() -> void:
 	grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for g in guns:
 		var ui: Dictionary = GUN_UI[g.type]
-		grid.add_child(UiKit.defense_card(ui.name, "%d %s" % [g.ammo, ui.ammo], _art(Defs.GUNS[g.type].model)))
+		var ammo_line: String = "No ammo" if g.ammo <= 0 else "%d %s" % [g.ammo, ui.ammo]
+		grid.add_child(UiKit.defense_card(ui.name, ammo_line, _art(Defs.GUNS[g.type].model)))
 	v.add_child(grid)
+	var rules := _range_rules()
+	if level.note != "":
+		rules = (level.note + " " + rules).strip_edges()
+	if rules != "":
+		var note := UiKit.text(rules, "caption", UiKit.INK_MUTED)
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(note)
 
 	var preview := UiKit.inset(10, 7, UiKit.LINE_DIM)
 	var pr := UiKit.hbox(10)
@@ -676,6 +767,27 @@ func _show_briefing() -> void:
 	v.add_child(preview)
 
 	v.add_child(UiKit.action("Plan Deployment", begin_deployment if phase == Phase.BRIEFING else _close_overlay))
+
+
+## One line on how range works for the turrets in this wave.
+func _range_rules() -> String:
+	var types := {}
+	for g in guns:
+		types[g.type] = true
+	var parts := []
+	if types.has("mg"):
+		parts.append("MG Turrets lose damage at long range.")
+	var close := []
+	for type in ["cannon", "sniper"]:
+		if types.has(type):
+			close.append(GUN_UI[type].name + "s")
+	if close.size() > 0:
+		parts.append("%s can't hit targets close to them." % " and ".join(close))
+	if types.has("decoy") or types.has("rigged"):
+		parts.append("Monsters stop to attack decoys.")
+	if types.has("rigged"):
+		parts.append("Rigged Decoys explode when destroyed.")
+	return " ".join(parts)
 
 
 func _show_radar() -> void:
@@ -787,6 +899,8 @@ func _show_result() -> void:
 	var data := [["Gate Integrity", "%d / %d" % [ceili(s.gate_hp), s.gate_max]],
 		["Hostiles Eliminated", "%d / %d" % [s.kills, s.total_enemies]],
 		["Turrets Survived", "%d / %d" % [s.guns_survived, s.guns_total]]]
+	if _hints_used > 0:
+		data.append(["Hints Used", str(_hints_used)])
 	for i in data.size():
 		if i > 0:
 			rows.add_child(UiKit.rule(UiKit.LINE_DIM))
@@ -795,7 +909,7 @@ func _show_result() -> void:
 
 	var empty := 0
 	for g in sim.guns:
-		if g.ammo <= 0:
+		if g.ammo <= 0 and g.max_ammo > 0:
 			empty += 1
 	if empty > 0:
 		var note := UiKit.hbox(6)
@@ -812,7 +926,8 @@ func _show_result() -> void:
 		v.add_child(UiKit.action("Replay Wave", retry, "secondary", ""))
 	else:
 		v.add_child(UiKit.action("Adjust Deployment", retry, "primary", ""))
-		v.add_child(UiKit.text("Return to planning with your turrets in place.", "caption", UiKit.INK,
+		var tip := "Stuck? Tap Hint while planning." if not level.solutions.is_empty() else "Return to planning with your turrets in place."
+		v.add_child(UiKit.text(tip, "caption", UiKit.INK,
 			HORIZONTAL_ALIGNMENT_CENTER))
 
 
@@ -883,6 +998,8 @@ func _apply_automation() -> void:
 			defend()
 			if p == "result":
 				speed = 8.0
+	for i in int(_args.get("hint", "0")):
+		request_hint()
 	if p == "pause":
 		get_tree().create_timer(float(_args.get("shot_time", "3")) - 0.5).timeout.connect(toggle_pause)
 	if _args.has("shot"):

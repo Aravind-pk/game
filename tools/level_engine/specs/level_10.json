@@ -1,0 +1,113 @@
+{
+ "id": "10",
+ "title": "Last Light",
+ "map": "05",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 500,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   11,
+   21,
+   2,
+   1
+  ],
+  [
+   14,
+   21,
+   2,
+   2
+  ],
+  [
+   3,
+   20,
+   3,
+   1
+  ],
+  [
+   6,
+   18,
+   2,
+   1
+  ]
+ ],
+ "hotspots": [
+  {
+   "name": "West",
+   "cell": [
+    1,
+    20
+   ],
+   "delay": 0,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 1,
+     "count": 5,
+     "interval": 0.83
+    }
+   ]
+  },
+  {
+   "name": "East",
+   "cell": [
+    19,
+    18
+   ],
+   "delay": 2,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 1,
+     "count": 5,
+     "interval": 0.9
+    }
+   ]
+  },
+  {
+   "name": "Northwest",
+   "cell": [
+    2,
+    7
+   ],
+   "delay": 5,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 2,
+     "count": 4,
+     "interval": 1.26
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 1,
+   "count": 2,
+   "ammo": 62
+  },
+  {
+   "type": "cannon",
+   "level": 1,
+   "count": 1,
+   "ammo": 10
+  }
+ ],
+ "design": {
+  "target_win": 0.012,
+  "min_zone": 6,
+  "gate_margin": 0.12
+ }
+}

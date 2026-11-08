@@ -1,0 +1,116 @@
+{
+ "id": "11",
+ "title": "False Colours",
+ "map": "01",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 500,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   15,
+   15,
+   1,
+   1
+  ],
+  [
+   5,
+   24,
+   1,
+   2
+  ],
+  [
+   7,
+   26,
+   2,
+   1
+  ],
+  [
+   11,
+   16,
+   2,
+   1
+  ],
+  [
+   8,
+   17,
+   2,
+   1
+  ],
+  [
+   12,
+   25,
+   2,
+   1
+  ]
+ ],
+ "note": "New: Decoys. They can't fire, but monsters stop to attack them. Hold the swarm inside your guns' range.",
+ "hotspots": [
+  {
+   "name": "North",
+   "cell": [
+    7,
+    8
+   ],
+   "delay": 0,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 1,
+     "count": 8,
+     "interval": 0.81
+    }
+   ]
+  },
+  {
+   "name": "West",
+   "cell": [
+    1,
+    20
+   ],
+   "delay": 3,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 1,
+     "count": 8,
+     "interval": 0.76
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 1,
+   "count": 2,
+   "ammo": 62
+  },
+  {
+   "type": "sniper",
+   "level": 1,
+   "count": 1,
+   "ammo": 6
+  },
+  {
+   "type": "decoy",
+   "level": 1,
+   "ammo": 0,
+   "count": 1
+  }
+ ],
+ "design": {
+  "target_win": 0.12,
+  "min_zone": 5,
+  "gate_margin": 0.12
+ }
+}

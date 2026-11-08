@@ -30,6 +30,14 @@ var _flow_dirty := true
 var _alive_monsters := 0
 
 
+## Turrets are numbered by cell, so a layout plays the same whatever order it was placed in.
+static func canonical_order(deployment: Array) -> Array:
+	var out := deployment.duplicate()
+	out.sort_custom(func(a, b):
+		return a.cell.y < b.cell.y or (a.cell.y == b.cell.y and a.cell.x < b.cell.x))
+	return out
+
+
 func setup(lv: LevelData, deployment: Array) -> void:
 	level = lv
 	gate_hp = lv.gate_max_hp
@@ -40,6 +48,8 @@ func setup(lv: LevelData, deployment: Array) -> void:
 			"id": i, "type": d.type, "level": d.level, "cell": d.cell,
 			"pos": lv.cell_center(d.cell), "hp": s.hp, "max_hp": s.hp, "damage": s.damage,
 			"fire_rate": s.fire_rate, "range": s.range, "splash": s.splash,
+			"min_range": s.min_range, "falloff_start": s.falloff_start, "falloff_floor": s.falloff_floor,
+			"blast": s.blast, "blast_radius": s.blast_radius,
 			"projectile_speed": s.projectile_speed, "radius": s.radius, "ammo": int(d.ammo),
 			"max_ammo": int(d.ammo), "cooldown": 0.0, "alive": true, "aim": Vector2(0, -1),
 			"target": -1,
@@ -194,6 +204,7 @@ func _update_monsters() -> void:
 						g.hp = 0.0
 						g.alive = false
 						_flow_dirty = true
+						_detonate(g)
 						events.append({"type": "gun_destroyed", "gun": g.id}))
 		else:
 			var at_gate: bool = m.pos.y >= gate_y - m.radius - m.attack_range - 0.2 \
@@ -210,6 +221,16 @@ func _update_monsters() -> void:
 				dir = (dir + Vector2(-dir.y, dir.x) * lane).normalized()
 				m.facing = dir
 				_move(m, dir, m.speed * Defs.SIM_DT)
+
+
+## A rigged decoy takes the monsters around it down with it.
+func _detonate(g: Dictionary) -> void:
+	if g.blast <= 0.0:
+		return
+	for m in monsters:
+		if m.state == "active" and m.hp > 0.0 and g.pos.distance_to(m.pos) <= g.blast_radius + m.radius:
+			m.hp -= g.blast
+	events.append({"type": "explode", "pos": g.pos, "radius": g.blast_radius, "gun": g.id})
 
 
 func _attack(m: Dictionary, hit: Callable) -> void:
@@ -298,7 +319,7 @@ func _update_guns() -> void:
 		if not g.alive:
 			continue
 		g.cooldown = maxf(g.cooldown - Defs.SIM_DT, -Defs.SIM_DT)
-		var t := _closest_monster(g.pos, g.range)
+		var t := _closest_monster(g.pos, g.range, g.min_range)
 		g.target = t
 		if t < 0:
 			continue
@@ -315,18 +336,25 @@ func _update_guns() -> void:
 				"gun": g.id})
 			events.append({"type": "fire", "gun": g.id, "to": m.pos, "shell": true})
 		else:
-			m.hp -= g.damage
+			m.hp -= _direct_damage(g, m)
 			events.append({"type": "fire", "gun": g.id, "to": m.pos, "monster": m.id})
 
 
-func _closest_monster(pos: Vector2, rng: float) -> int:
+## Shot damage after distance falloff (a flat line for guns that don't fade).
+func _direct_damage(g: Dictionary, m: Dictionary) -> float:
+	var d: float = g.pos.distance_to(m.pos) - m.radius
+	var fade := clampf((d - g.falloff_start) / maxf(g.range - g.falloff_start, 0.001), 0.0, 1.0)
+	return g.damage * (1.0 - fade * (1.0 - g.falloff_floor))
+
+
+func _closest_monster(pos: Vector2, rng: float, min_rng: float) -> int:
 	var best := -1
 	var best_d := INF * 1.0
 	for m in monsters:
 		if m.state != "active" or m.hp <= 0.0:
 			continue
 		var d: float = pos.distance_to(m.pos) - m.radius
-		if d <= rng and d < best_d:
+		if d <= rng and d >= min_rng and d < best_d:
 			best_d = d
 			best = m.id
 	return best

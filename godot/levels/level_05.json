@@ -3,107 +3,60 @@
  "title": "The Eastern Breach",
  "cols": 20,
  "rows": 34,
- "view": [
-  3,
-  13,
-  14,
-  21
- ],
- "gate_hp": 1000,
- "gate_cols": [
-  8,
-  11
- ],
+ "view": [3, 13, 14, 21],
+ "gate_hp": 80,
+ "gate_cols": [8, 11],
  "obstacles": [
-  [
-   5,
-   17,
-   2,
-   2
-  ],
-  [
-   11,
-   19,
-   1,
-   1
-  ],
-  [
-   14,
-   22,
-   2,
-   1
-  ],
-  [
-   7,
-   24,
-   1,
-   2
-  ],
-  [
-   4,
-   29,
-   1,
-   1
-  ],
-  [
-   15,
-   28,
-   1,
-   1
-  ]
+  [5, 17, 2, 2],
+  [11, 19, 1, 1],
+  [14, 22, 2, 1],
+  [7, 24, 1, 2],
+  [4, 29, 1, 1],
+  [15, 28, 1, 1]
  ],
  "hotspots": [
   {
    "name": "Northeast",
-   "cell": [
-    16,
-    4
-   ],
-   "delay": 0.0,
+   "cell": [16, 4],
+   "delay": 0,
    "groups": [
     {
      "type": "burrower",
      "level": 1,
-     "count": 10,
-     "interval": 0.8
+     "count": 12,
+     "interval": 0.75
     },
     {
      "type": "brute",
      "level": 3,
      "count": 2,
-     "interval": 4.0
+     "interval": 3.73
     }
    ]
   },
   {
    "name": "Northwest",
-   "cell": [
-    3,
-    6
-   ],
-   "delay": 3.0,
+   "cell": [3, 6],
+   "delay": 3,
    "groups": [
     {
      "type": "burrower",
      "level": 1,
-     "count": 6,
-     "interval": 0.9
+     "count": 7,
+     "interval": 0.84
     }
    ]
   },
   {
    "name": "East",
-   "cell": [
-    18,
-    17
-   ],
-   "delay": 8.0,
+   "cell": [18, 17],
+   "delay": 8,
    "groups": [
     {
      "type": "stalker",
      "level": 2,
-     "count": 6,
-     "interval": 1.2
+     "count": 7,
+     "interval": 1.12
     }
    ]
   }
@@ -112,14 +65,183 @@
   {
    "type": "mg",
    "level": 1,
-   "ammo": 75,
+   "ammo": 119,
    "count": 2
   },
   {
    "type": "cannon",
    "level": 1,
-   "ammo": 7,
+   "ammo": 4,
    "count": 1
+  }
+ ],
+ "design": {
+  "pressure": 1.15,
+  "ammo_slack": 0.05,
+  "random_win_pct": 0.63,
+  "random_samples": 40007,
+  "target_win_pct": 0.5
+ },
+ "intel": [
+  "Ammo is tight: a winning plan spends about 91% of it, so every turret must stay busy.",
+  "Point a Cannon at the Northeast fissure: it works best far forward, right.",
+  "An MG Turret earns its ammo mid-field, centre.",
+  "An MG Turret earns its ammo mid-field, right."
+ ],
+ "solutions": [
+  {
+   "gate_left": 80,
+   "ammo_left": 21,
+   "guns": [
+    {
+     "type": "cannon",
+     "cell": [16, 17],
+     "zone": [
+      [14, 14],
+      [15, 14],
+      [13, 15],
+      [16, 15],
+      [15, 16],
+      [16, 16],
+      [13, 17],
+      [14, 17],
+      [15, 17],
+      [16, 17],
+      [14, 18],
+      [15, 18],
+      [16, 18],
+      [14, 19],
+      [15, 19],
+      [16, 19],
+      [16, 20]
+     ]
+    },
+    {
+     "type": "mg",
+     "cell": [11, 21],
+     "zone": [
+      [10, 20],
+      [10, 21],
+      [11, 21],
+      [10, 22],
+      [10, 23]
+     ]
+    },
+    {
+     "type": "mg",
+     "cell": [12, 22],
+     "zone": [
+      [13, 20],
+      [13, 21],
+      [14, 21],
+      [12, 22],
+      [13, 22],
+      [12, 23]
+     ]
+    }
+   ]
+  },
+  {
+   "gate_left": 80,
+   "ammo_left": 4,
+   "guns": [
+    {
+     "type": "cannon",
+     "cell": [16, 18],
+     "zone": [
+      [16, 15],
+      [14, 16],
+      [15, 16],
+      [13, 17],
+      [14, 17],
+      [15, 17],
+      [16, 17],
+      [14, 18],
+      [16, 18],
+      [14, 19],
+      [15, 19],
+      [14, 20],
+      [15, 21],
+      [16, 21]
+     ]
+    },
+    {
+     "type": "mg",
+     "cell": [10, 26],
+     "zone": [
+      [8, 25],
+      [9, 25],
+      [10, 25],
+      [11, 25],
+      [10, 26]
+     ]
+    },
+    {
+     "type": "mg",
+     "cell": [12, 26],
+     "zone": [
+      [9, 25],
+      [10, 25],
+      [9, 26],
+      [11, 26],
+      [12, 26],
+      [10, 27],
+      [11, 27]
+     ]
+    }
+   ]
+  },
+  {
+   "gate_left": 80,
+   "ammo_left": 26,
+   "guns": [
+    {
+     "type": "mg",
+     "cell": [10, 18],
+     "zone": [
+      [13, 15],
+      [11, 16],
+      [12, 16],
+      [10, 17],
+      [11, 17],
+      [10, 18],
+      [11, 18],
+      [9, 19],
+      [10, 19],
+      [10, 20]
+     ]
+    },
+    {
+     "type": "cannon",
+     "cell": [5, 19],
+     "zone": [
+      [3, 16],
+      [4, 16],
+      [5, 16],
+      [3, 17],
+      [4, 17],
+      [4, 18],
+      [4, 19],
+      [5, 19],
+      [6, 19],
+      [5, 20],
+      [6, 20],
+      [6, 21],
+      [7, 22]
+     ]
+    },
+    {
+     "type": "mg",
+     "cell": [9, 29],
+     "zone": [
+      [9, 28],
+      [9, 29],
+      [9, 30],
+      [9, 31],
+      [9, 32]
+     ]
+    }
+   ]
   }
  ]
 }

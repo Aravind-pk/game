@@ -1,0 +1,93 @@
+{
+ "id": "06",
+ "title": "Dust Line",
+ "map": "01",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 500,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   14,
+   17,
+   2,
+   2
+  ],
+  [
+   8,
+   26,
+   1,
+   3
+  ],
+  [
+   11,
+   25,
+   3,
+   1
+  ],
+  [
+   15,
+   24,
+   2,
+   2
+  ],
+  [
+   6,
+   24,
+   1,
+   1
+  ],
+  [
+   3,
+   28,
+   3,
+   1
+  ]
+ ],
+ "hotspots": [
+  {
+   "name": "West",
+   "cell": [
+    1,
+    20
+   ],
+   "delay": 0,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 1,
+     "count": 15,
+     "interval": 0.91
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 1,
+   "count": 2,
+   "ammo": 58
+  },
+  {
+   "type": "cannon",
+   "level": 1,
+   "count": 1,
+   "ammo": 9
+  }
+ ],
+ "design": {
+  "target_win": 0.06,
+  "min_zone": 6,
+  "gate_margin": 0.12
+ }
+}

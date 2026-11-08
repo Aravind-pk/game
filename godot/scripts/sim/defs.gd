@@ -12,21 +12,39 @@ const RETARGET_INTERVAL := 0.25     # how often monsters look for guns
 const MAX_BATTLE_TIME := 600.0
 
 # ---------------------------------------------------------------- guns
+# min_range: targets closer than this can't be hit. Damage fades linearly from full at
+# falloff_start to damage * falloff_floor at max range.
 const GUNS := {
 	"mg": {
 		"name": "Kestrel", "model": "kestrel", "desc": "High Fire Rate",
 		"hp": 120.0, "damage": 7.0, "fire_rate": 6.0, "range": 8.0,
 		"splash": 0.0, "projectile_speed": 0.0, "radius": 0.8,
+		"min_range": 0.0, "falloff_start": 3.0, "falloff_floor": 0.35, "blast": 0.0, "blast_radius": 0.0,
 	},
 	"cannon": {
 		"name": "Mule", "model": "mule", "desc": "AoE Damage",
 		"hp": 170.0, "damage": 42.0, "fire_rate": 0.55, "range": 11.0,
 		"splash": 2.6, "projectile_speed": 16.0, "radius": 1.0,
+		"min_range": 4.0, "falloff_start": 11.0, "falloff_floor": 1.0, "blast": 0.0, "blast_radius": 0.0,
 	},
 	"sniper": {
 		"name": "Needle", "model": "needle", "desc": "Long Range",
 		"hp": 70.0, "damage": 70.0, "fire_rate": 0.45, "range": 20.0,
 		"splash": 0.0, "projectile_speed": 0.0, "radius": 0.7,
+		"min_range": 7.0, "falloff_start": 20.0, "falloff_floor": 1.0, "blast": 0.0, "blast_radius": 0.0,
+	},
+	# No ammo, so they never fire: monsters stop to attack them, buying the other turrets time.
+	"decoy": {
+		"name": "Decoy", "model": "kestrel", "desc": "Draws Attacks",
+		"hp": 220.0, "damage": 0.0, "fire_rate": 1.0, "range": 6.0,
+		"splash": 0.0, "projectile_speed": 0.0, "radius": 0.9,
+		"min_range": 0.0, "falloff_start": 6.0, "falloff_floor": 1.0, "blast": 0.0, "blast_radius": 0.0,
+	},
+	"rigged": {
+		"name": "Rigged Decoy", "model": "kestrel", "desc": "Explodes When Destroyed",
+		"hp": 90.0, "damage": 0.0, "fire_rate": 1.0, "range": 6.0,
+		"splash": 0.0, "projectile_speed": 0.0, "radius": 0.9,
+		"min_range": 0.0, "falloff_start": 6.0, "falloff_floor": 1.0, "blast": 110.0, "blast_radius": 4.5,
 	},
 }
 
