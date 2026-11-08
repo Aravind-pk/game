@@ -434,7 +434,9 @@ async function forgeCampaign(pool, from, to, log) {
     if (existsSync(join(OUTPUT, name))) continue; // finished in an earlier run
     const t0 = performance.now();
     let chosen = null;
-    for (let variant = 0; variant < 5; variant++) {
+    // FORGE_VARIANT_OFFSET tries fresh layouts when re-forging a level whose first five missed.
+    const first = Number(process.env.FORGE_VARIANT_OFFSET) || 0;
+    for (let variant = first; variant < first + 5; variant++) {
       const spec = buildSpec(id, variant);
       log(`L${spec.id} ${spec.title} v${variant}: target ${(spec.design.target_win * 100).toFixed(2)}%`);
       const best = await tune(pool, spec, log);
