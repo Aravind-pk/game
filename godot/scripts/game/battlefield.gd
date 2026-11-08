@@ -230,19 +230,11 @@ func _occluder(size: Vector3, pos: Vector3) -> void:
 	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
-## Occluders for the wall + gate (same placement as render_backgrounds.py, WALL_SCALE 0.8).
+## The settlement wall is part of the painted background and deliberately does NOT occlude:
+## monsters attacking the gate stand just north of it and must stay visible (the concept art
+## cheats the same way), so they always draw over the wall.
 func _build_wall() -> void:
-	var ws := level.world_size()
-	var s := 0.8
-	var front := float(level.wall_row) * Defs.CELL
-	var depth := 1.8 * s
-	var zc := to3(Vector2(0, front + depth * 0.5 + 0.2)).z
-	_occluder(Vector3(ws.x + 80, 4.2 * s + 0.5, depth), Vector3(0, 0, zc))
-	var g0 := level.gate_cols.x * Defs.CELL - ws.x * 0.5
-	var g1 := (level.gate_cols.y + 1) * Defs.CELL - ws.x * 0.5
-	var tw := 3.0 * s
-	for tx in [g0 - tw * 0.5 - 0.1, g1 + tw * 0.5 + 0.1]:
-		_occluder(Vector3(tw, 7.4 * s, tw), Vector3(tx, 0, zc))
+	pass
 
 
 ## Gameplay obstacles are 2D sprites rendered from the game camera (render_prop_sprites.py).

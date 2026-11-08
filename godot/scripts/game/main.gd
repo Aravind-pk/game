@@ -397,14 +397,14 @@ func _build_ui() -> void:
 
 
 func _layout_gate_pill() -> void:
-	# sit just above whichever bottom bar is showing
-	var bar: Control = _tray if _tray.visible else _combat_bar
-	var h := bar.get_combined_minimum_size().y if bar.visible else 0.0
-	_gate_box.offset_bottom = -h - UiKit.px(10)
-	_gate_box.offset_top = _gate_box.offset_bottom - _gate_box.get_combined_minimum_size().y
+	# centred under the top HUD row, so the gate itself stays fully visible
 	var w := _gate_box.get_combined_minimum_size().x
+	var h := _gate_box.get_combined_minimum_size().y
+	_gate_box.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_gate_box.offset_left = -w * 0.5
 	_gate_box.offset_right = w * 0.5
+	_gate_box.offset_top = UiKit.px(16) + UiKit.px(48) + UiKit.px(10)
+	_gate_box.offset_bottom = _gate_box.offset_top + h
 
 
 func _toggle_speed() -> void:
@@ -690,7 +690,9 @@ func _apply_automation() -> void:
 	if _args.has("unlock_all"):
 		unlocked = level_paths.size() - 1
 	var p := str(_args.get("phase", ""))
-	if _args.has("auto_deploy") or p in ["combat", "result", "pause", "deploy_full"]:
+	if _args.has("weak"):  # one turret in a corner: lets monsters reach the gate (screenshots)
+		place(0, level.view_rect.position + Vector2i(0, 1))
+	elif _args.has("auto_deploy") or p in ["combat", "result", "pause", "deploy_full"]:
 		_auto_deploy()
 	match p:
 		"briefing":
