@@ -48,6 +48,10 @@ var _speed_btn: Button
 var _overlay: Control
 var _toast: Label
 var _toast_t := 0.0
+var _sheet_scroll: ScrollContainer   # the open Panel sheet, for drag-to-scroll
+var _drag_from := Vector2.ZERO
+var _drag_scroll := 0
+var _dragging_sheet := false
 
 
 func _ready() -> void:
@@ -461,6 +465,7 @@ func _refresh_hud() -> void:
 # ================================================================== overlays (Panel sheets)
 
 func _close_overlay() -> void:
+	_sheet_scroll = null
 	for c in _overlay.get_children():
 		c.queue_free()
 	_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -481,6 +486,7 @@ func _open_sheet() -> VBoxContainer:
 	scroll.offset_bottom = -UiKit.px(16)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_overlay.add_child(scroll)
+	_sheet_scroll = scroll
 	var v := UiKit.vbox(16)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -639,6 +645,27 @@ func _show_result() -> void:
 	else:
 		row.add_child(UiKit.button("Retry", retry, "primary", "retry", "lg"))
 	c.add_child(row)
+
+
+## Drag anywhere on an open sheet to scroll it, with mouse or touch. Godot's ScrollContainer
+## only drag-scrolls on touchscreens and not when the drag starts on a panel inside it.
+func _input(event: InputEvent) -> void:
+	if _sheet_scroll == null or not is_instance_valid(_sheet_scroll):
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_drag_from = event.position
+			_drag_scroll = _sheet_scroll.scroll_vertical
+			_dragging_sheet = false
+		elif _dragging_sheet:
+			_dragging_sheet = false
+			get_viewport().set_input_as_handled()  # a drag is not a tap on a button
+	elif event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT):
+		var dy: float = event.position.y - _drag_from.y
+		if absf(dy) > 12.0:
+			_dragging_sheet = true
+		if _dragging_sheet:
+			_sheet_scroll.scroll_vertical = _drag_scroll - int(dy)
 
 
 # ================================================================== progress
