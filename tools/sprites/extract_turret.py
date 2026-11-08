@@ -3,6 +3,8 @@
 Usage (from the repo root):  python tools/sprites/extract_turret.py kestrel
 
 Reads   art/sprites/<kit>/sheet.png  (4 rows: 14 aim, 14 fire, 14 recoil, 12 destroy)
+        The fire and recoil rows are not used: their barrels do not match the aim row,
+        so the game keeps the aim pose and draws the flash at the muzzle itself.
 Writes  godot/assets/sprites/turrets/<kit>.png and <kit>.json
         art/previews/<kit>_contact.png
 
@@ -15,10 +17,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from extract_kit import contact_sheet, luma_alpha, pack
+from extract_kit import components, contact_sheet, luma_alpha, pack
 
 ROOT = Path(__file__).resolve().parents[2]
-ROWS = [("aim", 20, 182, 14), ("fire", 215, 355, 14), ("recoil", 393, 525, 14), ("destroy", 539, 700, 12)]
+ROWS = [("aim", 20, 182, 14), ("destroy", 539, 700, 12)]
 CANVAS_W, CANVAS_H = 340, 240
 BASE_X, BASE_BOTTOM = 170, 212
 GROUND_ABOVE_BOTTOM = 26  # the base's centre sits this far above its front edge
@@ -54,6 +56,17 @@ def base_spans(band, count):
     if len(found) != count:
         raise SystemExit(f"expected {count} turret bases in a row, found {len(found)}")
     return found
+
+
+def only_turret(cell):
+    """Drop scraps of neighbouring frames that fell inside this cell."""
+    comps = components(cell[..., 3] > 25)
+    keep = np.zeros(cell.shape[:2], dtype=bool)
+    main = max(comps, key=len)
+    keep[main[:, 0], main[:, 1]] = True
+    out = cell.copy()
+    out[~keep] = 0
+    return out
 
 
 def base_refine(ref, frame, top, search=5):
@@ -103,6 +116,8 @@ def main(kit):
     ref_width = None
     for name, y0, y1, count in ROWS:
         cells, width = row_frames(sheet, y0, y1, count)
+        if name == "aim":
+            cells = [only_turret(c) for c in cells]
         if reference is None:
             reference = cells[0]
             ref_width = width

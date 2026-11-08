@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://caha25flhur6d"
-path="res://.godot/imported/cabinet.png-3b876b8dce0bb49782e82327b17243aa.ctex"
+uid="uid://bom157fsn8hg3"
+path="res://.godot/imported/wall_06.png-a20d00892e5236c2419a2c219dbf6335.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/props/cabinet.png"
-dest_files=["res://.godot/imported/cabinet.png-3b876b8dce0bb49782e82327b17243aa.ctex"]
+source_file="res://assets/sprites/wall/wall_06.png"
+dest_files=["res://.godot/imported/wall_06.png-a20d00892e5236c2419a2c219dbf6335.ctex"]
 
 [params]
 

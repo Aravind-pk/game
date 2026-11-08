@@ -45,6 +45,11 @@ func destroyed() -> void:
 	pass
 
 
+## Where shots leave this unit, in pixels from its ground position.
+func muzzle_offset() -> Vector2:
+	return Vector2(0.0, -1.8 * RISE * PX_PER_M)
+
+
 ## Recolours the unit's body without touching its health bar or base markings.
 func tint(_color: Color) -> void:
 	pass

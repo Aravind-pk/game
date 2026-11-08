@@ -23,7 +23,11 @@ ground position, and effects. It reads the simulation and never changes it.
 - **Monsters with a sprite kit** (`monster_sprite.gd`): 16 facings, a 26-pose turntable for large
   turns, emerge, attack and death. The simulation's sharp grid paths are rounded into curves in the
   view only.
-- **Turrets with a sprite kit** (`turret_sprite.gd`): 14 aim directions, firing, recoil, destruction.
+- **Turrets with a sprite kit** (`turret_sprite.gd`): 14 aim directions, a muzzle flash and tracer from the barrel tip, destruction.
+- **Props** are placed from the level data on a bare field. Each solid prop carries a footprint polygon: the patch of
+  ground it stands on, generated from its silhouette. The simulation blocks the level's cells; the
+  footprint keeps monsters off the prop's real base. Run with `-- footprints` to see them.
+- **The wall** has 12 frames chosen by gate HP: cracks, then sparks, then the collapse below 12%, ending in the breach.
 - **Units without a kit** (`stand_in_unit.gd`) use a single piece of artwork until they get one.
   Currently: Mule, Needle, Rift Runner and Faultbreaker.
 
@@ -35,8 +39,8 @@ Run these from the repo root. Each needs Python with Pillow and NumPy.
 |---|---|---|
 | Monster kit | `art/sprites/<kit>/` six 256px sheets | `python tools/sprites/extract_kit.py <kit>` |
 | Turret kit | `art/sprites/<kit>/sheet.png` | `PYTHONPATH=tools/sprites python tools/sprites/extract_turret.py <kit>` |
-| Obstacles and craters | `art/sprites/props/` | `python tools/sprites/extract_props.py` |
-| Battlefield | `art/backgrounds/north_gate_field.webp` | `python tools/sprites/fit_background.py` |
+| Props and their ground footprints | `art/sprites/props/*_sheet.png` | `python tools/sprites/extract_props.py` |
+| Field, apron, 12 wall damage frames | `art/backgrounds/`, `art/sprites/apron.png`, `art/sprites/wall/` | `python tools/sprites/fit_background.py` |
 | Card portraits | the atlases above | `python tools/sprites/make_portraits.py` |
 
 Generated sheets often mislabel their rows, so check `art/previews/<kit>_contact.png` after

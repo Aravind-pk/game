@@ -14,6 +14,7 @@ func _init() -> void:
 	root.add_child(sprite)
 	sprite.setup("burrower", Vector2.ZERO)
 	_check_turret()
+	_check_footprint_avoidance()
 	_check_wheel(sprite)
 	_check_emerge_to_walk(sprite)
 	_check_full_circle(sprite)
@@ -31,8 +32,9 @@ func _monster(state: String) -> Dictionary:
 func _check_turret() -> void:
 	var turret := TurretSprite.new()
 	root.add_child(turret)
-	turret.setup("kestrel")
-	_expect(turret._anims.aim.frames.size() == 14 and turret._anims.fire.frames.size() == 14, "turret has 14 aim and fire frames")
+	turret.setup("kestrel", null, null)
+	_expect(turret._anims.aim.frames.size() == 14, "turret has 14 aim frames")
+	_expect(turret.MUZZLE_PX.size() == 14 and turret.AIM_DEGREES.size() == 14, "every aim frame has a muzzle and an angle")
 	_expect(turret._anims.destroy.frames.size() == 12, "turret has 12 destruction frames")
 	var last := turret._aim
 	for i in 200:
@@ -41,10 +43,27 @@ func _check_turret() -> void:
 		_expect(moved <= 1, "barrel swung %d steps in one frame" % moved)
 		last = turret._aim
 	_expect(turret._aim == 0, "barrel reaches the south aim frame (got %d)" % turret._aim)
+	turret.fired()
+	turret.update_turret(true, PI * 0.5, DT)
+	_expect(turret._flash.visible, "firing shows a flash")
+	_expect(turret.muzzle_offset().is_equal_approx(Vector2(0, -44) * turret._art_scale()), "shots leave from the south muzzle")
 	turret.destroyed()
 	for i in 120:
 		turret.update_turret(false, 0.0, DT)
 	_expect(turret._destroy_ms > 1000.0, "destruction plays out")
+
+
+func _check_footprint_avoidance() -> void:
+	var field := Battlefield.new()
+	var square := PackedVector2Array([Vector2(0, 0), Vector2(4, 0), Vector2(4, 2), Vector2(0, 2)])
+	field._footprints.append({"poly": square, "box": Rect2(0, 0, 4, 2)})
+	var from_inside := field._keep_clear(Vector2(2, 0.5), 0.45)
+	_expect(not Geometry2D.is_point_in_polygon(from_inside, square), "a monster inside a footprint is moved out")
+	_expect(is_equal_approx(from_inside.y, -0.45), "it moves out by the nearest edge (got %s)" % from_inside)
+	var near := field._keep_clear(Vector2(2, 2.2), 0.45)
+	_expect(is_equal_approx(near.y, 2.45), "a monster too close is eased away (got %s)" % near)
+	_expect(field._keep_clear(Vector2(9, 9), 0.45) == Vector2(9, 9), "open ground is left alone")
+	field.free()
 
 
 func _check_wheel(sprite: MonsterSprite) -> void:

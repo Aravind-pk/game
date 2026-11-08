@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c8b5w6qc7ih6b"
-path="res://.godot/imported/crater.png-2727e7985374638959fbfbff62d7e14c.ctex"
+uid="uid://1dso04gsq4dw"
+path="res://.godot/imported/wall_10.png-36b97222d235140afc2fcfe44fc5765e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/props/crater.png"
-dest_files=["res://.godot/imported/crater.png-2727e7985374638959fbfbff62d7e14c.ctex"]
+source_file="res://assets/sprites/wall/wall_10.png"
+dest_files=["res://.godot/imported/wall_10.png-36b97222d235140afc2fcfe44fc5765e.ctex"]
 
 [params]
 

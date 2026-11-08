@@ -1,6 +1,7 @@
 class_name Battlefield
 extends Node2D
-## Draws the battle in 2D: a painted field, sprites sorted by ground position, and effects.
+## Draws the battle in 2D: a bare field, a wall that shows its damage, props placed from level
+## data, sprites sorted by ground position, and effects.
 ## Reads BattleSim state and never changes it, so battles stay deterministic.
 
 signal cell_tapped(cell: Vector2i)
@@ -11,10 +12,27 @@ const PX_PER_M := UnitView.PX_PER_M
 const DEPTH := UnitView.DEPTH
 const RISE := UnitView.RISE
 const DESIGN_WIDTH := 1080.0
-const VIEW_NORTH_OFFSET_M := 8.0      # the screen centre sits this far south of the middle of the view
+const VIEW_NORTH_OFFSET_M := 2.94     # the screen centre sits this far south of the middle of the view; sets where the gate is on screen
 const BACKGROUND := "res://assets/backgrounds/north_gate_field.jpg"
-const PAINTED_DOORS_CENTRE := Vector2(0, 448)   # the doors in the painting, from the screen centre
-const PAINTED_DOORS_SIZE := Vector2(300, 166)
+const APRON := "res://assets/backgrounds/apron.png"
+const APRON_SCALE := 0.95
+const WALL_DIR := "res://assets/sprites/wall/"
+const RAIL_ABOVE_GATE_LINE := 51.5    # the wall's top rail, in pixels above the line monsters attack from
+# Gate HP share at or below which each wall frame after the first takes over: cracks and dust,
+# then sparks, then the collapse once the gate is nearly gone. The last frame is the breach.
+const GATE_FRAME_AT_HP: Array[float] = [0.75, 0.65, 0.55, 0.45, 0.35, 0.25, 0.18, 0.12, 0.08, 0.04]
+const FIRST_SPARK_FRAME := 4
+const SPARKS_PER_HIT := 6
+const DOOR_ABOVE_BASE_PX := 125.0
+const PROPS_PATH := "res://assets/sprites/props/props"
+const MONSTER_CLEARANCE_M := 0.45     # how far a monster's centre stays from a prop's footprint
+const PROP_SCALE_MIN := 0.55
+const PROP_SCALE_MAX := 1.15
+const PROP_CHOICES := 4               # picks among this many of the best-fitting props
+const SCATTER_DECOR := 42
+const SCATTER_GROUND := 7
+const SCATTER_CLEARANCE_PX := 34.0
+const SCATTER_TOP_PX := -800.0
 
 const MONSTER_KITS := {"burrower": "burrower"}   # monster types with a full sprite kit
 const TURRET_KITS := {"kestrel": "kestrel"}      # turret models with a full sprite kit
@@ -38,11 +56,15 @@ var sim_speed := 1.0  # battle speed multiplier (animations follow it)
 var _world: Node2D                # everything; scaled to fit the screen, moved for camera shake
 var _entities: Node2D             # y-sorted units and obstacles
 var _fx_root: Node2D
-var _gate: Node2D
-var _gate_cracks: Node2D
-var _gate_hole: Polygon2D
-var _gate_flash: ColorRect
-var _gate_state := "intact"
+var _ground_root: Node2D
+var _gate: Sprite2D
+var _wall_base := 0.0             # the foot of the wall, from the screen centre
+var _wall_data := {}
+var _wall_frames: Array[Texture2D] = []
+var _gate_frame := 0
+var _props := {}                  # kind -> list of prop entries from props.json
+var _props_texture: Texture2D
+var _footprints: Array[Dictionary] = []   # ground polygons (metres) the monsters must walk around
 var _grid: CellOverlay
 var _hint: CellOverlay
 var _hint_tween: Tween
@@ -74,7 +96,8 @@ func build(lv: LevelData) -> void:
 	_ghost = null
 	_hint = null
 	_breaching = false
-	_gate_state = "intact"
+	_gate_frame = 0
+	_footprints.clear()
 	var vr := level.view_rect
 	_focus = Vector2((vr.position.x + vr.size.x * 0.5) * Defs.CELL,
 		(vr.position.y * Defs.CELL + level.wall_row * Defs.CELL) * 0.5 + VIEW_NORTH_OFFSET_M)
@@ -85,17 +108,23 @@ func build(lv: LevelData) -> void:
 	var painting := Sprite2D.new()
 	painting.texture = load(BACKGROUND)
 	_world.add_child(painting)
+	_ground_root = Node2D.new()
+	_world.add_child(_ground_root)
 	_build_hotspots()
 	_build_unstable()
 	_grid = _make_grid()
 	_grid.visible = false
-	_build_gate()
+	_build_wall()
 	_entities = Node2D.new()
 	_entities.y_sort_enabled = true
 	_world.add_child(_entities)
 	_fx_root = Node2D.new()
 	_world.add_child(_fx_root)
+	_load_props()
 	_build_obstacles()
+	_build_craters()
+	_build_scatter()
+	_show_footprints_if_asked()
 	_fit_to_screen()
 	if not get_viewport().size_changed.is_connected(_fit_to_screen):
 		get_viewport().size_changed.connect(_fit_to_screen)
@@ -119,77 +148,204 @@ func _cell_rect(c: Vector2i) -> Rect2:
 	return Rect2(top_left, Vector2(Defs.CELL * PX_PER_M, Defs.CELL * PX_PER_M * DEPTH))
 
 
-## Fills each blocked rectangle with painted props: long runs of barriers and broken wall
-## side to side, rubble down the columns, and a large piece on the square blocks.
+func _load_props() -> void:
+	if not _props.is_empty():
+		return
+	var file := FileAccess.open(PROPS_PATH + ".json", FileAccess.READ)
+	for entry in (JSON.parse_string(file.get_as_text()) as Dictionary).props:
+		if not _props.has(entry.kind):
+			_props[entry.kind] = []
+		_props[entry.kind].append(entry)
+	_props_texture = load(PROPS_PATH + ".png")
+
+
+func _level_rng(salt: String) -> RandomNumberGenerator:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(level.title + salt)
+	return rng
+
+
+## Fills each blocked rectangle from the level data with props that fit it. The simulation
+## blocks those cells; each prop's footprint then keeps monsters off the prop's real base.
 func _build_obstacles() -> void:
 	for i in level.obstacles.size():
 		var r: Rect2i = level.obstacles[i]
+		var rng := _level_rng("obstacle%d" % i)
 		if r.size.x >= 2 and r.size.y >= 2:
-			_place_prop("rocks" if i % 2 == 0 else "rubble", r, 1.15)
+			_fit_prop(r, ["solid"], rng)
 		elif r.size.x >= 2:
 			var c := r.position.x
 			while c < r.end.x:
 				var piece := mini(2, r.end.x - c)
-				var art := "rubble" if piece == 1 else ("barrier" if (c + i) % 2 == 0 else "broken_wall")
-				_place_prop(art, Rect2i(c, r.position.y, piece, 1), 1.05)
+				_fit_prop(Rect2i(c, r.position.y, piece, 1), ["thin"] if piece == 2 and rng.randf() < 0.75 else ["solid"], rng)
 				c += piece
 		elif r.size.y >= 2:
 			for k in r.size.y:
-				_place_prop("rubble" if (k + i) % 2 == 0 else "rocks", Rect2i(r.position.x, r.position.y + k, 1, 1), 1.2)
+				_fit_prop(Rect2i(r.position.x, r.position.y + k, 1, 1), ["solid"], rng)
 		else:
-			_place_prop(["cabinet", "rocks", "rubble"][i % 3], r, 0.8 if i % 3 == 0 else 1.15)
+			_fit_prop(r, ["tall"] if rng.randf() < 0.3 else ["solid"], rng)
 
 
-## Stands a prop on the front edge of its cells, so it sorts correctly against units.
-func _place_prop(art: String, cells: Rect2i, width_share: float) -> void:
-	var texture: Texture2D = load("res://assets/sprites/props/%s.png" % art)
-	var prop := Sprite2D.new()
-	prop.texture = texture
-	prop.centered = false
-	var size := texture.get_size()
-	prop.offset = Vector2(-size.x * 0.5, -size.y)
-	prop.scale = Vector2.ONE * cells.size.x * Defs.CELL * PX_PER_M * width_share / size.x
-	var front := Vector2((cells.position.x + cells.size.x * 0.5) * Defs.CELL, (cells.position.y + cells.size.y) * Defs.CELL)
-	prop.position = to_world(front)
-	_entities.add_child(prop)
+## Picks a prop whose footprint suits the cells, at close to its natural size.
+func _fit_prop(cells: Rect2i, kinds: Array, rng: RandomNumberGenerator) -> void:
+	var room := Vector2(cells.size.x * Defs.CELL * PX_PER_M, cells.size.y * Defs.CELL * PX_PER_M * DEPTH)
+	var options: Array = []
+	for kind in kinds:
+		for entry in _props.get(kind, []):
+			var box := _footprint_size(entry)
+			var fit := clampf(minf(room.x * 0.94 / box.x, room.y * 0.94 / box.y), PROP_SCALE_MIN, PROP_SCALE_MAX)
+			if kind == "tall":
+				fit = 1.0
+			options.append({"entry": entry, "scale": fit, "score": absf(log(fit))})
+	options.sort_custom(func(a, b): return a.score < b.score)
+	var chosen: Dictionary = options[rng.randi_range(0, mini(PROP_CHOICES, options.size()) - 1)]
+	var flip := rng.randf() < 0.5
+	var centre := (Vector2(cells.position) + Vector2(cells.size) * 0.5) * Defs.CELL
+	var at := to_world(centre)
+	_entities.add_child(_prop_sprite(chosen.entry, at, chosen.scale, flip))
+	_add_footprint(chosen.entry, at, chosen.scale, flip)
 
 
-## The gate itself is part of the painting. Damage is drawn on top of its doors.
-func _build_gate() -> void:
-	_gate = Node2D.new()
-	_gate.position = PAINTED_DOORS_CENTRE
+func _footprint_size(entry: Dictionary) -> Vector2:
+	var lo := Vector2(INF, INF)
+	var hi := -lo
+	for q in entry.poly:
+		lo = lo.min(Vector2(q[0], q[1]))
+		hi = hi.max(Vector2(q[0], q[1]))
+	return hi - lo
+
+
+func _prop_sprite(entry: Dictionary, at: Vector2, size: float, flip: bool) -> Sprite2D:
+	var rect: Array = entry.rect
+	var sprite := Sprite2D.new()
+	sprite.texture = _props_texture
+	sprite.region_enabled = true
+	sprite.region_rect = Rect2(rect[0], rect[1], rect[2], rect[3])
+	sprite.centered = false
+	sprite.flip_h = flip
+	sprite.offset = Vector2(-(rect[2] - entry.anchor[0]) if flip else -entry.anchor[0], -entry.anchor[1])
+	sprite.position = at
+	sprite.scale = Vector2.ONE * size
+	return sprite
+
+
+## Tags the prop's picture with the patch of ground it stands on, in simulation metres.
+func _add_footprint(entry: Dictionary, at: Vector2, size: float, flip: bool) -> void:
+	var poly := PackedVector2Array()
+	var box := Rect2()
+	for q in entry.poly:
+		var local := Vector2(-q[0] if flip else q[0], q[1]) * size + at
+		var ground := Vector2(local.x / PX_PER_M + _focus.x, local.y / (PX_PER_M * DEPTH) + _focus.y)
+		box = Rect2(ground, Vector2.ZERO) if poly.is_empty() else box.expand(ground)
+		poly.append(ground)
+	_footprints.append({"poly": poly, "box": box})
+
+
+func _build_craters() -> void:
+	var rng := _level_rng("craters")
+	for h in level.hotspots:
+		var options: Array = _props.get("crater", [])
+		var entry: Dictionary = options[rng.randi_range(0, options.size() - 1)]
+		var size: float = CRATER_WIDTH_M * PX_PER_M / float(entry.rect[2])
+		_ground_root.add_child(_prop_sprite(entry, to_world(level.hotspot_pos(h)), size, rng.randf() < 0.5))
+
+
+## Grass, scrub and dirt patches. Monsters walk through these, so they have no footprint.
+func _build_scatter() -> void:
+	var rng := _level_rng("scatter")
+	var top := SCATTER_TOP_PX
+	var bottom := _wall_rail_y() - 30.0
+	for i in SCATTER_GROUND:
+		var entry: Dictionary = _props.ground[rng.randi_range(0, _props.ground.size() - 1)]
+		var at := Vector2(rng.randf_range(-520.0, 520.0), rng.randf_range(top, bottom))
+		_ground_root.add_child(_prop_sprite(entry, at, rng.randf_range(0.8, 1.2), rng.randf() < 0.5))
+	for i in SCATTER_DECOR:
+		var at := Vector2(rng.randf_range(-530.0, 530.0), rng.randf_range(top, bottom))
+		if _near_footprint(at):
+			continue
+		var entry: Dictionary = _props.decor[rng.randi_range(0, _props.decor.size() - 1)]
+		_entities.add_child(_prop_sprite(entry, at, rng.randf_range(0.75, 1.05), rng.randf() < 0.5))
+
+
+func _near_footprint(at: Vector2) -> bool:
+	var ground := Vector2(at.x / PX_PER_M + _focus.x, at.y / (PX_PER_M * DEPTH) + _focus.y)
+	var margin := SCATTER_CLEARANCE_PX / PX_PER_M
+	for footprint in _footprints:
+		if (footprint.box as Rect2).grow(margin).has_point(ground):
+			return true
+	return false
+
+
+## Keeps a point on open ground: if it is on, or too close to, a footprint it slides to the edge.
+func _keep_clear(p: Vector2, clearance: float) -> Vector2:
+	for footprint in _footprints:
+		if not (footprint.box as Rect2).grow(clearance).has_point(p):
+			continue
+		var poly: PackedVector2Array = footprint.poly
+		var inside := Geometry2D.is_point_in_polygon(p, poly)
+		var nearest := p
+		var best := INF
+		for i in poly.size():
+			var q := Geometry2D.get_closest_point_to_segment(p, poly[i], poly[(i + 1) % poly.size()])
+			var d := q.distance_to(p)
+			if d < best:
+				best = d
+				nearest = q
+		if inside or best < clearance:
+			var away := (p - nearest).normalized()
+			p = nearest + (-away if inside else away) * clearance
+	return p
+
+
+## Run the game with `-- footprints` to see every prop's ground polygon.
+func _show_footprints_if_asked() -> void:
+	if not OS.get_cmdline_user_args().has("footprints"):
+		return
+	for footprint in _footprints:
+		var outline := Line2D.new()
+		outline.width = 2.5
+		outline.default_color = Color(0.2, 1.0, 1.0)
+		outline.closed = true
+		for q in footprint.poly:
+			outline.add_point(to_world(q))
+		outline.z_index = 30
+		_world.add_child(outline)
+
+
+## The wall and gate are one picture per damage stage, standing on the paved apron.
+func _build_wall() -> void:
+	if _wall_frames.is_empty():
+		var file := FileAccess.open(WALL_DIR + "wall.json", FileAccess.READ)
+		_wall_data = JSON.parse_string(file.get_as_text())
+		for i in int(_wall_data.frames):
+			_wall_frames.append(load(WALL_DIR + "wall_%02d.png" % i))
+	_wall_base = _wall_rail_y() + float(_wall_data.rail_above_base)
+	var apron := Sprite2D.new()
+	apron.texture = load(APRON)
+	apron.centered = false
+	apron.scale = Vector2.ONE * APRON_SCALE
+	apron.offset = Vector2(-apron.texture.get_width() * 0.5, 0)
+	apron.position = Vector2(0, _wall_base - 34.0)
+	_world.add_child(apron)
+	_gate = Sprite2D.new()
+	_gate.centered = false
 	_world.add_child(_gate)
-	var half := PAINTED_DOORS_SIZE * 0.5
-	_gate_cracks = Node2D.new()
-	for line in [[Vector2(-0.8, -1), Vector2(-0.45, -0.3), Vector2(-0.6, 0.25), Vector2(-0.25, 1)],
-			[Vector2(0.7, -1), Vector2(0.35, -0.2), Vector2(0.55, 0.4), Vector2(0.2, 1)],
-			[Vector2(-0.45, -0.3), Vector2(0.0, -0.1), Vector2(0.35, -0.2)]]:
-		var crack := Line2D.new()
-		crack.width = 3.5
-		crack.default_color = Color(0.05, 0.04, 0.03, 0.9)
-		for p in line:
-			crack.add_point(p * half)
-		_gate_cracks.add_child(crack)
-	_gate.add_child(_gate_cracks)
-	_gate_hole = Polygon2D.new()
-	_gate_hole.color = Color(0.03, 0.025, 0.02)
-	_gate_hole.polygon = PackedVector2Array([
-		Vector2(-1, 1) * half, Vector2(-0.96, -0.55) * half, Vector2(-0.62, -0.92) * half, Vector2(-0.25, -0.7) * half,
-		Vector2(0.12, -1) * half, Vector2(0.55, -0.72) * half, Vector2(0.97, -0.9) * half, Vector2(1, 1) * half,
-	])
-	_gate.add_child(_gate_hole)
-	_gate_flash = ColorRect.new()
-	_gate_flash.color = Color(1.0, 0.3, 0.2, 0.0)
-	_gate_flash.position = -half
-	_gate_flash.size = PAINTED_DOORS_SIZE
-	_gate.add_child(_gate_flash)
-	_set_gate_state("intact")
+	_set_gate_frame(0)
 
 
-func _set_gate_state(state: String) -> void:
-	_gate_state = state
-	_gate_cracks.visible = state == "damaged"
-	_gate_hole.visible = state == "destroyed"
+func _wall_rail_y() -> float:
+	return to_world(gate_ground()).y - RAIL_ABOVE_GATE_LINE
+
+
+func _set_gate_frame(frame: int) -> void:
+	_gate_frame = frame
+	_gate.texture = _wall_frames[frame]
+	_gate.position = Vector2(-DESIGN_WIDTH * 0.5, _wall_base - float(_wall_data.base_y[frame]))
+
+
+func _door_ground() -> Vector2:
+	var door_y := _wall_base - DOOR_ABOVE_BASE_PX
+	return Vector2(gate_ground().x, door_y / (PX_PER_M * DEPTH) + _focus.y)
 
 
 func gate_ground() -> Vector2:
@@ -199,11 +355,6 @@ func gate_ground() -> Vector2:
 func _build_hotspots() -> void:
 	for h in level.hotspots:
 		var at := to_world(level.hotspot_pos(h))
-		var crater := Sprite2D.new()
-		crater.texture = load("res://assets/sprites/props/crater.png")
-		crater.position = at
-		crater.scale = Vector2.ONE * CRATER_WIDTH_M * PX_PER_M / crater.texture.get_width()
-		_world.add_child(crater)
 		var glow := Sprite2D.new()
 		glow.texture = _soft_dot()
 		glow.material = _additive
@@ -284,7 +435,7 @@ func _make_grid() -> CellOverlay:
 func show_deployment(deployment: Array) -> void:
 	_clear_dynamic()
 	_breaching = false
-	_set_gate_state("intact")  # a retry starts with the gate repaired
+	_set_gate_frame(0)  # a retry starts with the gate repaired
 	for i in deployment.size():
 		_add_gun_node(i, deployment[i])
 	_set_hotspot_intensity(0.35)
@@ -303,7 +454,7 @@ func _make_gun_view(type: String) -> UnitView:
 	var model: String = Defs.GUNS[type].model
 	if TURRET_KITS.has(model):
 		var turret := TurretSprite.new()
-		turret.setup(TURRET_KITS[model])
+		turret.setup(TURRET_KITS[model], _soft_dot(), _additive)
 		return turret
 	var stand_in := StandInUnit.new()
 	stand_in.setup(load(STAND_IN_ART % model), STAND_IN_WIDTH_M[model], Vector2.ZERO)
@@ -440,7 +591,7 @@ func sync(alpha: float) -> void:
 		var turret: UnitView = _gun_nodes.get(g.id)
 		if turret == null:
 			continue
-		turret.update_turret(g.alive and g.target >= 0, atan2(float(g.aim.y), float(g.aim.x)), dt)
+		turret.update_turret(g.alive and g.target >= 0, atan2(float(g.aim.y) * DEPTH, float(g.aim.x)), dt)
 		turret.bar.visible = g.alive and g.hp < g.max_hp
 		turret.bar.set_fraction(g.hp / g.max_hp)
 	for m in sim.monsters:
@@ -450,6 +601,8 @@ func sync(alpha: float) -> void:
 		if view == null:
 			view = _spawn_monster_view(m)
 		view.tick(m, m.prev_pos.lerp(m.pos, alpha), dt)
+		if m.state == "active":
+			view.ground = _keep_clear(view.ground, MONSTER_CLEARANCE_M)
 		view.position = to_world(view.ground)
 		view.bar.visible = m.hp < m.max_hp and m.state == "active"
 		view.bar.set_fraction(m.hp / m.max_hp)
@@ -491,8 +644,6 @@ func handle_events(events: Array) -> void:
 				_fx_spark(sim.guns[e.gun].pos, Color("#ffb070"))
 				_shake_screen(TURRET_HIT_TREMOR_PX)
 			"gate_hit":
-				var m: Dictionary = sim.monsters[e.monster]
-				_fx_spark(m.pos + Vector2(0, 0.9), Color("#ff6b63"))
 				_shake_screen(GATE_HIT_TREMOR_PX)
 
 
@@ -550,8 +701,9 @@ func _fx_emerge(p: Vector2) -> void:
 
 func _fx_fire(e: Dictionary) -> void:
 	var g: Dictionary = sim.guns[e.gun]
-	(_gun_nodes[e.gun] as UnitView).fired()
-	var from := to_world(g.pos, 1.8)
+	var gun: UnitView = _gun_nodes[e.gun]
+	gun.fired()
+	var from := gun.position + gun.muzzle_offset()
 	var to := to_world(e.to, 0.7)
 	if e.get("shell", false):
 		_fx_shell(from, to, g)
@@ -614,14 +766,20 @@ func _fx_gun_destroyed(id: int) -> void:
 	_puff(to_world(view.ground, 1.8), 1.0, Color(0.2, 0.2, 0.2, 0.6), 1.6, 3.0)
 
 
+## Every hit shakes the screen. Falling HP moves the wall through its damage frames, and once
+## they reach the sparking stage each hit also throws sparks off the doors.
 func shake_gate() -> void:
-	if _gate_state == "destroyed":
+	if sim == null or _breaching:
 		return
-	if sim and _gate_state == "intact" and sim.gate_hp <= level.gate_max_hp * 0.5:
-		_set_gate_state("damaged")
-		_fx_explosion(gate_ground() + Vector2(-1.5, -0.6), 1.4)
-	_gate_flash.color.a = 0.5
-	create_tween().tween_property(_gate_flash, "color:a", 0.0, 0.25)
+	var hp := clampf(sim.gate_hp / level.gate_max_hp, 0.0, 1.0)
+	var frame := 0
+	for threshold in GATE_FRAME_AT_HP:
+		if hp <= threshold:
+			frame += 1
+	if frame > _gate_frame:
+		_set_gate_frame(frame)
+	if _gate_frame >= FIRST_SPARK_FRAME:
+		_fx_gate_sparks()
 	if randi() % 3 == 0:  # visual only; the simulation stays deterministic
 		_puff(to_world(gate_ground() + Vector2(randf_range(-3.0, 3.0), -0.8), 0.6), 0.9, Color(0.6, 0.55, 0.48, 0.5), 0.6, 1.8)
 
@@ -633,22 +791,32 @@ func play_breach() -> void:
 		return
 	_breaching = true
 	_breach_t = 0.0
-	var g := gate_ground()
+	var door := _door_ground()
 	var tween := create_tween()
 	for k in 4:
 		var off := Vector2((k - 1.5) * 1.8, -0.5 + (k % 2) * 0.4)
 		tween.tween_callback(func():
-			_fx_explosion(g + off, 2.2)
+			_fx_explosion(door + off, 2.2)
 			_shake_screen(10.0))
 		tween.tween_interval(0.16)
+	for frame in range(_gate_frame + 1, _wall_frames.size()):
+		tween.tween_callback(_set_gate_frame.bind(frame))
+		tween.tween_interval(0.14)
 	tween.tween_callback(func():
-		_set_gate_state("destroyed")
-		_fx_explosion(g, 3.4)
+		_fx_explosion(door, 3.4)
 		_shake_screen(22.0)
 		for i in 14:
-			_fx_debris(g + Vector2(randf_range(-3.0, 3.0), -0.4)))
+			_fx_debris(door + Vector2(randf_range(-3.0, 3.0), -0.4)))
 	for i in 3:
-		_puff(to_world(g + Vector2((i - 1) * 2.5, -1.0), 1.0), 1.2, Color(0.55, 0.5, 0.45, 0.55), 2.2, 3.8)
+		_puff(to_world(door + Vector2((i - 1) * 2.5, -1.0), 1.0), 1.2, Color(0.55, 0.5, 0.45, 0.55), 2.2, 3.8)
+
+
+func _fx_gate_sparks() -> void:
+	var door := to_world(_door_ground())
+	for i in SPARKS_PER_HIT:
+		var from := door + Vector2(randf_range(-130.0, 130.0), randf_range(-60.0, 60.0))
+		var velocity := Vector2(randf_range(-170.0, 170.0), randf_range(-200.0, -40.0))
+		_chip(from, velocity, Color("#ffd27a"), randf_range(2.5, 5.0), randf_range(0.25, 0.5))
 
 
 func _fx_debris(p: Vector2) -> void:
