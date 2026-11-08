@@ -18,7 +18,7 @@ func _init() -> void:
 	_search_iters = int(args.get("search", "0"))
 	var only := str(args.get("level", ""))
 	var dir := DirAccess.open("res://levels")
-	var files := Array(dir.get_files()).filter(func(f): return f.ends_with(".json"))
+	var files := Array(dir.get_files()).filter(func(f): return f.begins_with("level_") and f.ends_with(".json"))
 	files.sort()
 	for f in files:
 		var lv := LevelData.load_file("res://levels/" + f)

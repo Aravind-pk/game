@@ -18,13 +18,13 @@ tap the field; tap a placed turret to pick it up, drag to move) → **DEFEND** (
 
 ![Game flow](docs/screenshots/flow.png)
 
-**Look:** anime cel shading (toon diffuse + ink outlines, `scripts/game/stylize.gd`), golden-hour
-key light with a cool fill, a dusk sky for ambient light, light haze, colour grading and glow. The
-battlefield is dressed with procedural props (`art/blender/ng_props.py` → `assets/models/props/`):
-ruined walls and pillars with rebar, block piles, barriers, containers, wrecked cars, pine woods,
-lamp posts, smoking spawn craters and a modular fortified wall and gate. Grass is a wind-swayed
-MultiMesh. Obstacles in the level data become ruins, wrecks or containers. Screenshots are rendered with
-the Forward Mobile renderer (software Vulkan), which is the same renderer phones use.
+**Look:** a painted-background approach, as in most 2D/2.5D mobile strategy games. Static
+scenery (terrain, fine grass, edge ruins and woods, craters, the settlement wall) is rendered once
+per level by `art/blender/render_backgrounds.py` from the exact orthographic camera the game uses
+(`godot/levels/camera.json`, 40°). Gameplay obstacles are 2D sprites from `render_prop_sprites.py`,
+placed from the level data at runtime, so layouts stay editable. Monsters and turrets stay live 3D
+(rigged, toon-shaded). In Godot the background is projected onto the ground and onto simple wall
+occluders, so units take real shadows on the painting and pass behind the wall and ruins.
 
 ![Battlefield](docs/screenshots/battlefield.png)
 

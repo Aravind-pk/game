@@ -1,0 +1,85 @@
+{
+ "px_per_m": 40.0,
+ "sprites": {
+  "ruin_wall_0": {
+   "kind": "ruin_wall",
+   "size_px": 280,
+   "frame_m": 7.0
+  },
+  "ruin_wall_90": {
+   "kind": "ruin_wall",
+   "size_px": 280,
+   "frame_m": 7.0
+  },
+  "car_0": {
+   "kind": "car",
+   "size_px": 260,
+   "frame_m": 6.5
+  },
+  "car_90": {
+   "kind": "car",
+   "size_px": 260,
+   "frame_m": 6.5
+  },
+  "barrier_0": {
+   "kind": "barrier",
+   "size_px": 240,
+   "frame_m": 6.0
+  },
+  "barrier_90": {
+   "kind": "barrier",
+   "size_px": 240,
+   "frame_m": 6.0
+  },
+  "container_0": {
+   "kind": "container",
+   "size_px": 360,
+   "frame_m": 9.0
+  },
+  "container_90": {
+   "kind": "container",
+   "size_px": 360,
+   "frame_m": 9.0
+  },
+  "ruin_corner_a": {
+   "kind": "ruin_corner",
+   "size_px": 320,
+   "frame_m": 8.0
+  },
+  "ruin_corner_b": {
+   "kind": "ruin_corner",
+   "size_px": 320,
+   "frame_m": 8.0
+  },
+  "block_pile_a": {
+   "kind": "block_pile",
+   "size_px": 240,
+   "frame_m": 6.0
+  },
+  "block_pile_b": {
+   "kind": "block_pile",
+   "size_px": 240,
+   "frame_m": 6.0
+  },
+  "ruin_pillar_a": {
+   "kind": "ruin_pillar",
+   "size_px": 280,
+   "frame_m": 7.0
+  },
+  "ruin_pillar_b": {
+   "kind": "ruin_pillar",
+   "size_px": 280,
+   "frame_m": 7.0
+  },
+  "rocks_a": {
+   "kind": "rocks",
+   "size_px": 200,
+   "frame_m": 5.0
+  },
+  "rocks_b": {
+   "kind": "rocks",
+   "size_px": 200,
+   "frame_m": 5.0
+  }
+ }
+}

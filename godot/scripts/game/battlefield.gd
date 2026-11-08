@@ -11,7 +11,7 @@ signal hover_changed(cell: Vector2i)
 const TURRET_PALETTE := "polar_ceramic"
 const MONSTER_PALETTE := "basalt_ember"
 const GUN_SCALE := 1.45       # visual only; the simulation uses Defs radii
-const MONSTER_SCALE := 1.75
+const MONSTER_SCALE := 1.45
 
 var level: LevelData
 var camera: Camera3D
@@ -205,6 +205,7 @@ func _projector(depth_mode: String) -> ShaderMaterial:
 func _build_ground() -> void:
 	_bg_mat = _projector("")
 	_ground_mat = _projector(", depth_draw_never")
+	_ground_mat.render_priority = -128  # depth_draw_never puts it in the alpha pass: draw it first
 	_update_bg_scale()
 	if not get_viewport().size_changed.is_connected(_update_bg_scale):
 		get_viewport().size_changed.connect(_update_bg_scale)
@@ -259,6 +260,7 @@ func _load_sprites() -> void:
 func _prop_sprite(name: String, ground: Vector2, scale := 1.0) -> void:
 	var path := "res://assets/sprites/props/%s.png" % name
 	if not ResourceLoader.exists(path):
+		push_warning("missing sprite " + path)
 		return
 	var spr := Sprite3D.new()
 	spr.texture = load(path)

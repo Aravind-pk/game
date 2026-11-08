@@ -56,7 +56,7 @@ func _ready() -> void:
 		_args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 	var dir := DirAccess.open("res://levels")
 	for f in dir.get_files():
-		if f.ends_with(".json"):
+		if f.begins_with("level_") and f.ends_with(".json"):
 			level_paths.append("res://levels/" + f)
 	level_paths.sort()
 	_load_progress()
