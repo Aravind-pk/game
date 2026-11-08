@@ -9,6 +9,7 @@ signal cell_dragged(from_cell: Vector2i, to_cell: Vector2i)
 signal hover_changed(cell: Vector2i)
 
 const TURRET_PALETTE := "polar_ceramic"
+const DECOY_PALETTE := "midnight_steel"  # decoys wear dark steel so they never pass for a live turret
 const MONSTER_PALETTE := "basalt_ember"
 const GUN_SCALE := 1.45       # visual only; the simulation uses Defs radii
 const MONSTER_SCALE := 1.45
@@ -63,6 +64,7 @@ func build(lv: LevelData) -> void:
 	_build_obstacles()
 	_build_scatter()
 	_build_hotspots()
+	_build_unstable()
 	_build_grid()
 	_build_camera()
 
@@ -412,6 +414,69 @@ func _soft_dot() -> Texture2D:
 	return _dot_tex
 
 
+## Unstable ground is always shown, not only while a turret is held: the player plans around it.
+## Cracked, rust-red tiles with a hazard-striped border so it never reads as plain dirt.
+func _build_unstable() -> void:
+	if level.no_build.is_empty():
+		return
+	var vr := level.view_rect
+	var img := Image.create(vr.size.x, vr.size.y, false, Image.FORMAT_L8)
+	for r in level.no_build:
+		for y in range(r.position.y, r.end.y):
+			for x in range(r.position.x, r.end.x):
+				if vr.has_point(Vector2i(x, y)):
+					img.set_pixel(x - vr.position.x, y - vr.position.y, Color.WHITE)
+	var sh := Shader.new()
+	sh.code = """
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+uniform sampler2D mask : filter_nearest;
+uniform vec2 cells;
+float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float on(vec2 c) { return texture(mask, (c + 0.5) / cells).r; }
+void fragment() {
+	vec2 g = UV * cells;
+	vec2 c = floor(g);
+	if (on(c) < 0.5) { discard; }
+	vec2 f = fract(g);
+	// cracks: distance to the nearest edge of a jittered cell pattern, three per tile
+	vec2 q = g * 3.0;
+	vec2 qi = floor(q);
+	float d1 = 9.0; float d2 = 9.0;
+	for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+		vec2 o = vec2(float(x), float(y));
+		vec2 pt = o + vec2(h(qi + o), h(qi + o + 17.0)) - fract(q);
+		float d = dot(pt, pt);
+		if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
+	}
+	float crack = 1.0 - smoothstep(0.0, 0.08, sqrt(d2) - sqrt(d1));
+	// hazard stripes along the outer border of each patch
+	float edge = 1.0;
+	if (on(c + vec2(-1, 0)) < 0.5) edge = min(edge, f.x);
+	if (on(c + vec2(1, 0)) < 0.5) edge = min(edge, 1.0 - f.x);
+	if (on(c + vec2(0, -1)) < 0.5) edge = min(edge, f.y);
+	if (on(c + vec2(0, 1)) < 0.5) edge = min(edge, 1.0 - f.y);
+	float border = 1.0 - step(0.12, edge);
+	float stripe = step(0.5, fract((g.x + g.y) * 1.6));
+	vec3 base = vec3(0.62, 0.2, 0.12);
+	vec3 col = mix(base, vec3(0.16, 0.06, 0.04), crack * 0.85);
+	col = mix(col, mix(vec3(0.95, 0.3, 0.18), vec3(0.15, 0.05, 0.03), stripe), border);
+	ALBEDO = col;
+	ALPHA = max(0.38 + crack * 0.45, border * 0.9);
+}
+"""
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	mat.set_shader_parameter("mask", ImageTexture.create_from_image(img))
+	mat.set_shader_parameter("cells", Vector2(vr.size))
+	mat.render_priority = -10  # ground decal: draw before obstacle sprites, which stand on top of it
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(vr.size) * Defs.CELL
+	var centre := (Vector2(vr.position) + Vector2(vr.size) * 0.5) * Defs.CELL
+	var m := _mesh(plane, mat, to3(centre, 0.04), _env_root)
+	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
 func _build_grid() -> void:
 	var vr := level.view_rect
 	var img := Image.create(vr.size.x, vr.size.y, false, Image.FORMAT_L8)
@@ -461,7 +526,8 @@ func _load_model(path: String) -> Node3D:
 
 
 func gun_model(type: String) -> Node3D:
-	return _load_model("res://assets/models/turrets/%s_%s.glb" % [Defs.GUNS[type].model, TURRET_PALETTE])
+	var palette := DECOY_PALETTE if Defs.GUNS[type].damage <= 0.0 else TURRET_PALETTE
+	return _load_model("res://assets/models/turrets/%s_%s.glb" % [Defs.GUNS[type].model, palette])
 
 
 func monster_model(type: String) -> Node3D:
@@ -556,6 +622,12 @@ func _add_gun_node(id: int, d: Dictionary) -> Node3D:
 		head.rotation.y = PI  # face north, toward the threat
 	if Defs.GUNS[d.type].damage <= 0.0:  # decoys get a coloured base so they read apart from real turrets
 		root.add_child(_ring(1.4, Color("#ff6b63") if Defs.GUNS[d.type].blast > 0.0 else Color("#f2b13a")))
+	if int(d.get("gun", 0)) < 0:  # holdout: dug in behind a ring of sandbags, so it reads as part of the map
+		var bag := _mat(Color("#c2a46a"), 1.0)
+		for k in 12:
+			var a := TAU * float(k) / 12.0
+			var b := _box(Vector3(0.8, 0.5, 0.45), bag, Vector3(cos(a) * 1.55, 0.25, sin(a) * 1.55), root)
+			b.rotation.y = -a + PI / 2
 	var bar := _bar(1.6, Color("#5ee08a"))
 	bar.name = "HP"
 	bar.position.y = 3.6

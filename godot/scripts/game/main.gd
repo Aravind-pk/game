@@ -550,6 +550,27 @@ func _toast_msg(t: String, col := UiKit.INK) -> void:
 	_toast_t = 2.5
 
 
+var _art_cache := {}
+
+## Tray art for a turret type. Decoys reuse the MG art, washed amber (Decoy) or red (Rigged Decoy),
+## so a card never reads as a live turret.
+func _gun_art(type: String) -> Texture2D:
+	var base := _art(Defs.GUNS[type].model)
+	if base == null or Defs.GUNS[type].damage > 0.0:
+		return base
+	if not _art_cache.has(type):
+		var img := base.get_image()
+		img.decompress()
+		var tint := Color("#ff6b63") if Defs.GUNS[type].blast > 0.0 else Color("#f2b13a")
+		for y in img.get_height():
+			for x in img.get_width():
+				var c := img.get_pixel(x, y)
+				var l := 0.25 + 0.75 * c.get_luminance()
+				img.set_pixel(x, y, Color(tint.r * l, tint.g * l, tint.b * l, c.a))
+		_art_cache[type] = ImageTexture.create_from_image(img)
+	return _art_cache[type]
+
+
 func _art(model: String) -> Texture2D:
 	var p := "res://assets/ui/art/%s.png" % model
 	return load(p) if ResourceLoader.exists(p) else null
@@ -562,7 +583,7 @@ func _rebuild_cards() -> void:
 	for gi in guns.size():
 		var g: Dictionary = guns[gi]
 		var label: String = GUN_UI[g.type].short if g.ammo <= 0 else "%s · %d" % [GUN_UI[g.type].short, g.ammo]
-		var c := UiKit.turret_card(label, _art(Defs.GUNS[g.type].model),
+		var c := UiKit.turret_card(label, _gun_art(g.type),
 			select_card.bind(gi))
 		_cards_box.add_child(c)
 		_cards.append(c)
@@ -739,7 +760,7 @@ func _show_briefing() -> void:
 	for g in guns:
 		var ui: Dictionary = GUN_UI[g.type]
 		var ammo_line: String = "No ammo" if g.ammo <= 0 else "%d %s" % [g.ammo, ui.ammo]
-		grid.add_child(UiKit.defense_card(ui.name, ammo_line, _art(Defs.GUNS[g.type].model)))
+		grid.add_child(UiKit.defense_card(ui.name, ammo_line, _gun_art(g.type)))
 	v.add_child(grid)
 	var rules := _range_rules()
 	if level.note != "":
