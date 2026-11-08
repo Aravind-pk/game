@@ -64,3 +64,14 @@ A full build with previews takes about 4–5 minutes on CPU.
 - Rigging / animation (walk, attack, emergence, turret recoil, destruction).
 - Baked texture detail (stone grain, edge wear); materials are currently flat colours + geometry.
 - The flame turret, Behemoth boss, gate and battlefield props.
+
+## Comparing with Modly (open-source image-to-3D)
+
+[Modly](https://github.com/lightningpixel/modly) runs open-source image-to-3D models
+(Hunyuan3D 2 Mini, TripoSG, TRELLIS 2) locally and needs an NVIDIA GPU.
+
+1. Feed it the single-object cut-outs in `art/modly_inputs/` (one per design, 1024×1024).
+2. Save each result as `art/modly_outputs/<model_id>.glb` (e.g. `shale_digger.glb`).
+3. Render it side-by-side with the procedural model, same camera/lights/scale:
+   `python art/blender/compare_modly.py shale_digger art/modly_outputs/shale_digger.glb`
+   → `art/previews/compare/shale_digger_compare.png` plus a triangle/material/texture report.
