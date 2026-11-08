@@ -1,0 +1,137 @@
+{
+ "id": "34",
+ "title": "Blast Radius",
+ "map": "04",
+ "cols": 20,
+ "rows": 34,
+ "view": [
+  3,
+  13,
+  14,
+  21
+ ],
+ "gate_hp": 500,
+ "gate_cols": [
+  8,
+  11
+ ],
+ "obstacles": [
+  [
+   13,
+   23,
+   1,
+   2
+  ],
+  [
+   5,
+   18,
+   2,
+   2
+  ],
+  [
+   5,
+   27,
+   2,
+   1
+  ],
+  [
+   8,
+   17,
+   3,
+   1
+  ],
+  [
+   16,
+   21,
+   1,
+   1
+  ]
+ ],
+ "hotspots": [
+  {
+   "name": "Northwest",
+   "cell": [
+    1,
+    5
+   ],
+   "delay": 0,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 2,
+     "count": 4,
+     "interval": 1.21
+    },
+    {
+     "type": "brute",
+     "level": 3,
+     "count": 1,
+     "interval": 3.8
+    }
+   ]
+  },
+  {
+   "name": "West",
+   "cell": [
+    0,
+    18
+   ],
+   "delay": 6,
+   "groups": [
+    {
+     "type": "stalker",
+     "level": 2,
+     "count": 6,
+     "interval": 1.15
+    }
+   ]
+  },
+  {
+   "name": "East",
+   "cell": [
+    18,
+    16
+   ],
+   "delay": 5,
+   "groups": [
+    {
+     "type": "burrower",
+     "level": 2,
+     "count": 7,
+     "interval": 0.8
+    }
+   ]
+  }
+ ],
+ "guns": [
+  {
+   "type": "mg",
+   "level": 2,
+   "count": 2,
+   "ammo": 121
+  },
+  {
+   "type": "cannon",
+   "level": 1,
+   "count": 1,
+   "ammo": 15
+  },
+  {
+   "type": "rigged",
+   "level": 1,
+   "ammo": 0,
+   "count": 1
+  },
+  {
+   "type": "decoy",
+   "level": 1,
+   "ammo": 0,
+   "count": 1
+  }
+ ],
+ "design": {
+  "target_win": 0.0317,
+  "min_zone": 4,
+  "gate_margin": 0.12
+ }
+}
