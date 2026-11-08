@@ -1,0 +1,11 @@
+{
+  "id": "01", "title": "First Contact",
+  "cols": 20, "rows": 34, "view": [3, 13, 14, 21],
+  "gate_hp": 600, "gate_cols": [8, 11],
+  "obstacles": [[5, 20, 2, 1], [13, 24, 1, 2], [9, 17, 2, 1], [4, 27, 1, 1], [15, 29, 1, 1]],
+  "hotspots": [
+    {"name": "North", "cell": [10, 6], "delay": 0.0,
+     "groups": [{"type": "burrower", "level": 1, "count": 10, "interval": 1.1}]}
+  ],
+  "guns": [{"type": "mg", "level": 1, "ammo": 70, "count": 2}]
+}

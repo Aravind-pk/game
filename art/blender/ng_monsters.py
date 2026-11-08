@@ -73,7 +73,7 @@ def sculpt_body(name, balls, mat="primary", voxel=0.045, noise=0.035, noise_scal
 
 
 def plate_on(name, center, radii, theta, phi, size, tilt=20, lift=1.0, mat="armor", seed=0,
-             point=0.08, point_y=0.75, bev=0.018, points=12, twist=0.0, jitter=0.18):
+             point=0.08, point_y=0.75, bev=0.018, points=12, twist=0.0, jitter=0.18, curve=0.45):
     """Place a shingle plate tangent to an ellipsoid surface.
 
     theta: around the body (0 = top, +90 = right side, -90 = left side)
@@ -85,7 +85,7 @@ def plate_on(name, center, radii, theta, phi, size, tilt=20, lift=1.0, mat="armo
     pos = c + Vector((d.x * radii[0], d.y * radii[1], d.z * radii[2])) * lift
     n = Vector((d.x / radii[0] ** 2, d.y / radii[1] ** 2, d.z / radii[2] ** 2)).normalized()
     o = rock_shard(name, size, pos, (0, 0, 0), mat, seed=seed, points=points, point=point,
-                   point_y=point_y, bev=bev, jitter=jitter)
+                   point_y=point_y, bev=bev, jitter=jitter, curve=curve)
     back = Vector((0, 1, 0))
     back = (back - n * back.dot(n))
     if back.length < 1e-4:

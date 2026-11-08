@@ -120,7 +120,11 @@ def apply_palette(palette):
             continue
         bsdf = m.node_tree.nodes.get("Principled BSDF")
         col = hex_rgb(hexcol)
-        bsdf.inputs["Base Color"].default_value = col
+        tint = m.node_tree.nodes.get("NG_tint")
+        if tint:  # textured: base colour = detail texture x palette colour
+            tint.inputs[7].default_value = col
+        else:
+            bsdf.inputs["Base Color"].default_value = col
         bsdf.inputs["Roughness"].default_value = ROUGHNESS.get(role, 0.6)
         bsdf.inputs["Metallic"].default_value = METALLIC_ROLES.get(role, 0.0)
         if role in EMISSIVE_ROLES:
@@ -156,11 +160,15 @@ def set_transform(obj, loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1)):
     return obj
 
 
+ROUND = 1.7  # global bevel scale: softer, more moulded hard-surface forms
+
+
 def bevel(obj, width=0.02, segments=2, angle=35):
     mod = obj.modifiers.new("Bevel", "BEVEL")
-    mod.width = width
-    mod.segments = segments
+    mod.width = width * ROUND
+    mod.segments = max(segments, 3) if width >= 0.015 else segments
     mod.limit_method = "ANGLE"
+    mod.use_clamp_overlap = True
     mod.angle_limit = math.radians(angle)
     mod.harden_normals = True
     return obj
@@ -281,7 +289,8 @@ def tube_along(name, points, radius, mat="frame", verts=10, taper=None):
 
 
 def rock_shard(name, size, loc=(0, 0, 0), rot=(0, 0, 0), mat="armor", seed=0, points=14,
-               flat_bottom=False, point=0.0, bev=0.025, point_y=0.0, jitter=0.22):
+               flat_bottom=False, point=0.0, bev=0.025, point_y=0.0, jitter=0.22, curve=0.0,
+               bev_segments=1):
     """Faceted rock plate: convex hull of jittered points inside an ellipsoid.
 
     size  = (x, y, z) half-extents
@@ -310,10 +319,15 @@ def rock_shard(name, size, loc=(0, 0, 0), rot=(0, 0, 0), mat="armor", seed=0, po
     # Planar dissolve merges almost-coplanar triangles into chunky facets
     bmesh.ops.dissolve_limit(bm, angle_limit=math.radians(6), verts=bm.verts, edges=bm.edges)
     bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 4])
+    if curve:
+        # bend into a shell so plates follow the body's curvature (rounder silhouette)
+        for v in bm.verts:
+            r2 = (v.co.x / size[0]) ** 2 + (v.co.y / size[1]) ** 2
+            v.co.z -= curve * size[2] * r2 * 1.5
     obj = mesh_object(name, bm, mat)
     set_transform(obj, loc, rot)
     if bev:
-        bevel(obj, bev, 1, angle=20)
+        bevel(obj, bev, bev_segments, angle=20)
     return obj
 
 
@@ -385,11 +399,29 @@ def triangle_count():
     return total
 
 
+def decimate_to(target_tris):
+    """Collapse-decimate every mesh proportionally so the scene fits a triangle budget."""
+    total = triangle_count()
+    if total <= target_tris:
+        return
+    ratio = max(0.2, target_tris / total)
+    for o in [o for o in bpy.context.scene.objects if o.type == "MESH"]:
+        d = o.modifiers.new("Budget", "DECIMATE")
+        d.ratio = ratio
+        d.use_collapse_triangulate = True
+        for sel in bpy.context.selected_objects:
+            sel.select_set(False)
+        o.select_set(True)
+        bpy.context.view_layer.objects.active = o
+        bpy.ops.object.modifier_apply(modifier=d.name)
+
+
 def export_glb(path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", export_apply=True,
                               export_yup=True, use_selection=False, export_cameras=False,
-                              export_lights=False)
+                              export_lights=False, export_image_format="JPEG",
+                              export_image_quality=88)
 
 
 def save_blend(path):
@@ -398,7 +430,7 @@ def save_blend(path):
 
 
 def render_preview(path, target=(0, 0, 0.8), distance=7.0, yaw=-35, pitch=18, res=(900, 700),
-                   samples=48, ortho_scale=None, crease_lines=True):
+                   samples=48, ortho_scale=None, crease_lines=True, background=True):
     """Studio render on a cream background with anime-style outlines."""
     scene = bpy.context.scene
     created = []
@@ -491,7 +523,8 @@ def render_preview(path, target=(0, 0, 0.8), distance=7.0, yaw=-35, pitch=18, re
     scene.render.filepath = path
     os.makedirs(os.path.dirname(path), exist_ok=True)
     bpy.ops.render.render(write_still=True)
-    _composite_bg(path)
+    if background:
+        _composite_bg(path)
 
     for o in created:
         bpy.data.objects.remove(o, do_unlink=True)

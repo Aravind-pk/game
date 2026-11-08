@@ -3,7 +3,8 @@ and render preview colour-study sheets.
 
 Usage (from the repo root):
     blender --background --python art/blender/build_all.py
-    # or with the bpy module:  python art/blender/build_all.py [--no-render] [--only kestrel,mule]
+    # or with the bpy module:  python art/blender/build_all.py [--no-render] [--no-textures]
+    #                          [--tex-size 1024] [--only kestrel,mule]
 """
 
 import os
@@ -15,11 +16,18 @@ sys.path.insert(0, HERE)
 import ng_common as C  # noqa: E402
 import ng_monsters as M  # noqa: E402
 import ng_turrets as T  # noqa: E402
+import ng_texture as X  # noqa: E402
 
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 BLEND_DIR = os.path.join(REPO, "art", "blender", "models")
 PREVIEW_DIR = os.path.join(REPO, "art", "previews")
 GLB_DIR = os.path.join(REPO, "godot", "assets", "models")
+ICON_DIR = os.path.join(REPO, "godot", "assets", "ui", "icons")
+ICON_PALETTE = {"turrets": "polar_ceramic", "monsters": "basalt_ember"}  # in-game defaults
+TEX_DIR = os.path.join(REPO, "art", "blender", "models", "textures")
+
+# triangle budgets for mobile (monsters appear in crowds)
+TRI_BUDGET = {"shale_digger": 9000, "rift_runner": 9000, "faultbreaker": 12000}
 
 # id, display name, game role, builder, family, preview camera (target z, distance)
 MODELS = [
@@ -38,6 +46,8 @@ def palettes_for(family):
 
 def main(argv):
     render = "--no-render" not in argv
+    textures = "--no-textures" not in argv
+    tex_size = int(argv[argv.index("--tex-size") + 1]) if "--tex-size" in argv else 1024
     only = None
     if "--only" in argv:
         only = set(argv[argv.index("--only") + 1].split(","))
@@ -50,6 +60,10 @@ def main(argv):
         pals = palettes_for(family)
         first = next(iter(pals))
         C.apply_palette(pals[first])
+        if mid in TRI_BUDGET:
+            C.decimate_to(TRI_BUDGET[mid])
+        if textures:
+            X.bake_textures(mid, "turret" if family == "turrets" else "monster", TEX_DIR, tex_size)
         tris = C.triangle_count()
         C.save_blend(os.path.join(BLEND_DIR, f"{mid}.blend"))
         for pname, pal in pals.items():
@@ -59,6 +73,11 @@ def main(argv):
                 C.render_preview(os.path.join(PREVIEW_DIR, "renders", f"{mid}_{pname}.png"),
                                  target=(0, -0.2, tz), distance=dist, yaw=-50, pitch=18,
                                  res=(640, 520), samples=32)
+        if render:
+            C.apply_palette(pals[ICON_PALETTE[family]])
+            C.render_preview(os.path.join(ICON_DIR, f"{mid}.png"), target=(0, -0.2, tz),
+                             distance=dist, yaw=-50, pitch=18, res=(320, 260), samples=24,
+                             background=False)
         report.append((mid, role, tris))
         print(f"[north-gate] {mid}: {tris} triangles, {len(pals)} palettes")
     if render:

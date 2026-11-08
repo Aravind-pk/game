@@ -6,36 +6,84 @@ anywhere on the battlefield, then watch a deterministic, fully automatic battle 
 
 > Plan → Deploy → Simulate → Win or Lose
 
+## Playing / running
+
+Open `godot/` in **Godot 4.5** and press Play (main scene: `scenes/main.tscn`).
+The game is portrait 1080×1920 and uses the Mobile renderer. Export to Android/iOS
+through Godot's export templates.
+
+**Flow:** Briefing (enemy list, gate HP, spawn radar) → Plan & Deploy (pick a turret card,
+tap the field; tap a placed turret to pick it up, drag to move) → **DEFEND** (fully automatic,
+1×/2× speed) → Result. **Retry** keeps your deployment so you can adjust it.
+
+![Game flow](docs/screenshots/flow.png)
+
+### What's implemented (MVP)
+
+- Deterministic fixed-step simulation (`scripts/sim/battle_sim.gd`), fully separate from visuals.
+  The same deployment always gives the same battle; a test checks this exactly.
+- Free placement on a grid anywhere in the visible field, with a range ring and valid/invalid cell
+  colours. Ruins, the wall and spawn fissures can't be built on.
+- Underground spawning: the fissure glows and the ground throws up dust, then the monster
+  climbs out. Hotspots off-screen are simulated like any other.
+- Monsters follow a flow field to the gate with no predefined roads. They go for turrets
+  within their detection radius, destroy them, then carry on to the gate and attack it.
+- Turrets target the closest monster automatically and have limited ammo. Cannon shells fly and
+  splash, sniper beams have long range. Destroyed turrets become wrecks that no longer block movement.
+- Spawn radar (full map, hotspots + counts), briefing panel, victory/defeat, retry, next level,
+  saved progress.
+- 5 levels in `godot/levels/*.json`, one of them the spec's "Eastern Breach". All of it is data-driven.
+
+### Tests & balance
+
+```bash
+godot --headless --path godot --import          # once, registers classes
+godot --headless --path godot --script res://tests/sim_check.gd -- trials=40 search=150
+```
+
+For every level this checks that no defence loses and that identical runs match bit-for-bit.
+It also measures how many random deployments win, and hill-climbs to a winning deployment to
+prove the level is solvable. Current curve, as the share of random deployments that win:
+L1 62% · L2 22% · L3 22% · L4 22% · L5 8%.
+
+Screenshots, rendered headless with Xvfb:
+`godot --path godot --rendering-driver opengl3 -- level=05 phase=combat shot=out.png shot_time=20`
+(phases: briefing, deploy, radar, combat, result).
+
 ## Repository layout
 
 ```
+godot/
+  levels/            Level data (JSON)
+  scripts/sim/       defs.gd (stats), level_data.gd, battle_sim.gd: deterministic core
+  scripts/game/      main.gd (flow + UI), battlefield.gd (3D view/FX/input), radar_view.gd
+  tests/             sim_check.gd: determinism + balance probe
+  assets/models/     Generated .glb (model x palette), textured
+  assets/ui/icons/   Generated model icons
 art/
-  concepts/          Concept sheets (colour studies + game overview)
-  blender/           Procedural Blender model scripts (the source of truth)
-    ng_common.py       palettes, materials, mesh helpers, preview renderer, exporter
-    ng_turrets.py      Kestrel (MG), Mule (cannon), Needle (sniper)
-    ng_monsters.py     Shale Digger (Burrower), Rift Runner (Stalker), Faultbreaker (Brute)
-    build_all.py       builds everything below
-    models/*.blend     generated Blender files (one per model)
-  previews/          Generated renders + colour-study sheets
-godot/               Godot 4 project
-  assets/models/     Generated .glb files, one per model × palette
-  scenes/, scripts/  Model showcase scene (main scene for now)
+  concepts/          Concept sheets
+  blender/           Procedural model scripts (source of truth), see below
+  previews/          Renders, colour-study sheets, TripoSR comparison
+tools/triposr/       CPU TripoSR runner used for the comparison
 ```
 
 ## Models
 
 | Model | Game role | Palettes | Triangles |
 |---|---|---|---|
-| Kestrel | MG Turret (high fire rate) | Frontier Olive, Polar Ceramic, Midnight Steel | ~7.1k |
-| Mule | Cannon (AoE) | 〃 | ~8.0k |
-| Needle | Sniper (long range) | 〃 | ~3.9k |
-| Shale Digger | Burrower, Lv1 (swarm) | Basalt Ember, Clayfire, Abyss Violet | ~9.9k |
-| Rift Runner | Stalker, Lv2 (fast) | 〃 | ~10.5k |
-| Faultbreaker | Brute, Lv3 (tank) | 〃 | ~12.3k |
+| Kestrel | MG Turret (high fire rate) | Frontier Olive, Polar Ceramic, Midnight Steel | ~8.6k |
+| Mule | Cannon (AoE) | 〃 | ~10.6k |
+| Needle | Sniper (long range) | 〃 | ~5.2k |
+| Shale Digger | Burrower, Lv1 (swarm) | Basalt Ember, Clayfire, Abyss Violet | ~9k |
+| Rift Runner | Stalker, Lv2 (fast) | 〃 | ~9k |
+| Faultbreaker | Brute, Lv3 (tank) | 〃 | ~12k |
 
 ![Turrets](art/previews/turrets_sheet.png)
 ![Monsters](art/previews/monsters_sheet.png)
+
+Each model has baked textures (`art/blender/ng_texture.py`): a greyscale detail map (AO, stone
+grain and cracks, chipped edges) used as the base colour texture multiplied by the palette
+colour, plus a normal map. Monster plates are bent into curved shells, and turret bevels are rounded.
 
 ### Conventions
 
@@ -62,7 +110,6 @@ A full build with previews takes about 4–5 minutes on CPU.
 ### Not done yet
 
 - Rigging / animation (walk, attack, emergence, turret recoil, destruction).
-- Baked texture detail (stone grain, edge wear); materials are currently flat colours + geometry.
 - The flame turret, Behemoth boss, gate and battlefield props.
 
 ## Comparing with Modly (open-source image-to-3D)
