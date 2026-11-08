@@ -58,6 +58,7 @@ func build(lv: LevelData) -> void:
 	_build_environment()
 	_build_ground()
 	_build_wall()
+	_build_gate()
 	_build_obstacles()
 	_build_scatter()
 	_build_hotspots()
@@ -185,6 +186,11 @@ var _bg_mat: ShaderMaterial      # occluders (writes depth)
 var _ground_mat: ShaderMaterial  # ground (no depth write, so sprite cards can sink below it)
 var _cam: Dictionary = {}
 var _sprites: Dictionary = {}
+var _gate: Sprite3D
+var _gate_state := "intact"
+var _gate_pos := Vector3.ZERO
+var _breaching := false
+var _breach_t := 0.0
 
 
 func _load_cam() -> void:
@@ -290,6 +296,42 @@ func _build_obstacles() -> void:
 			sc = 0.6 if i % 3 == 2 else 0.8
 		var centre := (Vector2(r.position) + Vector2(r.size) * 0.5) * Defs.CELL
 		_prop_sprite(name, centre, sc)
+
+
+## The gate is a sprite (intact / damaged / destroyed) at the doors' ground point, pushed back
+## along the camera's view direction: same place on screen, but deeper than the monsters
+## attacking it, so they always draw in front of the doors.
+func _build_gate() -> void:
+	_load_sprites()
+	var front := float(level.wall_row) * Defs.CELL
+	var gx := (level.gate_cols.x + level.gate_cols.y + 1) * 0.5 * Defs.CELL
+	var ground := Vector2(gx, front + 0.9 * 0.8 + 1.9)  # measured against the painted towers
+	var pitch := deg_to_rad(float(_cam.pitch_deg))
+	var forward := Vector3(0, -sin(pitch), -cos(pitch))
+	_gate = Sprite3D.new()
+	_gate.pixel_size = 1.0 / float(_sprites.get("px_per_m", 40.0))
+	_gate.shaded = false
+	_gate.transparent = true
+	_gate.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
+	_gate.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_gate.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_gate.rotation = Vector3(-pitch, 0, 0)
+	_gate_pos = to3(ground) + forward * 14.0
+	_gate.position = _gate_pos
+	_env_root.add_child(_gate)
+	_set_gate_state("intact")
+
+
+func _set_gate_state(state: String) -> void:
+	_gate_state = state
+	var path := "res://assets/sprites/props/gate_%s.png" % state
+	if ResourceLoader.exists(path):
+		_gate.texture = load(path)
+
+
+func gate_ground() -> Vector2:
+	var gx := (level.gate_cols.x + level.gate_cols.y + 1) * 0.5 * Defs.CELL
+	return Vector2(gx, float(level.wall_row) * Defs.CELL)
 
 
 func _build_scatter() -> void:
@@ -905,4 +947,98 @@ func _fx_gun_destroyed(id: int) -> void:
 
 
 func shake_gate() -> void:
-	pass  # the gate is part of the painted background; damage shows on the gate HP bar
+	if _gate == null or _gate_state == "destroyed":
+		return
+	if sim and _gate_state == "intact" and sim.gate_hp <= level.gate_max_hp * 0.5:
+		_set_gate_state("damaged")
+		_fx_explosion(gate_ground() + Vector2(-1.5, -0.6), 1.4)
+	var tw := create_tween()
+	_gate.modulate = Color(1.0, 0.55, 0.5)
+	tw.tween_property(_gate, "position:x", _gate_pos.x + 0.12, 0.04)
+	tw.tween_property(_gate, "position:x", _gate_pos.x - 0.12, 0.04)
+	tw.tween_property(_gate, "position:x", _gate_pos.x, 0.04)
+	tw.parallel().tween_property(_gate, "modulate", Color.WHITE, 0.25)
+	if randi() % 3 == 0:  # visual only; the simulation stays deterministic
+		var s := SphereMesh.new()
+		var p := gate_ground() + Vector2(randf_range(-3.0, 3.0), -0.8)
+		var d := _mesh(s, _emissive(Color(0.6, 0.55, 0.48), 0.2, 0.5), to3(p, 0.6), _fx_root)
+		_fade_free(d, 0.6, 1.8)
+
+
+## Gate falls: chained explosions, destroyed sprite, debris, dust and camera shake; then the
+## surviving monsters charge through the breach (animate_breach).
+func play_breach() -> void:
+	if _gate == null or _breaching:
+		return
+	_breaching = true
+	_breach_t = 0.0
+	var g := gate_ground()
+	var tw := create_tween()
+	for k in 4:
+		var off := Vector2((k - 1.5) * 1.8, -0.5 + (k % 2) * 0.4)
+		tw.tween_callback(func(): _fx_explosion(g + off, 2.2); _shake_camera(0.35))
+		tw.tween_interval(0.16)
+	tw.tween_callback(func():
+		_set_gate_state("destroyed")
+		_fx_explosion(g, 3.4)
+		_shake_camera(0.8)
+		for i in 14:
+			_fx_debris(g + Vector2(randf_range(-3.0, 3.0), -0.4)))
+	for i in 3:
+		var dust := _mesh(SphereMesh.new(), _emissive(Color(0.55, 0.5, 0.45), 0.15, 0.55),
+			to3(g + Vector2((i - 1) * 2.5, -1.0), 1.0), _fx_root)
+		dust.scale = Vector3.ONE * 1.2
+		var t2 := create_tween()
+		t2.tween_interval(0.7)
+		t2.tween_property(dust, "scale", Vector3.ONE * 4.5, 1.6)
+		t2.parallel().tween_property(dust.material_override, "albedo_color:a", 0.0, 1.6)
+		t2.tween_callback(dust.queue_free)
+
+
+func _fx_debris(p: Vector2) -> void:
+	var b := BoxMesh.new()
+	b.size = Vector3(0.35, 0.2, 0.3) * randf_range(0.6, 1.4)
+	var r := _mesh(b, _mat(Color("#3e4752").lerp(Color("#8e9196"), randf()), 0.8, 0.3), to3(p, 1.0), _fx_root)
+	var dir := Vector3(randf_range(-1, 1), 0, randf_range(-0.3, 1.0)).normalized()
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(r, "position", r.position + dir * randf_range(2.0, 5.0) + Vector3(0, 2.5, 0), 0.35)
+	tw.tween_property(r, "rotation", Vector3(randf() * 6, randf() * 6, randf() * 6), 1.0)
+	tw.chain().tween_property(r, "position:y", 0.1, 0.4)
+	tw.chain().tween_interval(1.2)
+	tw.chain().tween_callback(r.queue_free)
+
+
+func _shake_camera(strength: float) -> void:
+	var tw := create_tween()
+	for i in 6:
+		tw.tween_property(camera, "h_offset", randf_range(-strength, strength), 0.04)
+		tw.parallel().tween_property(camera, "v_offset", randf_range(-strength, strength), 0.04)
+	tw.tween_property(camera, "h_offset", 0.0, 0.06)
+	tw.parallel().tween_property(camera, "v_offset", 0.0, 0.06)
+
+
+## After the breach: surviving monsters run through the gate into the settlement.
+func animate_breach(delta: float) -> void:
+	if not _breaching or sim == null:
+		return
+	_breach_t += delta
+	if _breach_t < 0.9:
+		return
+	var g := gate_ground()
+	for m in sim.monsters:
+		if m.state == "dead" or not _monster_nodes.has(m.id):
+			continue
+		var node: Node3D = _monster_nodes[m.id]
+		var cur := Vector2(node.position.x, node.position.z) + level.world_size() * 0.5
+		var target := Vector2(clampf(cur.x, g.x - 3.0, g.x + 3.0), g.y + 14.0)
+		if cur.y < g.y - 0.5:
+			target = Vector2(clampf(cur.x, g.x - 2.5, g.x + 2.5), g.y + 1.0)
+		var dir := (target - cur).normalized()
+		var nxt := cur + dir * float(m.speed) * 1.4 * delta
+		node.position = to3(nxt)
+		node.rotation.y = lerp_angle(node.rotation.y, atan2(dir.x, dir.y), 0.2)
+		var ap := node.get_meta("anim", null) as AnimationPlayer
+		if ap and ap.current_animation != "walk":
+			ap.play("walk", 0.15)
+			ap.speed_scale = 1.6

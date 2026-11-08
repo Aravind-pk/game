@@ -364,7 +364,8 @@ def build_scene(lv, cam_cfg):
     wz = wall_front_y + 0.9 * WALL_SCALE
     g0, g1 = lv["gate_cols"][0] * CELL, (lv["gate_cols"][1] + 1) * CELL
     gw = g1 - g0
-    place("gate_doors", None, B((g0 + g1) / 2, wz, lv), 0, scale_xyz=(gw / 8.0, WALL_SCALE, WALL_SCALE))
+    # gate doors are NOT baked: the game shows intact / damaged / destroyed gate sprites
+    build_yard(lv, wall_front_y, g0, g1, rng)
     tw = 3.0 * WALL_SCALE
     for tx in (g0 - tw / 2 - 0.1, g1 + tw / 2 + 0.1):
         place("gate_tower", None, B(tx, wz, lv), 0, WALL_SCALE)
@@ -407,12 +408,82 @@ def build_scene(lv, cam_cfg):
     yard.location = B(W / 2, wall_front_y + 20, lv, 0.004)
     ym = bpy.data.materials.new("bg_yard")
     ym.use_nodes = True
-    ym.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = hex_lin("#2c333b")
+    _yn = ym.node_tree
+    _ybsdf = _yn.nodes["Principled BSDF"]
+    _yg = _yn.nodes.new("ShaderNodeNewGeometry")
+    _ynoise = _yn.nodes.new("ShaderNodeTexNoise")
+    _ynoise.inputs["Scale"].default_value = 0.35
+    _ynoise.inputs["Detail"].default_value = 8.0
+    _yn.links.new(_yg.outputs["Position"], _ynoise.inputs["Vector"])
+    _yr = _yn.nodes.new("ShaderNodeValToRGB")
+    _yr.color_ramp.elements[0].color = hex_lin("#3d434a")
+    _yr.color_ramp.elements[1].color = hex_lin("#5b6168")
+    _yn.links.new(_ynoise.outputs["Fac"], _yr.inputs["Fac"])
+    _yn.links.new(_yr.outputs["Color"], _ybsdf.inputs["Base Color"])
     ym.node_tree.nodes["Principled BSDF"].inputs["Roughness"].default_value = 0.95
     yard.data.materials.append(ym)
 
     C.apply_palette(P.PROP_PALETTE)
     grungify_role_materials()
+
+
+def build_yard(lv, wall_front_y, g0, g1, rng):
+    """Settlement detail inside the wall: road through the gate, sandbag lines, tents, crates,
+    barrels, a truck, floodlights and blocky buildings with rooftop clutter."""
+    W = lv["cols"] * CELL
+    gx = (g0 + g1) / 2
+    y0 = wall_front_y + 1.6 * WALL_SCALE + 0.4     # just inside the wall
+    # road from the gate into the settlement, with worn yellow markings
+    road = C.box("yard_road", (g1 - g0 + 1.0, 30.0, 0.04), B(gx, y0 + 15.0, lv, 0.02), mat="asphalt", bev=0)
+    for k in range(6):
+        C.box(f"yard_mark{k}", (0.25, 1.6, 0.02), B(gx, y0 + 2.5 + k * 3.2, lv, 0.05), mat="stripe", bev=0)
+    for side in (-1, 1):
+        C.box(f"yard_kerb{side}", (0.3, 30.0, 0.15), B(gx + side * (g1 - g0 + 1.0) / 2, y0 + 15, lv, 0.07),
+              mat="concrete_dark", bev=0.01)
+    # sandbag lines flanking the inner gate
+    for side in (-1, 1):
+        for row in range(2):
+            for k in range(9):
+                x = gx + side * ((g1 - g0) / 2 + 1.2 + k * 0.55)
+                C.box(f"bag{side}{row}{k}", (0.55, 0.32, 0.22), B(x, y0 + 1.4 + row * 0.02, lv, 0.12 + row * 0.22),
+                      (0, 0, rng.uniform(-6, 6)), "sand", 0.08)
+    # crates, barrels, a parked truck near the road
+    for k in range(7):
+        x = gx + rng.choice([-1, 1]) * rng.uniform(6.0, 11.0)
+        y = y0 + rng.uniform(2.5, 9.0)
+        s = rng.uniform(0.7, 1.1)
+        C.box(f"crate{k}", (s, s, s), B(x, y, lv, s / 2), (0, 0, rng.uniform(0, 90)), "bark", 0.03)
+    for k in range(8):
+        x = gx + rng.choice([-1, 1]) * rng.uniform(5.0, 12.0)
+        C.cylinder(f"barrel{k}", 0.3, 0.9, B(x, y0 + rng.uniform(2.0, 8.0), lv, 0.45), mat="rust", verts=10)
+    place("car", None, B(gx + 7.5, y0 + 6.5, lv), 90 + rng.uniform(-8, 8), 1.0)
+    place("container", None, B(gx - 12.0, y0 + 4.0, lv), 0, 0.8)
+    # tents
+    for k, (dx, dy) in enumerate(((-7.5, 10.5), (-11.5, 12.0), (8.0, 11.0), (12.0, 12.5))):
+        prof = [(-1.6, 0), (1.6, 0), (0, 1.9)]
+        t = C.prism(f"tent{k}", prof, 3.2, B(gx + dx, y0 + dy, lv), (0, 0, rng.uniform(-10, 10)), "tent", 0.04, axis="Y")
+    # buildings with rooftop clutter, filling the rest of the yard band
+    xs = [x for x in range(-30, int(W) + 30, 6) if abs(x - gx) > 7.5]
+    for k, x in enumerate(xs):
+        w = rng.uniform(4.5, 6.5)
+        d = rng.uniform(4.0, 6.0)
+        h = rng.uniform(3.0, 6.5)
+        y = y0 + rng.uniform(14.0, 17.0)
+        C.box(f"bld{k}", (w, d, h), B(x, y, lv, h / 2), mat="concrete", bev=0.05)
+        C.box(f"roof{k}", (w + 0.3, d + 0.3, 0.3), B(x, y, lv, h + 0.15), mat="roof", bev=0.03)
+        C.box(f"win{k}", (w * 0.6, 0.05, 0.4), B(x, y - d / 2 - 0.03, lv, h * 0.6), mat="lamp" if k % 3 == 0 else "glass", bev=0)
+        C.box(f"ac{k}", (0.9, 0.7, 0.5), B(x + rng.uniform(-1.2, 1.2), y + rng.uniform(-1, 1), lv, h + 0.55), mat="steel", bev=0.02)
+        if k % 2 == 0:
+            C.cylinder(f"tank{k}", 0.6, 1.2, B(x - w / 4, y + d / 4, lv, h + 0.9), mat="steel", verts=12)
+    # floodlight masts inside the wall
+    for lx in (gx - 10.0, gx + 10.0):
+        place("lamp_post", None, B(lx, y0 + 3.0, lv), 90 if lx < gx else -90, 1.0)
+        lamp = bpy.data.lights.new("yard_lamp", "POINT")
+        lamp.energy = 220
+        lamp.color = (1.0, 0.78, 0.5)
+        lo = bpy.data.objects.new("yard_lamp", lamp)
+        lo.location = B(lx + (0.8 if lx < gx else -0.8), y0 + 3.0, lv, 4.6)
+        bpy.context.scene.collection.objects.link(lo)
 
 
 def setup_camera_and_light(lv, cfg):

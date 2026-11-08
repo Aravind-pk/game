@@ -176,11 +176,17 @@ func _process(delta: float) -> void:
 		steps += 1
 	if steps == MAX_STEPS_PER_FRAME:
 		_accum = 0.0
-	battlefield.sync(clampf(_accum / Defs.SIM_DT, 0.0, 1.0))
+	if sim.state == BattleSim.State.DEFEAT:
+		battlefield.animate_breach(delta)
+	else:
+		battlefield.sync(clampf(_accum / Defs.SIM_DT, 0.0, 1.0))
 	_refresh_hud()
 	if sim.state != BattleSim.State.RUNNING:
 		if _end_timer < 0.0:
 			_end_timer = 1.4
+			if sim.state == BattleSim.State.DEFEAT:
+				_end_timer = 3.6  # let the gate fall and the breach play out
+				battlefield.play_breach()
 		_end_timer -= delta
 		if _end_timer <= 0.0:
 			if sim.state == BattleSim.State.VICTORY:
@@ -484,6 +490,7 @@ func _open_sheet() -> VBoxContainer:
 	scroll.offset_right = -UiKit.px(16)
 	scroll.offset_top = UiKit.px(76)
 	scroll.offset_bottom = -UiKit.px(16)
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER  # drag to scroll
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_overlay.add_child(scroll)
 	_sheet_scroll = scroll
@@ -551,6 +558,9 @@ func _show_briefing() -> void:
 	nav.add_child(UiKit.spacer())
 	nav.add_child(UiKit.button("Deploy", begin_deployment if phase == Phase.BRIEFING else _close_overlay,
 		"primary", "next", "lg"))
+	var edge := Control.new()  # keep the button clear of the screen edge
+	edge.custom_minimum_size.x = UiKit.px(10)
+	nav.add_child(edge)
 	v.add_child(nav)
 
 

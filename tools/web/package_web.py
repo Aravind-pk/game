@@ -81,6 +81,33 @@ body { background: var(--bg) !important; color: var(--ink); }
 #ng-brand { font: 800 40px/1 "Barlow Condensed", "Arial Narrow", sans-serif; letter-spacing: .04em;
   text-transform: uppercase; color: var(--ink); }
 #ng-brand span { color: var(--amber); }
+/* Fit the game inside the phone's safe area (the host pads :root by the insets; a canvas
+   sized to the full window would be pushed down and lose its bottom: the deploy tray). */
+#canvas { position: fixed !important; left: env(safe-area-inset-left, 0px);
+  top: env(safe-area-inset-top, 0px);
+  width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)) !important;
+  height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important; }
+@supports not (height: 100dvh) {
+  #canvas { height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important; }
+}
+"""
+
+FIT_SCRIPT = """<script>
+// Size the canvas backing store to its CSS box (Godot resize policy "none" follows it).
+(function () {
+  function fit() {
+    var c = document.getElementById("canvas");
+    if (!c) return;
+    var r = window.devicePixelRatio || 1;
+    var w = Math.max(1, Math.round(c.clientWidth * r)), h = Math.max(1, Math.round(c.clientHeight * r));
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  }
+  window.addEventListener("resize", fit);
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", fit);
+  setInterval(fit, 500);
+  fit();
+})();
+</script>
 """
 
 
@@ -89,6 +116,8 @@ def artifact_page(html):
     import re
     style = re.search(r"<style>(.*?)</style>", html, re.S).group(1)
     body = re.search(r"<body>(.*)</body>", html, re.S).group(1)
+    body = body.replace('"canvasResizePolicy":2', '"canvasResizePolicy":0')
+    body = body.replace('<script src="index.js"></script>', FIT_SCRIPT + '<script src="index.js"></script>', 1)
     body = body.replace('<div id="status">', '<div id="status">\n<div id="ng-brand"><span>&#9650;</span> North Gate</div>', 1)
     return ("<title>North Gate</title>\n"
             '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@600&family=Barlow+Condensed:wght@800&display=swap">\n'

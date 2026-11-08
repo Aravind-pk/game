@@ -34,6 +34,10 @@ PROP_PALETTE = {
     "seams": "#FF5A1F",
     "scorch": "#2A2220",
     "logo": "#E9E4D8",
+    "sand": "#B49C74",
+    "tent": "#6A6E46",
+    "asphalt": "#2F343A",
+    "roof": "#4C5560",
 }
 
 
