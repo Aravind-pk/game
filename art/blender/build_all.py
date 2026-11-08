@@ -17,6 +17,7 @@ import ng_common as C  # noqa: E402
 import ng_monsters as M  # noqa: E402
 import ng_turrets as T  # noqa: E402
 import ng_texture as X  # noqa: E402
+import ng_rig as R  # noqa: E402
 
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 BLEND_DIR = os.path.join(REPO, "art", "blender", "models")
@@ -64,6 +65,7 @@ def main(argv):
             C.decimate_to(TRI_BUDGET[mid])
         if textures:
             X.bake_textures(mid, "turret" if family == "turrets" else "monster", TEX_DIR, tex_size)
+        R.rig(mid)  # skeleton + idle/walk/attack/emerge/death (monsters only)
         tris = C.triangle_count()
         C.save_blend(os.path.join(BLEND_DIR, f"{mid}.blend"))
         for pname, pal in pals.items():

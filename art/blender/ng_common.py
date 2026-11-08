@@ -422,6 +422,8 @@ def export_glb(path):
     bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", export_apply=True,
                               export_yup=True, use_selection=False, export_cameras=False,
                               export_lights=False, export_image_format="JPEG",
+                              export_animations=True, export_animation_mode="ACTIONS",
+                              export_skins=True, export_def_bones=False,
                               export_image_quality=88)
 
 

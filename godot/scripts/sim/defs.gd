@@ -1,6 +1,7 @@
 class_name Defs
 extends RefCounted
-## Static game data: gun and monster stats. All distances in metres, times in seconds.
+## Static game data: gun and monster stats. `name` is the on-screen (concept sheet) name;
+## the dictionary keys are the spec names used in level data. All distances in metres, times in seconds.
 ## Balance numbers are first-pass values meant to be tuned through playtesting.
 
 const SIM_DT := 1.0 / 30.0          # fixed simulation step
@@ -13,17 +14,17 @@ const MAX_BATTLE_TIME := 600.0
 # ---------------------------------------------------------------- guns
 const GUNS := {
 	"mg": {
-		"name": "MG Turret", "model": "kestrel", "desc": "High fire rate",
+		"name": "Kestrel", "model": "kestrel", "desc": "High Fire Rate",
 		"hp": 120.0, "damage": 7.0, "fire_rate": 6.0, "range": 8.0,
 		"splash": 0.0, "projectile_speed": 0.0, "radius": 0.8,
 	},
 	"cannon": {
-		"name": "Cannon", "model": "mule", "desc": "Area damage",
+		"name": "Mule", "model": "mule", "desc": "AoE Damage",
 		"hp": 170.0, "damage": 42.0, "fire_rate": 0.55, "range": 11.0,
 		"splash": 2.6, "projectile_speed": 16.0, "radius": 1.0,
 	},
 	"sniper": {
-		"name": "Sniper", "model": "needle", "desc": "Long range",
+		"name": "Needle", "model": "needle", "desc": "Long Range",
 		"hp": 70.0, "damage": 70.0, "fire_rate": 0.45, "range": 20.0,
 		"splash": 0.0, "projectile_speed": 0.0, "radius": 0.7,
 	},
@@ -32,17 +33,17 @@ const GUNS := {
 # ---------------------------------------------------------------- monsters
 const MONSTERS := {
 	"burrower": {
-		"name": "Burrower", "model": "shale_digger", "base_level": 1, "desc": "Swarm",
+		"name": "Shale Digger", "model": "shale_digger", "base_level": 1, "desc": "Swarm",
 		"hp": 32.0, "speed": 2.3, "damage": 7.0, "attack_rate": 1.0,
 		"detect": 6.0, "attack_range": 1.0, "radius": 0.55, "model_scale": 0.75,
 	},
 	"stalker": {
-		"name": "Stalker", "model": "rift_runner", "base_level": 2, "desc": "Fast",
+		"name": "Rift Runner", "model": "rift_runner", "base_level": 2, "desc": "Fast",
 		"hp": 48.0, "speed": 4.4, "damage": 9.0, "attack_rate": 1.5,
 		"detect": 9.0, "attack_range": 1.0, "radius": 0.55, "model_scale": 0.7,
 	},
 	"brute": {
-		"name": "Brute", "model": "faultbreaker", "base_level": 3, "desc": "Tank",
+		"name": "Faultbreaker", "model": "faultbreaker", "base_level": 3, "desc": "Tank",
 		"hp": 300.0, "speed": 1.25, "damage": 32.0, "attack_rate": 0.6,
 		"detect": 5.0, "attack_range": 1.6, "radius": 1.15, "model_scale": 0.8,
 	},

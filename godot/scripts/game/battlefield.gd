@@ -719,6 +719,7 @@ func screen_to_cell(screen_pos: Vector2) -> Vector2i:
 
 
 var input_enabled := false
+var sim_speed := 1.0  # battle speed multiplier (animations follow it)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -779,17 +780,34 @@ func sync(alpha: float) -> void:
 			node = _spawn_monster_node(m)
 		var p: Vector2 = m.prev_pos.lerp(m.pos, alpha)
 		var y := 0.0
+		var moving: bool = m.prev_pos.distance_to(m.pos) > 0.001
 		if m.state == "emerging":
 			var k: float = 1.0 - m.state_t / Defs.EMERGE_TIME
 			y = lerpf(-1.8, 0.0, k)
-		else:
-			var moving: bool = m.prev_pos.distance_to(m.pos) > 0.001
-			if moving:
-				y = absf(sin(t * 10.0 + m.id)) * 0.08
-		var body := node.get_child(0) as Node3D
 		node.position = to3(p, y)
 		node.rotation.y = lerp_angle(node.rotation.y, atan2(m.facing.x, m.facing.y), 0.25)
-		body.position.z = (sin(t * 14.0) * 0.5 + 0.5) * 0.35 if m.attacking else 0.0
+		var ap := node.get_meta("anim", null) as AnimationPlayer
+		if ap:
+			var want := "emerge"
+			var spd := 1.0
+			if m.state == "active":
+				if m.attacking:
+					want = "attack"
+					# one swing per simulated attack
+					spd = ap.get_animation("attack").length * float(m.attack_rate)
+				elif moving:
+					want = "walk"
+					spd = float(m.speed) / float(Defs.MONSTERS[m.type].speed)
+				else:
+					want = "idle"
+			if ap.current_animation != want:
+				ap.play(want, 0.15)
+			ap.speed_scale = spd * (sim_speed if sim_speed > 0.0 else 1.0)
+		else:
+			var body := node.get_child(0) as Node3D
+			if moving:
+				node.position.y += absf(sin(t * 10.0 + m.id)) * 0.08
+			body.position.z = (sin(t * 14.0) * 0.5 + 0.5) * 0.35 if m.attacking else 0.0
 		var bar := node.get_node("HP") as Node3D
 		bar.visible = m.hp < m.max_hp and m.state == "active"
 		_set_bar(bar, m.hp / m.max_hp, 1.2)
@@ -801,6 +819,13 @@ func _spawn_monster_node(m: Dictionary) -> Node3D:
 	model.scale = Vector3.ONE * float(Defs.MONSTERS[m.type].model_scale) * MONSTER_SCALE
 	Stylize.apply(model, 0.025)
 	root.add_child(model)
+	var ap := model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	if ap:
+		for loop_name in ["idle", "walk", "attack"]:
+			if ap.has_animation(loop_name):
+				ap.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
+		ap.play("emerge")
+		root.set_meta("anim", ap)
 	var bar := _bar(1.2, Color("#ff6b63"))
 	bar.name = "HP"
 	bar.position.y = 2.6 if m.type != "brute" else 3.8
@@ -890,8 +915,25 @@ func _fx_emerge(p: Vector2) -> void:
 	_fade_free(dust, 0.8, 2.2)
 
 
+func _recoil(gun_id: int, amount: float) -> void:
+	var node: Node3D = _gun_nodes.get(gun_id)
+	if node == null:
+		return
+	var head := _head_of(node)
+	if head == null:
+		return
+	if not head.has_meta("rest"):
+		head.set_meta("rest", head.position)
+	var rest: Vector3 = head.get_meta("rest")
+	var back := head.basis.z.normalized() * -amount
+	var tw := create_tween()
+	tw.tween_property(head, "position", rest + back, 0.04)
+	tw.tween_property(head, "position", rest, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
 func _fx_fire(e: Dictionary) -> void:
 	var g: Dictionary = sim.guns[e.gun]
+	_recoil(e.gun, {"mg": 0.05, "cannon": 0.35, "sniper": 0.2}.get(g.type, 0.1))
 	var from := to3(g.pos, 1.2)
 	var to := to3(e.to, 0.7)
 	var col := Color("#ffd27a")
@@ -969,10 +1011,18 @@ func _fx_monster_death(id: int) -> void:
 	_monster_nodes.erase(id)
 	node.get_node("HP").visible = false
 	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(node, "rotation:z", 0.6, 0.4)
-	tw.tween_property(node, "position:y", -1.6, 1.2).set_delay(0.3)
-	tw.chain().tween_callback(node.queue_free)
+	var ap := node.get_meta("anim", null) as AnimationPlayer
+	if ap and ap.has_animation("death"):
+		ap.speed_scale = maxf(sim_speed, 1.0)
+		ap.play("death", 0.1)
+		tw.tween_interval(1.6 / maxf(sim_speed, 1.0))
+		tw.tween_property(node, "position:y", -1.6, 1.0)
+	else:
+		tw.set_parallel(true)
+		tw.tween_property(node, "rotation:z", 0.6, 0.4)
+		tw.tween_property(node, "position:y", -1.6, 1.2).set_delay(0.3)
+		tw.chain()
+	tw.tween_callback(node.queue_free)
 	var s := SphereMesh.new()
 	var puff := _mesh(s, _emissive(Color("#ff6b40"), 3.0, 0.8), node.position + Vector3(0, 0.6, 0), _fx_root)
 	_fade_free(puff, 0.3, 2.5)
