@@ -3,4 +3,4 @@ godot/.godot/
 # Blender
 *.blend1
 __pycache__/
-build/
+build/web/
