@@ -17,72 +17,78 @@
  ],
  "obstacles": [
   [
-   3,
-   18,
+   4,
+   28,
    1,
-   3
+   1
   ],
   [
-   15,
+   9,
+   18,
+   1,
+   1
+  ],
+  [
+   5,
    20,
    1,
    1
   ],
   [
-   8,
-   16,
+   15,
+   14,
    1,
    2
   ],
   [
-   12,
-   21,
-   1,
-   3
+   14,
+   18,
+   2,
+   2
   ],
   [
-   6,
-   19,
-   2,
+   8,
+   24,
+   3,
    1
+  ],
+  [
+   12,
+   26,
+   2,
+   2
   ]
  ],
  "hotspots": [
   {
    "name": "East",
    "cell": [
-    19,
-    24
+    18,
+    14
    ],
    "delay": 0,
    "groups": [
     {
-     "type": "burrower",
-     "level": 1,
-     "count": 9,
-     "interval": 0.74
+     "type": "stalker",
+     "level": 2,
+     "count": 6,
+     "interval": 1.17
     }
    ]
   },
   {
-   "name": "West",
+   "name": "North",
    "cell": [
-    0,
-    17
+    5,
+    6
    ],
-   "delay": 2,
+   "delay": 8,
    "groups": [
     {
      "type": "stalker",
      "level": 2,
-     "count": 4,
-     "interval": 1.16
-    },
-    {
-     "type": "brute",
-     "level": 3,
-     "count": 1,
-     "interval": 3.6
+     "count": 6,
+     "interval": 1.07
     }
    ]
   }
@@ -92,13 +98,13 @@
    "type": "mg",
    "level": 1,
    "count": 2,
-   "ammo": 94
+   "ammo": 70
   },
   {
    "type": "cannon",
    "level": 1,
    "count": 1,
-   "ammo": 13
+   "ammo": 10
   },
   {
    "type": "decoy",
