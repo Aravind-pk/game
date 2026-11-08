@@ -557,17 +557,6 @@ func _add_gun_node(id: int, d: Dictionary) -> Node3D:
 	bar.name = "HP"
 	bar.position.y = 3.6
 	root.add_child(bar)
-	var lab := Label3D.new()
-	lab.name = "Ammo"
-	lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	lab.no_depth_test = true
-	lab.pixel_size = 0.012
-	lab.font_size = 40
-	lab.outline_size = 10
-	lab.modulate = Color("#f5c56b")
-	lab.text = str(d.ammo)
-	lab.position.y = 4.1
-	root.add_child(lab)
 	_dynamic_root.add_child(root)
 	_gun_nodes[id] = root
 	return root
@@ -603,6 +592,15 @@ func update_ghost(cell: Vector2i, valid: bool) -> void:
 	_ghost_valid = valid
 	var col := Color("#4fd6e0") if valid else Color("#ff6b63")
 	(_ghost_ring.material_override as ShaderMaterial).set_shader_parameter("color", col)
+
+
+## Where a point `height` metres above a gun / the gate appears on the UI canvas.
+func gun_screen_pos(id: int, height: float) -> Vector2:
+	return camera.unproject_position((_gun_nodes[id] as Node3D).position + Vector3.UP * height)
+
+
+func gate_screen_pos(height: float) -> Vector2:
+	return camera.unproject_position(to3(gate_ground(), height))
 
 
 func screen_to_cell(screen_pos: Vector2) -> Vector2i:
@@ -650,9 +648,6 @@ func _unhandled_input(event: InputEvent) -> void:
 func begin_battle(s: BattleSim) -> void:
 	sim = s
 	set_held("")
-	for id in _gun_nodes:
-		var lab := _gun_nodes[id].get_node("Ammo") as Label3D
-		lab.text = str(sim.guns[id].ammo)
 
 
 func sync(alpha: float) -> void:
@@ -669,7 +664,6 @@ func sync(alpha: float) -> void:
 				var want := atan2(g.aim.x, g.aim.y)
 				head.rotation.y = lerp_angle(head.rotation.y, want, 0.35)
 		_set_bar(node.get_node("HP"), g.hp / g.max_hp, 1.6)
-		(node.get_node("Ammo") as Label3D).text = str(g.ammo) if g.alive else ""
 	var t := Time.get_ticks_msec() / 1000.0
 	for m in sim.monsters:
 		if m.state == "dead":

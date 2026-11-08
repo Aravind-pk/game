@@ -1,8 +1,7 @@
 extends Node
 ## North Gate game controller: BRIEFING -> DEPLOYMENT -> COMBAT -> RESULT -> retry/next.
-## UI follows the North Gate design system (scripts/ui/ui_kit.gd): WaveHeader + HudCounters
-## + pause on top, GateHealthBar over the wall, deploy tray of TurretCards ending in DEFEND,
-## Panel sheets for the briefing / radar, ResultBanner at the end.
+## UI is built from scripts/ui/ui_kit.gd: painted header + counters on top, gate plate on the
+## gate, deployment tray ending in DEFEND, sheets for briefing / radar, dialogs for pause / result.
 ##
 ## Screenshot/automation flags (after `--`):
 ##   level=05  phase=briefing|deploy|radar|combat|result|pause  shot=/path.png  shot_time=6
@@ -12,6 +11,24 @@ enum Phase { BRIEFING, DEPLOYMENT, COMBAT, RESULT }
 
 const MAX_STEPS_PER_FRAME := 12
 const PROGRESS_FILE := "user://progress.json"
+
+const EDGE_PT := 12.0
+const HEADER_PT := 50.0
+const EMBLEM_PT := 62.0
+const GATE_PILL_HEIGHT_M := 5.0
+const AMMO_CHIP_HEIGHT_M := 4.6
+
+## On-screen wording for the keys used in level data.
+const GUN_UI := {
+	"mg": {"name": "MG Turret", "short": "MG", "ammo": "Rounds"},
+	"cannon": {"name": "Cannon", "short": "Cannon", "ammo": "Shells"},
+	"sniper": {"name": "Sniper", "short": "Sniper", "ammo": "Rounds"},
+}
+const MONSTER_UI := {
+	"burrower": {"one": "Burrower", "many": "Burrowers", "desc": "Fast diggers. Emerge in groups."},
+	"stalker": {"one": "Stalker", "many": "Stalkers", "desc": "Armored and aggressive."},
+	"brute": {"one": "Brute", "many": "Brutes", "desc": "Heavily armored. High durability."},
+}
 
 var battlefield: Battlefield
 var level_paths: Array = []
@@ -32,10 +49,13 @@ var _shot_done := false
 
 # UI
 var _ui: CanvasLayer
-var _wave_title: Label
+var _chips_layer: Control
 var _wave_sub: Label
+var _counters: Control
 var _skull_val: Label
+var _skull_cap: Label
 var _turret_val: Label
+var _turret_cap: Label
 var _pause_btn: Button
 var _gate_box: Control
 var _gate_bar: ProgressBar
@@ -44,7 +64,9 @@ var _tray: Control
 var _cards_box: HBoxContainer
 var _cards: Array = []
 var _combat_bar: Control
-var _speed_btn: Button
+var _speed_label: Label
+var _hint_label: Label
+var _ammo_chips := {}         # gun id -> chip
 var _overlay: Control
 var _toast: Label
 var _toast_t := 0.0
@@ -98,10 +120,8 @@ func _set_phase(p: Phase) -> void:
 	phase = p
 	paused = false
 	battlefield.input_enabled = p == Phase.DEPLOYMENT
-	_tray.visible = p == Phase.DEPLOYMENT
-	_combat_bar.visible = p == Phase.COMBAT
 	_pause_btn.visible = p == Phase.COMBAT
-	_gate_box.visible = p != Phase.BRIEFING
+	_clear_chips()
 	_close_overlay()
 	match p:
 		Phase.BRIEFING:
@@ -117,8 +137,6 @@ func _set_phase(p: Phase) -> void:
 
 func begin_deployment() -> void:
 	_set_phase(Phase.DEPLOYMENT)
-	if deployment.is_empty():
-		_toast_msg("Select a turret, then tap a tile to deploy it.")
 
 
 func defend() -> void:
@@ -307,116 +325,145 @@ func _build_ui() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ui.add_child(root)
-	var m := UiKit.px(16)
+	var m := UiKit.px(EDGE_PT)
 
-	# ---- top HUD row: WaveHeader | HudCounters + pause
-	var top := UiKit.hbox(8)
-	top.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	top.offset_left = m
-	top.offset_right = -m
-	top.offset_top = m
-	root.add_child(top)
-	var wh := UiKit.wave_header()
-	top.add_child(wh[0])
-	_wave_title = wh[1]
-	_wave_sub = wh[2]
-	top.add_child(UiKit.spacer())
-	var counters := UiKit.hbox(16)
-	var sk := UiKit.hud_counter("skull", UiKit.THREAT)
-	_skull_val = sk[1]
-	counters.add_child(sk[0])
-	var tc := UiKit.hud_counter("ammo", UiKit.AMBER)
-	_turret_val = tc[1]
-	counters.add_child(tc[0])
-	top.add_child(UiKit.pill(counters))
-	_pause_btn = UiKit.button("Pause", toggle_pause, "secondary", "pause", "md", false, true)
-	top.add_child(_pause_btn)
+	# ---- turret ammo chips, under every other piece of UI
+	_chips_layer = Control.new()
+	_chips_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_chips_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_chips_layer)
 
-	# ---- deploy tray
-	var tray := PanelContainer.new()
-	var tsb := UiKit.box(UiKit.BG, 0, UiKit.LINE, 0, 16)
-	tsb.border_width_top = 2
-	tsb.content_margin_top = UiKit.px(10)
-	tray.add_theme_stylebox_override("panel", tsb)
-	tray.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	tray.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	root.add_child(tray)
-	_tray = tray
-	var tv := UiKit.vbox(8)
-	tray.add_child(tv)
-	var tools := UiKit.hbox(8)
-	tools.add_child(UiKit.button("Radar", _show_radar, "secondary", "radar"))
-	tools.add_child(UiKit.button("Briefing", _show_briefing, "secondary"))
-	tools.add_child(UiKit.spacer())
-	tools.add_child(UiKit.button("Clear all", clear_deployment, "ghost", "close"))
-	tv.add_child(tools)
-	var row := UiKit.hbox(8)
-	tv.add_child(row)
+	# ---- painted header strip
+	var hd := UiKit.header()
+	hd[0].set_anchors_preset(Control.PRESET_TOP_WIDE)
+	root.add_child(hd[0])
+	_wave_sub = hd[1]
+
+	# ---- counters + pause, under the header
+	_counters = UiKit.hbox(8)
+	_counters.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_counters.offset_left = m
+	_counters.offset_right = -m
+	_counters.offset_top = UiKit.px(HEADER_PT + 8)
+	root.add_child(_counters)
+	var enemies := UiKit.counter("", "Incoming")
+	_counters.add_child(enemies[0])
+	_skull_val = enemies[1]
+	_skull_cap = enemies[2]
+	_counters.add_child(UiKit.spacer())
+	var turrets := UiKit.counter("turret", "Deployed")
+	_counters.add_child(turrets[0])
+	_turret_val = turrets[1]
+	_turret_cap = turrets[2]
+	_pause_btn = UiKit.icon_button("pause_solid", toggle_pause, 32, 16)
+	_counters.add_child(_pause_btn)
+
+	# ---- deployment tray: hint, tools + turret cards, DEFEND
+	_tray = UiKit.vbox(7)
+	_anchor_bottom(_tray, root)
+	var hint := UiKit.inset(10, 3)
+	var hint_row := UiKit.hbox(8)
+	hint.add_child(hint_row)
+	hint_row.add_child(UiKit.glyph("info", 15, UiKit.FRIENDLY))
+	_hint_label = UiKit.text("", "caption")
+	hint_row.add_child(_hint_label)
+	_set_panel_fill(hint)
+	_tray.add_child(hint)
+	var row := UiKit.hbox(5)
+	_tray.add_child(row)
+	row.add_child(UiKit.tool_tile("Radar", _show_radar, "pin"))
+	row.add_child(UiKit.tool_tile("Briefing", _show_briefing, "doc"))
+	row.add_child(UiKit.tool_tile("Clear", clear_deployment, "close"))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size.y = UiKit.px(116)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	scroll.custom_minimum_size.y = UiKit.px(66)
 	row.add_child(scroll)
-	_cards_box = UiKit.hbox(8)
+	_cards_box = UiKit.hbox(5)
+	_cards_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_cards_box)
-	row.add_child(UiKit.button("Defend", defend, "primary", "play", "lg", true))
+	_tray.add_child(UiKit.action("Defend", defend))
 
 	# ---- combat bar
-	var cb := PanelContainer.new()
-	cb.add_theme_stylebox_override("panel", tsb)
-	cb.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	cb.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	root.add_child(cb)
-	_combat_bar = cb
-	var ch := UiKit.hbox(8)
-	cb.add_child(ch)
-	var info := UiKit.text("Turrets fire automatically.", "body", UiKit.INK_MUTED)
-	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	ch.add_child(info)
-	_speed_btn = UiKit.button("1×", _toggle_speed, "secondary")
-	_speed_btn.custom_minimum_size.x = UiKit.px(64)
-	ch.add_child(_speed_btn)
+	_combat_bar = UiKit.hbox(7)
+	_anchor_bottom(_combat_bar, root)
+	var auto := UiKit.inset(12, 7, UiKit.LINE)
+	_set_panel_fill(auto)
+	auto.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var auto_row := UiKit.hbox(10)
+	auto.add_child(auto_row)
+	auto_row.add_child(UiKit.glyph("gear", 20))
+	auto_row.add_child(UiKit.text("Automatic Defense", "label_lg"))
+	_combat_bar.add_child(auto)
+	var speed_btn := UiKit.icon_button("chevron", _toggle_speed, 38, 12)
+	speed_btn.custom_minimum_size.x = UiKit.px(64)
+	var speed_row := UiKit.hbox(2)
+	speed_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	speed_row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_speed_label = UiKit.text("1×", "plate")
+	speed_row.add_child(_speed_label)
+	speed_row.add_child(UiKit.glyph("chevron", 12))
+	speed_btn.get_child(0).queue_free()
+	speed_btn.add_child(speed_row)
+	_combat_bar.add_child(speed_btn)
 
-	# ---- gate health pill, floats above the tray over the wall
+	# ---- gate integrity plate, sits on the gate itself
 	var gb := UiKit.gate_bar()
 	_gate_box = gb[0]
 	_gate_bar = gb[1]
 	_gate_val = gb[2]
-	_gate_box.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_gate_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_gate_box.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	root.add_child(_gate_box)
+	get_viewport().size_changed.connect(_layout_gate_pill)
 
 	# ---- overlays + toast
 	_overlay = Control.new()
 	_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_overlay)
-	_toast = UiKit.text("", "label", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER)
+	_toast = UiKit.text("", "label_lg", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER)
 	_toast.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_toast.offset_top = UiKit.px(80)
+	_toast.offset_top = UiKit.px(HEADER_PT + 50)
 	_toast.add_theme_color_override("font_outline_color", UiKit.BG)
 	_toast.add_theme_constant_override("outline_size", UiKit.px(4))
 	_toast.modulate.a = 0.0
 	root.add_child(_toast)
 
 
+func _anchor_bottom(c: Control, root: Control) -> void:
+	var m := UiKit.px(EDGE_PT)
+	c.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	c.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	c.offset_left = m
+	c.offset_right = -m
+	c.offset_bottom = -m
+	root.add_child(c)
+
+
+func _set_panel_fill(p: PanelContainer) -> void:
+	(p.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = UiKit.PANEL_SOLID
+
+
 func _layout_gate_pill() -> void:
-	# centred under the top HUD row, so the gate itself stays fully visible
-	var w := _gate_box.get_combined_minimum_size().x
-	var h := _gate_box.get_combined_minimum_size().y
-	_gate_box.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_gate_box.offset_left = -w * 0.5
-	_gate_box.offset_right = w * 0.5
-	_gate_box.offset_top = UiKit.px(16) + UiKit.px(48) + UiKit.px(10)
-	_gate_box.offset_bottom = _gate_box.offset_top + h
+	# centred on the gate's upper edge, but never under the bottom controls
+	if battlefield == null or battlefield.camera == null or level == null:
+		return
+	var s := _gate_box.get_combined_minimum_size()
+	var p := battlefield.gate_screen_pos(GATE_PILL_HEIGHT_M)
+	var limit := _gate_box.get_parent_control().size.y - _bottom_ui_height() - s.y - UiKit.px(8)
+	_gate_box.size = s
+	_gate_box.position = Vector2(p.x - s.x * 0.5, minf(p.y - s.y * 0.5, limit))
+
+
+func _bottom_ui_height() -> float:
+	var c: Control = _tray if phase == Phase.DEPLOYMENT else (_combat_bar if phase == Phase.COMBAT else null)
+	return 0.0 if c == null else c.get_combined_minimum_size().y + UiKit.px(EDGE_PT)
 
 
 func _toggle_speed() -> void:
 	speed = 2.0 if speed == 1.0 else 1.0
 	battlefield.sim_speed = speed
-	(_speed_btn.find_children("*", "Label", true, false)[0] as Label).text = "2×" if speed == 2.0 else "1×"
+	_speed_label.text = "2×" if speed == 2.0 else "1×"
 
 
 func _toast_msg(t: String, col := UiKit.INK) -> void:
@@ -426,7 +473,7 @@ func _toast_msg(t: String, col := UiKit.INK) -> void:
 
 
 func _art(model: String) -> Texture2D:
-	var p := "res://assets/ui/icons/%s.png" % model
+	var p := "res://assets/ui/art/%s.png" % model
 	return load(p) if ResourceLoader.exists(p) else null
 
 
@@ -436,8 +483,8 @@ func _rebuild_cards() -> void:
 	_cards.clear()
 	for gi in guns.size():
 		var g: Dictionary = guns[gi]
-		var def: Dictionary = Defs.GUNS[g.type]
-		var c := UiKit.turret_card(def.name, g.level, g.ammo, _art(def.model), select_card.bind(gi))
+		var c := UiKit.turret_card("%s · %d" % [GUN_UI[g.type].short, g.ammo], _art(Defs.GUNS[g.type].model),
+			select_card.bind(gi))
 		_cards_box.add_child(c)
 		_cards.append(c)
 
@@ -445,10 +492,10 @@ func _rebuild_cards() -> void:
 func _refresh() -> void:
 	if level == null:
 		return
-	_wave_title.text = "NORTH GATE"
-	_wave_sub.text = "Level %s" % level.id
+	_wave_sub.text = "WAVE %s · %s" % [level.id, level.title.trim_prefix("The ").to_upper()]
 	for gi in _cards.size():
 		UiKit.set_card_state(_cards[gi], held == gi, _dep_of_gun(gi) >= 0)
+	_hint_label.text = "Tap an open tile to place it." if held >= 0 else "Select a turret. Tap an open tile."
 	_refresh_hud()
 	_layout_gate_pill.call_deferred()
 
@@ -456,205 +503,317 @@ func _refresh() -> void:
 func _refresh_hud() -> void:
 	if sim != null and phase in [Phase.COMBAT, Phase.RESULT]:
 		_skull_val.text = str(sim.remaining_enemies())
+		_skull_cap.text = "REMAINING"
 		var alive := 0
 		for g in sim.guns:
 			if g.alive:
 				alive += 1
-		_turret_val.text = "%d/%d" % [alive, sim.guns.size()]
+		_turret_val.text = str(alive)
+		_turret_cap.text = "TURRET" if alive == 1 else "TURRETS"
 		UiKit.set_gate(_gate_bar, _gate_val, sim.gate_hp, level.gate_max_hp)
+		_refresh_chips()
 	else:
 		_skull_val.text = str(level.total_enemies())
-		_turret_val.text = "%d/%d" % [deployment.size(), guns.size()]
+		_skull_cap.text = "INCOMING"
+		_turret_val.text = "%d / %d" % [deployment.size(), guns.size()]
+		_turret_cap.text = "DEPLOYED"
 		UiKit.set_gate(_gate_bar, _gate_val, level.gate_max_hp, level.gate_max_hp)
 
 
-# ================================================================== overlays (Panel sheets)
+func _clear_chips() -> void:
+	for id in _ammo_chips:
+		_ammo_chips[id].queue_free()
+	_ammo_chips.clear()
+
+
+func _refresh_chips() -> void:
+	if phase != Phase.COMBAT:
+		return
+	for g in sim.guns:
+		if not _ammo_chips.has(g.id):
+			var made := UiKit.ammo_chip()
+			_chips_layer.add_child(made)
+			_ammo_chips[g.id] = made
+		var chip: PanelContainer = _ammo_chips[g.id]
+		chip.visible = g.alive
+		if not g.alive:
+			continue
+		UiKit.set_ammo_chip(chip, g.ammo, g.max_ammo)
+		var s := chip.get_combined_minimum_size()
+		chip.size = s
+		chip.position = battlefield.gun_screen_pos(g.id, AMMO_CHIP_HEIGHT_M) - Vector2(s.x * 0.5, s.y)
+
+
+# ================================================================== overlays
 
 func _close_overlay() -> void:
 	_sheet_scroll = null
 	for c in _overlay.get_children():
 		c.queue_free()
 	_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sync_chrome(false)
 
 
+## Field controls for the current phase; full-screen sheets hide them.
+func _sync_chrome(sheet_open: bool) -> void:
+	_tray.visible = phase == Phase.DEPLOYMENT and not sheet_open
+	_combat_bar.visible = phase == Phase.COMBAT and not sheet_open
+	_gate_box.visible = phase != Phase.BRIEFING and not sheet_open
+	_counters.visible = phase in [Phase.DEPLOYMENT, Phase.COMBAT] and not sheet_open
+
+
+## A scrollable sheet that fills the screen under the header.
 func _open_sheet() -> VBoxContainer:
 	_close_overlay()
+	_sync_chrome(true)
+	_toast_t = 0.0
+	_toast.modulate.a = 0.0
 	_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	var dim := ColorRect.new()
-	dim.color = UiKit.SCRIM
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_overlay.add_child(dim)
 	var scroll := ScrollContainer.new()
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll.offset_left = UiKit.px(16)
-	scroll.offset_right = -UiKit.px(16)
-	scroll.offset_top = UiKit.px(76)
-	scroll.offset_bottom = -UiKit.px(16)
+	scroll.offset_left = UiKit.px(EDGE_PT)
+	scroll.offset_right = -UiKit.px(EDGE_PT)
+	scroll.offset_top = UiKit.px(HEADER_PT + 8)
+	scroll.offset_bottom = -UiKit.px(EDGE_PT)
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER  # drag to scroll
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_overlay.add_child(scroll)
 	_sheet_scroll = scroll
-	var v := UiKit.vbox(16)
+	var v := UiKit.vbox(10)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.mouse_filter = Control.MOUSE_FILTER_PASS
 	scroll.add_child(v)
 	return v
 
 
+## A fixed-width dialog column centred over the field, nudged up by `raise_pt`.
+func _open_dialog(width_pt: float, raise_pt: float, emblem: Control) -> VBoxContainer:
+	_close_overlay()
+	_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.offset_top = UiKit.px(HEADER_PT)
+	center.offset_bottom = -UiKit.px(raise_pt)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_overlay.add_child(center)
+	var col := UiKit.vbox(0)
+	col.add_theme_constant_override("separation", -UiKit.px(EMBLEM_PT * 0.5))
+	col.custom_minimum_size.x = UiKit.px(width_pt)
+	center.add_child(col)
+	var holder := CenterContainer.new()
+	holder.z_index = 1
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(emblem)
+	col.add_child(holder)
+	var p: Array = UiKit.panel(16, 8)
+	col.add_child(p[0])
+	return p[1]
+
+
 func _show_briefing() -> void:
-	var v := _open_sheet()
-	var head := UiKit.hbox(12)
-	head.add_child(UiKit.label_plate(level.title, level.id, "threat" if level_index >= 4 else "neutral"))
-	v.add_child(head)
-	var gate := UiKit.hbox(8)
-	gate.add_child(UiKit.glyph("shield", 18, UiKit.AMBER))
-	gate.add_child(UiKit.text("Gate HP %d" % level.gate_max_hp, "label"))
-	v.add_child(gate)
+	var s := _open_sheet()
+	var p: Array = UiKit.panel(12, 5)
+	s.add_child(p[0])
+	var v: VBoxContainer = p[1]
 
-	var roster: Array = UiKit.panel("Incoming", "(%d monsters)" % level.total_enemies())
-	v.add_child(roster[0])
-	var rows := level.enemy_summary()
-	rows.sort_custom(func(a, b): return a.count > b.count)
-	for e in rows:
-		var d: Dictionary = Defs.MONSTERS[e.type]
-		roster[1].add_child(UiKit.enemy_row(d.name, e.level, d.desc, e.count, _art(d.model)))
-
-	var rp: Array = UiKit.panel("Enemy Spawn Radar", "(Full Battlefield)")
-	v.add_child(rp[0])
-	var radar := RadarView.new()
-	radar.custom_minimum_size = Vector2(0, UiKit.px(220))
-	radar.set_level(level, deployment)
-	rp[1].add_child(radar)
-	rp[1].add_child(_radar_legend())
-
-	var tp: Array = UiKit.panel("Turrets", "(Unmanned)")
-	v.add_child(tp[0])
-	var tr := UiKit.hbox(8)
-	for g in level.guns:
-		var d: Dictionary = Defs.GUNS[g.type]
-		var row := UiKit.vbox(2)
-		var t := UiKit.hbox(4)
-		t.add_child(UiKit.text("%d× %s" % [g.count, d.name], "label"))
-		t.add_child(UiKit.tag("Lv.%d" % g.level, "friendly"))
-		row.add_child(t)
-		row.add_child(UiKit.text("(%s) · ammo ×%d" % [d.desc, g.ammo], "caption", UiKit.INK_MUTED))
-		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		tr.add_child(row)
-	tp[1].add_child(tr)
-
-	if level_index == 0:  # first level: the loop, as step markers
-		var fp: Array = UiKit.panel("Gameplay Flow", "(One Wave)")
-		v.add_child(fp[0])
-		fp[1].add_child(UiKit.step(1, "Plan & Deploy", "Place turrets anywhere in the field."))
-		fp[1].add_child(UiKit.step(2, "Monsters Emerge", "They spawn underground, even off screen.", "upcoming"))
-		fp[1].add_child(UiKit.step(3, "Battle Plays Out", "Combat is automatic. Turrets can be destroyed.", "upcoming"))
-		fp[1].add_child(UiKit.step(4, "Result", "Hold the gate to win.", "upcoming"))
-
-	var nav := UiKit.hbox(8)
+	var head := UiKit.hbox(6)
+	var title_col := UiKit.vbox(0)
+	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	UiKit.titled(title_col, level.title, "Mission Briefing")
+	head.add_child(title_col)
 	if level_index > 0:
-		nav.add_child(UiKit.button("Prev", func(): start_level(level_index - 1), "secondary"))
+		head.add_child(UiKit.icon_button("chevron_left", func(): start_level(level_index - 1), 30, 14))
 	if level_index < unlocked:
-		nav.add_child(UiKit.button("Next", func(): start_level(level_index + 1), "secondary", "next"))
-	nav.add_child(UiKit.spacer())
-	nav.add_child(UiKit.button("Deploy", begin_deployment if phase == Phase.BRIEFING else _close_overlay,
-		"primary", "next", "lg"))
-	var edge := Control.new()  # keep the button clear of the screen edge
-	edge.custom_minimum_size.x = UiKit.px(10)
-	nav.add_child(edge)
-	v.add_child(nav)
+		head.add_child(UiKit.icon_button("chevron", func(): start_level(level_index + 1), 30, 14))
+	v.add_child(head)
 
+	v.add_child(UiKit.image(load("res://assets/ui/art/hero_gate.jpg"), 0, 72, true))
 
-func _radar_legend() -> HBoxContainer:
-	var h := UiKit.hbox(12)
-	for item in [["Spawn hotspot", UiKit.THREAT], ["Camera view", UiKit.FRIENDLY], ["Gate", UiKit.AMBER]]:
-		var dot := ColorRect.new()
-		dot.color = item[1]
-		dot.custom_minimum_size = Vector2(UiKit.px(10), UiKit.px(10))
-		dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		h.add_child(dot)
-		h.add_child(UiKit.text(item[0], "caption", UiKit.INK_MUTED))
-	return h
+	var gate := UiKit.hbox(8)
+	gate.add_child(UiKit.text("Gate Integrity", "label"))
+	gate.add_child(UiKit.spacer())
+	gate.add_child(UiKit.text("%d / %d" % [level.gate_max_hp, level.gate_max_hp], "label"))
+	v.add_child(gate)
+	var bar := UiKit.vital_bar(4)
+	bar.max_value = 1.0
+	bar.value = 1.0
+	v.add_child(bar)
+	v.add_child(UiKit.rule())
+
+	v.add_child(UiKit.section("Incoming · %d" % level.total_enemies()))
+	for e in level.enemy_summary():
+		var ui: Dictionary = MONSTER_UI[e.type]
+		var noun: String = ui.one if e.count == 1 else ui.many
+		v.add_child(UiKit.enemy_row("%d %s · Lv %d" % [e.count, noun, e.level], ui.desc,
+			_art(Defs.MONSTERS[e.type].model)))
+
+	v.add_child(UiKit.section("Available Defenses", UiKit.AMBER, "label_lg"))
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", UiKit.px(6))
+	grid.add_theme_constant_override("v_separation", UiKit.px(6))
+	grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for g in guns:
+		var ui: Dictionary = GUN_UI[g.type]
+		grid.add_child(UiKit.defense_card(ui.name, "%d %s" % [g.ammo, ui.ammo], _art(Defs.GUNS[g.type].model)))
+	v.add_child(grid)
+
+	var preview := UiKit.inset(10, 7, UiKit.LINE_DIM)
+	var pr := UiKit.hbox(10)
+	preview.add_child(pr)
+	var cap := UiKit.vbox(-2)
+	cap.alignment = BoxContainer.ALIGNMENT_CENTER
+	cap.add_child(UiKit.text("Spawn", "label_lg"))
+	cap.add_child(UiKit.text("Preview", "label_lg"))
+	pr.add_child(cap)
+	var radar := RadarView.new()
+	radar.compact = true
+	radar.custom_minimum_size = Vector2(0, UiKit.px(70))
+	radar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	radar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	radar.set_level(level, deployment)
+	pr.add_child(radar)
+	v.add_child(preview)
+
+	v.add_child(UiKit.action("Plan Deployment", begin_deployment if phase == Phase.BRIEFING else _close_overlay))
 
 
 func _show_radar() -> void:
-	var v := _open_sheet()
-	var p: Array = UiKit.panel("Enemy Spawn Radar", "(Full Battlefield)",
-		UiKit.button("Close", _close_overlay, "secondary", "close", "md", false, true))
-	v.add_child(p[0])
+	var s := _open_sheet()
+	var p: Array = UiKit.panel(15, 10)
+	s.add_child(p[0])
+	var v: VBoxContainer = p[1]
+	UiKit.titled(v, "Enemy Spawn Radar", "Full Battlefield")
 	var radar := RadarView.new()
-	radar.custom_minimum_size = Vector2(0, UiKit.px(440))
+	radar.custom_minimum_size = Vector2(0, UiKit.px(345))
+	radar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	radar.set_level(level, deployment)
-	p[1].add_child(radar)
-	p[1].add_child(_radar_legend())
-	for h in level.hotspots:
-		var row := UiKit.hbox(8)
-		row.add_child(UiKit.tag("×%d" % level.hotspot_count(h), "threat"))
-		var parts := []
-		for g in h.groups:
-			parts.append("%d %s Lv.%d" % [g.count, Defs.MONSTERS[g.type].name, g.level])
-		var delay := "" if h.delay <= 0.0 else "  (after %ds)" % int(h.delay)
-		var l := UiKit.text("%s — %s%s" % [h.name, ", ".join(parts), delay], "body")
-		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(l)
-		p[1].add_child(row)
+	v.add_child(radar)
+
+	var stats := UiKit.inset(8, 6, UiKit.LINE)
+	var row := UiKit.hbox(6)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	stats.add_child(row)
+	var totals := {}
+	for e in level.enemy_summary():
+		totals[e.type] = int(totals.get(e.type, 0)) + int(e.count)
+	var first := true
+	for type in totals:
+		if not first:
+			row.add_child(UiKit.slash(UiKit.LINE, 22))
+		first = false
+		var col := UiKit.vbox(-3)
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.add_child(UiKit.text(str(totals[type]), "plate", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER))
+		var ui: Dictionary = MONSTER_UI[type]
+		col.add_child(UiKit.text(ui.one if totals[type] == 1 else ui.many, "label", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER))
+		row.add_child(col)
+	v.add_child(stats)
+	v.add_child(_radar_legend())
+	s.add_child(UiKit.action("Back to Deployment", _close_overlay))
+
+
+func _radar_legend() -> HBoxContainer:
+	var h := UiKit.hbox(8)
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
+	var dot := PanelContainer.new()
+	var dsb := StyleBoxFlat.new()
+	dsb.bg_color = UiKit.THREAT
+	dsb.set_corner_radius_all(UiKit.px(6))
+	dot.add_theme_stylebox_override("panel", dsb)
+	dot.custom_minimum_size = Vector2.ONE * UiKit.px(11)
+	dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(dot)
+	h.add_child(UiKit.text("Spawn hotspot", "caption"))
+	var gap := Control.new()
+	gap.custom_minimum_size.x = UiKit.px(22)
+	h.add_child(gap)
+	var frame := PanelContainer.new()
+	frame.add_theme_stylebox_override("panel", UiKit.box(Color(0, 0, 0, 0.3), 0, UiKit.LINE, 1))
+	frame.custom_minimum_size = Vector2(UiKit.px(26), UiKit.px(15))
+	frame.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(frame)
+	h.add_child(UiKit.text("Visible battlefield", "caption"))
+	return h
 
 
 func _show_pause() -> void:
-	var v := _open_sheet()
-	var p: Array = UiKit.panel("Paused")
-	v.add_child(p[0])
-	p[1].add_child(UiKit.text("The battle is frozen. Turrets keep their targets.", "body", UiKit.INK_MUTED))
-	var row := UiKit.hbox(8)
-	row.add_child(UiKit.button("Retry", retry, "secondary", "retry"))
-	row.add_child(UiKit.spacer())
-	row.add_child(UiKit.button("Resume", toggle_pause, "primary", "play", "lg"))
-	p[1].add_child(row)
+	var tile := PanelContainer.new()
+	tile.add_theme_stylebox_override("panel", UiKit.box(UiKit.PANEL, 6, UiKit.LINE, 1.4))
+	tile.custom_minimum_size = Vector2.ONE * UiKit.px(EMBLEM_PT * 0.8)
+	var c := CenterContainer.new()
+	c.add_child(UiKit.glyph("pause_solid", 22))
+	tile.add_child(c)
+	var v := _open_dialog(290, 170, tile)
+	v.add_child(UiKit.gap(EMBLEM_PT * 0.4))
+	v.add_child(UiKit.text("Battle Paused", "title", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(UiKit.rule(UiKit.LINE))
+	v.add_child(UiKit.gap(2))
+	v.add_child(UiKit.text("Simulation is paused.", "body", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(UiKit.text("Your deployment remains locked.", "caption", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(UiKit.image(load("res://assets/ui/art/pause_gate.jpg"), 0, 70, true))
+	v.add_child(UiKit.action("Resume Battle", toggle_pause, "primary", "play_solid", "left"))
+	v.add_child(UiKit.action("Adjust Deployment", retry, "secondary", ""))
+	v.add_child(UiKit.text("Restarts this wave with your placement saved.", "caption", UiKit.INK,
+		HORIZONTAL_ALIGNMENT_CENTER))
 
 
 func _show_result() -> void:
 	var s := sim.summary()
 	var won := sim.state == BattleSim.State.VICTORY
-	var v := _open_sheet()
-	var pad := Control.new()
-	pad.custom_minimum_size.y = UiKit.px(120)
-	v.add_child(pad)
-	var card := PanelContainer.new()
-	var sb := UiKit.box(UiKit.PANEL, 16, UiKit.LINE, 1, 24, true)
-	card.add_theme_stylebox_override("panel", sb)
-	v.add_child(card)
-	var c := UiKit.vbox(8)
-	card.add_child(c)
-	c.add_child(UiKit.text("Victory" if won else "Defeat", "result", UiKit.VITAL if won else UiKit.THREAT,
-		HORIZONTAL_ALIGNMENT_CENTER))
-	c.add_child(UiKit.text("The gate holds." if won else "The gate has fallen. Your deployment is saved.",
-		"body", UiKit.INK_MUTED, HORIZONTAL_ALIGNMENT_CENTER))
-	var stats := UiKit.hbox(24)
-	stats.alignment = BoxContainer.ALIGNMENT_CENTER
-	for st in [["%d / %d" % [ceili(s.gate_hp), s.gate_max], "Gate HP"],
-			["%d/%d" % [s.guns_survived, s.guns_total], "Turrets"],
-			["%d/%d" % [s.kills, s.total_enemies], "Monsters"]]:
-		var col := UiKit.vbox(0)
-		var b := UiKit.text(st[0], "hud-value", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER)
-		b.add_theme_font_size_override("font_size", UiKit.px(22))
-		col.add_child(b)
-		col.add_child(UiKit.text(st[1], "caption", UiKit.INK_MUTED, HORIZONTAL_ALIGNMENT_CENTER))
-		stats.add_child(col)
-	var gap := Control.new()
-	gap.custom_minimum_size.y = UiKit.px(8)
-	c.add_child(gap)
-	c.add_child(stats)
-	var gap2 := Control.new()
-	gap2.custom_minimum_size.y = UiKit.px(16)
-	c.add_child(gap2)
-	var row := UiKit.hbox(8)
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	var accent := UiKit.FRIENDLY if won else UiKit.THREAT
+	var emblem := UiKit.image(load("res://assets/ui/glyphs/emblem_%s.svg" % ("held" if won else "breached")),
+		EMBLEM_PT, EMBLEM_PT)
+	var v := _open_dialog(320, 230, emblem)
+
+	var top := UiKit.hbox(0)
+	top.add_child(UiKit.rule(UiKit.LINE))
+	var hole := Control.new()
+	hole.custom_minimum_size.x = UiKit.px(EMBLEM_PT + 8)
+	top.add_child(hole)
+	top.add_child(UiKit.rule(UiKit.LINE))
+	v.add_child(top)
+	v.add_child(UiKit.gap(EMBLEM_PT * 0.3))
+	v.add_child(UiKit.text("Gate Held" if won else "Gate Breached", "result", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER))
+	var sub := UiKit.text("Victory" if won else "Defeat", "plate", accent, HORIZONTAL_ALIGNMENT_CENTER)
+	v.add_child(sub)
+	v.add_child(UiKit.rule(accent, 0, 1.2))
+	v.add_child(UiKit.text("%s secured." % level.title if won else "Your deployment has been saved.",
+		"body", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER))
+
+	var table := UiKit.inset(10, 4, UiKit.LINE)
+	var rows := UiKit.vbox(3)
+	table.add_child(rows)
+	var data := [["Gate Integrity", "%d / %d" % [ceili(s.gate_hp), s.gate_max]],
+		["Hostiles Eliminated", "%d / %d" % [s.kills, s.total_enemies]],
+		["Turrets Survived", "%d / %d" % [s.guns_survived, s.guns_total]]]
+	for i in data.size():
+		if i > 0:
+			rows.add_child(UiKit.rule(UiKit.LINE_DIM))
+		rows.add_child(UiKit.stat_row(data[i][0], data[i][1]))
+	v.add_child(table)
+
+	var empty := 0
+	for g in sim.guns:
+		if g.ammo <= 0:
+			empty += 1
+	if empty > 0:
+		var note := UiKit.hbox(6)
+		note.alignment = BoxContainer.ALIGNMENT_CENTER
+		note.add_child(UiKit.slash(UiKit.AMBER, 11))
+		note.add_child(UiKit.slash(UiKit.AMBER, 11))
+		note.add_child(UiKit.text("%d %s exhausted %s ammunition." % [empty, "turret" if empty == 1 else "turrets",
+			"its" if empty == 1 else "their"], "caption", UiKit.INK))
+		v.add_child(note)
+
+	v.add_child(UiKit.gap(2))
 	if won:
-		row.add_child(UiKit.button("Replay", retry, "secondary", "retry"))
-		row.add_child(UiKit.button("Next level", next_level, "primary", "next"))
+		v.add_child(UiKit.action("Next Wave", next_level))
+		v.add_child(UiKit.action("Replay Wave", retry, "secondary", ""))
 	else:
-		row.add_child(UiKit.button("Retry", retry, "primary", "retry", "lg"))
-	c.add_child(row)
+		v.add_child(UiKit.action("Adjust Deployment", retry, "primary", ""))
+		v.add_child(UiKit.text("Return to planning with your turrets in place.", "caption", UiKit.INK,
+			HORIZONTAL_ALIGNMENT_CENTER))
 
 
 ## Drag anywhere on an open sheet to scroll it, with mouse or touch. Godot's ScrollContainer
