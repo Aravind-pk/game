@@ -75,3 +75,13 @@ A full build with previews takes about 4–5 minutes on CPU.
 3. Render it side-by-side with the procedural model, same camera/lights/scale:
    `python art/blender/compare_modly.py shale_digger art/modly_outputs/shale_digger.glb`
    → `art/previews/compare/shale_digger_compare.png` plus a triangle/material/texture report.
+
+## TripoSR comparison (run in this repo, CPU only)
+
+`tools/triposr/run_triposr.py` runs [TripoSR](https://github.com/VAST-AI-Research/TripoSR)
+(MIT) on the cut-outs on CPU, about 18 s per model, writing `art/triposr_outputs/<id>.glb`.
+TripoSR's `isosurface.py` needs one patch, swapping `torchmcubes` (not on PyPI) for
+`skimage.measure.marching_cubes`. Background removal is built in, so `rembg` isn't needed.
+
+Comparison renders: `art/previews/procedural_vs_triposr.png` (and `art/previews/compare/`), made with
+`compare_modly.py <id> art/triposr_outputs/<id>.glb --rot=-90,0,180 --label=TripoSR --srgb_vertex_colors=1`.

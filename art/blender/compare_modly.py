@@ -4,6 +4,9 @@ identical camera, lights and scale, and print a stats comparison.
 Usage:
     python art/blender/compare_modly.py <model_id> <path/to/modly_output.glb> [palette]
     # e.g. python art/blender/compare_modly.py shale_digger art/modly_outputs/shale_digger.glb
+    # options: --rot=X,Y,Z  (degrees, applied after import, to make the model stand up / face -Y)
+    #          --label=TripoSR
+    #          --srgb_vertex_colors=1  (TripoSR/trimesh exports: fixes washed-out vertex colours)
 
 Writes art/previews/compare/<model_id>_compare.png
 """
@@ -24,14 +27,20 @@ OUT = os.path.join(B.REPO, "art", "previews", "compare")
 
 
 def scene_bounds():
-    lo, hi = Vector((1e9,) * 3), Vector((-1e9,) * 3)
+    """World-space bounds from actual vertices (object bound boxes are local and can be
+    inflated when a joined object carries a rotation)."""
+    import numpy as np
+    pts = []
     for o in bpy.context.scene.objects:
         if o.type != "MESH":
             continue
-        for c in o.bound_box:
-            w = o.matrix_world @ Vector(c)
-            lo = Vector(map(min, lo, w)); hi = Vector(map(max, hi, w))
-    return lo, hi
+        co = np.empty(len(o.data.vertices) * 3, dtype=np.float64)
+        o.data.vertices.foreach_get("co", co)
+        co = co.reshape(-1, 3)
+        M = np.array(o.matrix_world)
+        pts.append(co @ M[:3, :3].T + M[:3, 3])
+    allp = np.concatenate(pts)
+    return Vector(allp.min(0)), Vector(allp.max(0))
 
 
 def stats(label):
@@ -43,12 +52,31 @@ def stats(label):
             "size_m": tuple(round(v, 2) for v in (hi - lo))}
 
 
-def main(model_id, glb, palette=None):
+def _linearize_vertex_colors():
+    """TripoSR (via trimesh) writes sRGB bytes into COLOR_0, which glTF defines as linear,
+    so they display washed out. Convert them back to linear."""
+    import numpy as np
+    for o in bpy.context.scene.objects:
+        if o.type != "MESH":
+            continue
+        for ca in o.data.color_attributes:
+            n = len(ca.data)
+            c = np.empty(n * 4, dtype=np.float32)
+            ca.data.foreach_get("color", c)
+            c = c.reshape(-1, 4)
+            rgb = c[:, :3]
+            c[:, :3] = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+            ca.data.foreach_set("color", c.ravel())
+
+
+def main(model_id, glb, palette=None, rot="0,0,0", label="image-to-3D", srgb_vertex_colors="0"):
+    srgb_vertex_colors = str(srgb_vertex_colors) in ("1", "true", "yes")
     spec = next(m for m in B.MODELS if m[0] == model_id)
     _, title, role, builder, family, (tz, dist) = spec
     pals = B.palettes_for(family)
     palette = palette or next(iter(pals))
-    cam = dict(target=(0, -0.2, tz), distance=dist, yaw=-50, pitch=18, res=(640, 520), samples=32)
+    cam = dict(target=(0, -0.2, tz), distance=dist, yaw=-50, pitch=18, res=(640, 520), samples=32,
+               crease_lines=False)  # silhouette-only: dense AI meshes make crease lines noisy
 
     # ours
     C.reset_scene(); builder(); C.apply_palette(pals[palette])
@@ -60,7 +88,17 @@ def main(model_id, glb, palette=None):
     # modly: import, normalise to same longest dimension, sit on ground, face -Y like ours
     C.reset_scene()
     bpy.ops.import_scene.gltf(filepath=glb)
-    theirs = stats("image-to-3D (raw)")
+    import math
+    rx, ry, rz = (math.radians(float(v)) for v in rot.split(","))
+    from mathutils import Euler
+    R = Euler((rx, ry, rz)).to_matrix().to_4x4()
+    for o in bpy.context.scene.objects:
+        if o.parent is None:
+            o.matrix_world = R @ o.matrix_world
+    bpy.context.view_layer.update()
+    if srgb_vertex_colors:
+        _linearize_vertex_colors()
+    theirs = stats(f"{label} (raw)")
     lo, hi = scene_bounds()
     dims = hi - lo
     scale = max(target_dims) / max(dims)
@@ -80,7 +118,7 @@ def main(model_id, glb, palette=None):
         s.paste(a, (0, 40)); s.paste(b, (a.width, 40))
         d = ImageDraw.Draw(s)
         d.text((20, 12), f"{title} - procedural Blender ({ours['triangles']} tris)", fill=(0, 0, 0))
-        d.text((a.width + 20, 12), f"{title} - image-to-3D ({theirs['triangles']} tris)", fill=(0, 0, 0))
+        d.text((a.width + 20, 12), f"{title} - {label} ({theirs['triangles']} tris)", fill=(0, 0, 0))
         s.save(os.path.join(OUT, f"{model_id}_compare.png"))
     except ImportError:
         pass
@@ -92,4 +130,6 @@ def main(model_id, glb, palette=None):
 
 if __name__ == "__main__":
     args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
-    main(*args)
+    pos = [a for a in args if not a.startswith("--")]
+    kw = dict(a[2:].split("=", 1) for a in args if a.startswith("--"))
+    main(*pos, **kw)

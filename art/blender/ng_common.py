@@ -398,7 +398,7 @@ def save_blend(path):
 
 
 def render_preview(path, target=(0, 0, 0.8), distance=7.0, yaw=-35, pitch=18, res=(900, 700),
-                   samples=48, ortho_scale=None):
+                   samples=48, ortho_scale=None, crease_lines=True):
     """Studio render on a cream background with anime-style outlines."""
     scene = bpy.context.scene
     created = []
@@ -477,7 +477,7 @@ def render_preview(path, target=(0, 0, 0.8), distance=7.0, yaw=-35, pitch=18, re
     ls.select_by_visibility = True
     ls.select_silhouette = True
     ls.select_border = True
-    ls.select_crease = True
+    ls.select_crease = crease_lines
     ls.select_by_collection = True
     ls.collection = noline
     ls.collection_negation = "EXCLUSIVE"
