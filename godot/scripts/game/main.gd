@@ -524,7 +524,7 @@ func _set_panel_fill(p: PanelContainer) -> void:
 
 func _layout_gate_pill() -> void:
 	# centred on the gate's upper edge, but never under the bottom controls
-	if battlefield == null or battlefield.camera == null or level == null:
+	if battlefield == null or battlefield.level == null or level == null:
 		return
 	var s := _gate_box.get_combined_minimum_size()
 	var p := battlefield.gate_screen_pos(GATE_PILL_HEIGHT_M)

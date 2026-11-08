@@ -1,40 +1,64 @@
 class_name Battlefield
-extends Node3D
-## 3D presentation of a level: terrain, ruins, settlement wall + gate, spawn fissures,
-## turrets, monsters and combat effects. Reads BattleSim state; never changes it.
-## Also handles tap/drag placement during deployment.
+extends Node2D
+## Draws the battle in 2D: a painted field, sprites sorted by ground position, and effects.
+## Reads BattleSim state and never changes it, so battles stay deterministic.
 
 signal cell_tapped(cell: Vector2i)
-signal cell_dragged(from_cell: Vector2i, to_cell: Vector2i)
+signal cell_dragged(from: Vector2i, to: Vector2i)
 signal hover_changed(cell: Vector2i)
 
-const TURRET_PALETTE := "polar_ceramic"
-const MONSTER_PALETTE := "basalt_ember"
-const GUN_SCALE := 1.45       # visual only; the simulation uses Defs radii
-const MONSTER_SCALE := 1.45
+const PX_PER_M := UnitView.PX_PER_M
+const DEPTH := UnitView.DEPTH
+const RISE := UnitView.RISE
+const DESIGN_WIDTH := 1080.0
+const VIEW_NORTH_OFFSET_M := 8.0      # the screen centre sits this far south of the middle of the view
+const BACKGROUND := "res://assets/backgrounds/north_gate_field.jpg"
+const PAINTED_DOORS_CENTRE := Vector2(0, 448)   # the doors in the painting, from the screen centre
+const PAINTED_DOORS_SIZE := Vector2(300, 166)
+
+const MONSTER_KITS := {"burrower": "burrower"}   # monster types with a full sprite kit
+const TURRET_KITS := {"kestrel": "kestrel"}      # turret models with a full sprite kit
+const STAND_IN_ART := "res://assets/ui/art/%s.png"
+const STAND_IN_WIDTH_M := {"stalker": 2.4, "brute": 3.8, "mule": 3.2, "needle": 2.8}
+const MONSTER_BAR_HEIGHT_M := {"burrower": 2.7, "stalker": 2.7, "brute": 4.2}
+const TURRET_BAR_HEIGHT_M := 3.6
+const DEPLOY_DRAG_PX := 14.0
+const CRATER_WIDTH_M := 6.5
+const GATE_HIT_TREMOR_PX := 7.0
+const TURRET_HIT_TREMOR_PX := 3.5
+const TREMOR_DECAY := 0.002       # share of the tremor left after one second
+const TREMOR_MIN_PX := 0.15
 
 var level: LevelData
-var camera: Camera3D
 var sim: BattleSim
+var input_enabled := false
+var sim_speed := 1.0  # battle speed multiplier (animations follow it)
 
-var _gun_nodes := {}        # deployment index / sim gun id -> Node3D
-var _monster_nodes := {}    # monster id -> Node3D
-var _hotspot_nodes := []    # fissure meshes
-var _grid: MeshInstance3D
-var _hint: MeshInstance3D
-var _ghost: Node3D
-var _ghost_ring: MeshInstance3D
-var _ghost_type := ""
-var _ghost_valid := false
-var _scene_cache := {}
-var _fx_root: Node3D
-var _dynamic_root: Node3D
+var _world: Node2D                # everything; scaled to fit the screen, moved for camera shake
+var _entities: Node2D             # y-sorted units and obstacles
+var _fx_root: Node2D
+var _gate: Node2D
+var _gate_cracks: Node2D
+var _gate_hole: Polygon2D
+var _gate_flash: ColorRect
+var _gate_state := "intact"
+var _grid: CellOverlay
+var _hint: CellOverlay
+var _hint_tween: Tween
+var _ghost: Node2D
+var _ghost_ring: RangeRing
+var _gun_nodes := {}              # deployment index / sim gun id -> UnitView
+var _monster_nodes := {}          # monster id -> UnitView
+var _hotspot_glows: Array[Sprite2D] = []
+var _focus := Vector2.ZERO        # simulation point at the centre of the screen
+var _additive: CanvasItemMaterial
+var _dot: Texture2D
 var _press_cell := Vector2i(-1, -1)
 var _press_pos := Vector2.ZERO
 var _dragging := false
-var _wreck_mat: StandardMaterial3D
-var _interp := 1.0
-var _env_root: Node3D
+var _breaching := false
+var _breach_t := 0.0
+var _tremor := 0.0                # current screen shake strength, in pixels
 
 
 # ================================================================== setup
@@ -45,629 +69,315 @@ func build(lv: LevelData) -> void:
 		c.queue_free()
 	_gun_nodes.clear()
 	_monster_nodes.clear()
-	_hotspot_nodes.clear()
-	_dynamic_root = Node3D.new()
-	add_child(_dynamic_root)
-	_fx_root = Node3D.new()
-	add_child(_fx_root)
-	_wreck_mat = StandardMaterial3D.new()
-	_wreck_mat.albedo_color = Color(0.13, 0.12, 0.12)
-	_wreck_mat.roughness = 1.0
-	_env_root = Node3D.new()
-	add_child(_env_root)
-	_load_cam()
-	_build_environment()
-	_build_ground()
-	_build_wall()
-	_build_gate()
-	_build_obstacles()
-	_build_scatter()
-	_build_hotspots()
-	_build_grid()
-	_build_camera()
-
-
-func to3(p: Vector2, h := 0.0) -> Vector3:
-	var ws := level.world_size()
-	return Vector3(p.x - ws.x * 0.5, h, p.y - ws.y * 0.5)
-
-
-func cell3(c: Vector2i, h := 0.0) -> Vector3:
-	return to3(level.cell_center(c), h)
-
-
-func _build_environment() -> void:
-	# lighting matches the pre-rendered background (camera.json sun); units are the only lit objects
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-float(_cam.sun_pitch_deg), float(_cam.sun_yaw_deg), 0)
-	sun.light_energy = 1.25
-	sun.light_color = Color(1.0, 0.9, 0.78)
-	sun.shadow_enabled = true
-	sun.shadow_blur = 1.5
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
-	sun.directional_shadow_max_distance = 120.0
-	add_child(sun)
-	var env := WorldEnvironment.new()
-	var e := Environment.new()
-	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color("#2c333b")
-	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color("#a9b8cc")
-	e.ambient_light_energy = 0.55
-	e.tonemap_mode = Environment.TONE_MAPPER_LINEAR  # keep the painted background's colours exact
-	e.glow_enabled = true
-	e.glow_intensity = 0.6
-	e.glow_hdr_threshold = 1.05
-	env.environment = e
-	add_child(env)
-
-
-func _cam_target() -> Vector3:
+	_hotspot_glows.clear()
+	_ghost = null
+	_hint = null
+	_breaching = false
+	_gate_state = "intact"
 	var vr := level.view_rect
-	var tx := (vr.position.x + vr.size.x * 0.5) * Defs.CELL
-	var ty := (vr.position.y * Defs.CELL + level.wall_row * Defs.CELL) * 0.5 + float(_cam.target_y_offset_m)
-	return to3(Vector2(tx, ty))
+	_focus = Vector2((vr.position.x + vr.size.x * 0.5) * Defs.CELL,
+		(vr.position.y * Defs.CELL + level.wall_row * Defs.CELL) * 0.5 + VIEW_NORTH_OFFSET_M)
+	_additive = CanvasItemMaterial.new()
+	_additive.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	_world = Node2D.new()
+	add_child(_world)
+	var painting := Sprite2D.new()
+	painting.texture = load(BACKGROUND)
+	_world.add_child(painting)
+	_build_hotspots()
+	_grid = _make_grid()
+	_grid.visible = false
+	_build_gate()
+	_entities = Node2D.new()
+	_entities.y_sort_enabled = true
+	_world.add_child(_entities)
+	_fx_root = Node2D.new()
+	_world.add_child(_fx_root)
+	_build_obstacles()
+	_fit_to_screen()
+	if not get_viewport().size_changed.is_connected(_fit_to_screen):
+		get_viewport().size_changed.connect(_fit_to_screen)
 
 
-func _build_camera() -> void:
-	# identical to the camera render_backgrounds.py uses, so units sit on the painted ground
-	camera = Camera3D.new()
-	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.keep_aspect = Camera3D.KEEP_WIDTH
-	camera.size = float(_cam.width_m)
-	var pitch := deg_to_rad(float(_cam.pitch_deg))
-	camera.rotation = Vector3(-pitch, 0, 0)
-	camera.position = _cam_target() + Vector3(0, sin(pitch), cos(pitch)) * 120.0
-	camera.near = 1.0
-	camera.far = 300.0
-	add_child(camera)
-	camera.make_current()
-
-
-func _mat(color: Color, rough := 0.9, metal := 0.0) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.albedo_color = color
-	m.roughness = rough
-	m.metallic = metal
-	return m
-
-
-func _emissive(color: Color, energy := 3.0, alpha := 1.0) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.albedo_color = Color(color, alpha)
-	m.emission_enabled = true
-	m.emission = color
-	m.emission_energy_multiplier = energy
-	if alpha < 1.0:
-		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	return m
-
-
-func _mesh(mesh: Mesh, mat: Material, pos := Vector3.ZERO, parent: Node = null) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.material_override = mat
-	mi.position = pos
-	(parent if parent else self).add_child(mi)
-	return mi
-
-
-func _box(size: Vector3, mat: Material, pos: Vector3, parent: Node = null) -> MeshInstance3D:
-	var b := BoxMesh.new()
-	b.size = size
-	return _mesh(b, mat, pos, parent)
-
-
-# deterministic pseudo-random for decoration (never used by the simulation)
-func _hash(i: int) -> float:
-	var x := sin(float(i) * 12.9898 + 78.233) * 43758.5453
-	return x - floor(x)
-
-
-## Painted background projected in screen space onto the ground plane and onto simple
-## occluder boxes (wall, ruins): units sit on the painting, take real shadows on it, and walk
-## behind the wall and ruins. Everything static lives in the image.
-const BG_SHADER := """
-shader_type spatial;
-render_mode ambient_light_disabled, specular_disabled, cull_back%s;
-uniform sampler2D bg : source_color, filter_linear;
-uniform float v_scale = 1.0;
-uniform float shadow_floor = 0.6;
-void fragment() {
-	vec2 uv = vec2(SCREEN_UV.x, 0.5 + (SCREEN_UV.y - 0.5) * v_scale);
-	ALBEDO = texture(bg, uv).rgb;
-}
-void light() {
-	DIFFUSE_LIGHT += vec3(mix(shadow_floor, 1.0, ATTENUATION));
-}
-"""
-
-var _bg_mat: ShaderMaterial      # occluders (writes depth)
-var _ground_mat: ShaderMaterial  # ground (no depth write, so sprite cards can sink below it)
-var _cam: Dictionary = {}
-var _sprites: Dictionary = {}
-var _gate: Sprite3D
-var _gate_state := "intact"
-var _gate_pos := Vector3.ZERO
-var _breaching := false
-var _breach_t := 0.0
-
-
-func _load_cam() -> void:
-	var f := FileAccess.open("res://levels/camera.json", FileAccess.READ)
-	_cam = JSON.parse_string(f.get_as_text())
-
-
-func _projector(depth_mode: String) -> ShaderMaterial:
-	var sh := Shader.new()
-	sh.code = BG_SHADER % depth_mode
-	var m := ShaderMaterial.new()
-	m.shader = sh
-	var p := "res://assets/backgrounds/level_%s.jpg" % level.map_id
-	m.set_shader_parameter("bg", load(p) if ResourceLoader.exists(p) else null)
-	return m
-
-
-func _build_ground() -> void:
-	_bg_mat = _projector("")
-	_ground_mat = _projector(", depth_draw_never")
-	_ground_mat.render_priority = -128  # depth_draw_never puts it in the alpha pass: draw it first
-	_update_bg_scale()
-	if not get_viewport().size_changed.is_connected(_update_bg_scale):
-		get_viewport().size_changed.connect(_update_bg_scale)
-	var ws := level.world_size()
-	var plane := PlaneMesh.new()
-	plane.size = ws + Vector2(160, 160)
-	var g := _mesh(plane, _ground_mat)
-	g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-
-
-func _update_bg_scale() -> void:
-	if _bg_mat == null:
+func _fit_to_screen() -> void:
+	if _world == null:
 		return
-	var vs := get_viewport().get_visible_rect().size
-	var img_aspect := float(_cam.image_h) / float(_cam.image_w)
-	for m in [_bg_mat, _ground_mat]:
-		m.set_shader_parameter("v_scale", (vs.y / vs.x) / img_aspect)
+	var view := get_viewport_rect().size
+	_world.position = view * 0.5
+	_world.scale = Vector2.ONE * view.x / DESIGN_WIDTH
 
 
-func _occluder(size: Vector3, pos: Vector3) -> void:
-	var m := _box(size, _bg_mat, pos + Vector3(0, size.y * 0.5, 0), _env_root)
-	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+## Ground position in metres to a point in the world layer, optionally lifted off the ground.
+func to_world(p: Vector2, height := 0.0) -> Vector2:
+	return Vector2((p.x - _focus.x) * PX_PER_M, (p.y - _focus.y) * PX_PER_M * DEPTH - height * RISE * PX_PER_M)
 
 
-## The settlement wall is part of the painted background and deliberately does NOT occlude:
-## monsters attacking the gate stand just north of it and must stay visible (the concept art
-## cheats the same way), so they always draw over the wall.
-func _build_wall() -> void:
-	pass
+func _cell_rect(c: Vector2i) -> Rect2:
+	var top_left := to_world(Vector2(c) * Defs.CELL)
+	return Rect2(top_left, Vector2(Defs.CELL * PX_PER_M, Defs.CELL * PX_PER_M * DEPTH))
 
 
-## Gameplay obstacles are 2D sprites rendered from the game camera (render_prop_sprites.py).
-## Each is a camera-facing card centred on its ground point at the background's pixel density;
-## because the card's depth equals its ground point's depth, units north of it are hidden behind
-## it and units south of it draw over it.
-func _load_sprites() -> void:
-	if not _sprites.is_empty():
-		return
-	var f := FileAccess.open("res://assets/sprites/props/props.json", FileAccess.READ)
-	if f:
-		_sprites = JSON.parse_string(f.get_as_text())
-
-
-func _prop_sprite(name: String, ground: Vector2, scale := 1.0) -> void:
-	var path := "res://assets/sprites/props/%s.png" % name
-	if not ResourceLoader.exists(path):
-		push_warning("missing sprite " + path)
-		return
-	var spr := Sprite3D.new()
-	spr.texture = load(path)
-	spr.pixel_size = 1.0 / float(_sprites.get("px_per_m", 40.0))
-	spr.shaded = false
-	spr.transparent = true
-	spr.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
-	spr.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	spr.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	spr.rotation = Vector3(-deg_to_rad(float(_cam.pitch_deg)), 0, 0)
-	spr.position = to3(ground)
-	spr.scale = Vector3.ONE * scale
-	_env_root.add_child(spr)
-
-
+## Fills each blocked rectangle with painted props: long runs of barriers and broken wall
+## side to side, rubble down the columns, and a large piece on the square blocks.
 func _build_obstacles() -> void:
-	_load_sprites()
 	for i in level.obstacles.size():
 		var r: Rect2i = level.obstacles[i]
-		var span := maxi(r.size.x, r.size.y)
-		var vertical := r.size.y > r.size.x
-		var ab := "a" if i % 2 == 0 else "b"
-		var dir := "90" if vertical else "0"
-		var name := ""
-		var sc := 1.0
 		if r.size.x >= 2 and r.size.y >= 2:
-			name = ("ruin_corner_" if i % 2 == 0 else "block_pile_") + ab
-		elif span >= 3:
-			name = "container_" + dir
-			sc = span * Defs.CELL / 6.2
-		elif span == 2:
-			name = ["ruin_wall_", "car_", "barrier_"][i % 3] + dir
+			_place_prop("rocks" if i % 2 == 0 else "rubble", r, 1.15)
+		elif r.size.x >= 2:
+			var c := r.position.x
+			while c < r.end.x:
+				var piece := mini(2, r.end.x - c)
+				var art := "rubble" if piece == 1 else ("barrier" if (c + i) % 2 == 0 else "broken_wall")
+				_place_prop(art, Rect2i(c, r.position.y, piece, 1), 1.05)
+				c += piece
+		elif r.size.y >= 2:
+			for k in r.size.y:
+				_place_prop("rubble" if (k + i) % 2 == 0 else "rocks", Rect2i(r.position.x, r.position.y + k, 1, 1), 1.2)
 		else:
-			name = ["ruin_pillar_", "rocks_", "block_pile_"][i % 3] + ab
-			sc = 0.6 if i % 3 == 2 else 0.8
-		var centre := (Vector2(r.position) + Vector2(r.size) * 0.5) * Defs.CELL
-		_prop_sprite(name, centre, sc)
+			_place_prop(["cabinet", "rocks", "rubble"][i % 3], r, 0.8 if i % 3 == 0 else 1.15)
 
 
-## The gate is a sprite (intact / damaged / destroyed) at the doors' ground point, pushed back
-## along the camera's view direction: same place on screen, but deeper than the monsters
-## attacking it, so they always draw in front of the doors.
+## Stands a prop on the front edge of its cells, so it sorts correctly against units.
+func _place_prop(art: String, cells: Rect2i, width_share: float) -> void:
+	var texture: Texture2D = load("res://assets/sprites/props/%s.png" % art)
+	var prop := Sprite2D.new()
+	prop.texture = texture
+	prop.centered = false
+	var size := texture.get_size()
+	prop.offset = Vector2(-size.x * 0.5, -size.y)
+	prop.scale = Vector2.ONE * cells.size.x * Defs.CELL * PX_PER_M * width_share / size.x
+	var front := Vector2((cells.position.x + cells.size.x * 0.5) * Defs.CELL, (cells.position.y + cells.size.y) * Defs.CELL)
+	prop.position = to_world(front)
+	_entities.add_child(prop)
+
+
+## The gate itself is part of the painting. Damage is drawn on top of its doors.
 func _build_gate() -> void:
-	_load_sprites()
-	var front := float(level.wall_row) * Defs.CELL
-	var gx := (level.gate_cols.x + level.gate_cols.y + 1) * 0.5 * Defs.CELL
-	var ground := Vector2(gx, front + 0.9 * 0.8 + 1.9)  # measured against the painted towers
-	var pitch := deg_to_rad(float(_cam.pitch_deg))
-	var forward := Vector3(0, -sin(pitch), -cos(pitch))
-	_gate = Sprite3D.new()
-	_gate.pixel_size = 1.0 / float(_sprites.get("px_per_m", 40.0))
-	_gate.shaded = false
-	_gate.transparent = true
-	_gate.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
-	_gate.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	_gate.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_gate.rotation = Vector3(-pitch, 0, 0)
-	_gate_pos = to3(ground) + forward * 14.0
-	_gate.position = _gate_pos
-	_env_root.add_child(_gate)
+	_gate = Node2D.new()
+	_gate.position = PAINTED_DOORS_CENTRE
+	_world.add_child(_gate)
+	var half := PAINTED_DOORS_SIZE * 0.5
+	_gate_cracks = Node2D.new()
+	for line in [[Vector2(-0.8, -1), Vector2(-0.45, -0.3), Vector2(-0.6, 0.25), Vector2(-0.25, 1)],
+			[Vector2(0.7, -1), Vector2(0.35, -0.2), Vector2(0.55, 0.4), Vector2(0.2, 1)],
+			[Vector2(-0.45, -0.3), Vector2(0.0, -0.1), Vector2(0.35, -0.2)]]:
+		var crack := Line2D.new()
+		crack.width = 3.5
+		crack.default_color = Color(0.05, 0.04, 0.03, 0.9)
+		for p in line:
+			crack.add_point(p * half)
+		_gate_cracks.add_child(crack)
+	_gate.add_child(_gate_cracks)
+	_gate_hole = Polygon2D.new()
+	_gate_hole.color = Color(0.03, 0.025, 0.02)
+	_gate_hole.polygon = PackedVector2Array([
+		Vector2(-1, 1) * half, Vector2(-0.96, -0.55) * half, Vector2(-0.62, -0.92) * half, Vector2(-0.25, -0.7) * half,
+		Vector2(0.12, -1) * half, Vector2(0.55, -0.72) * half, Vector2(0.97, -0.9) * half, Vector2(1, 1) * half,
+	])
+	_gate.add_child(_gate_hole)
+	_gate_flash = ColorRect.new()
+	_gate_flash.color = Color(1.0, 0.3, 0.2, 0.0)
+	_gate_flash.position = -half
+	_gate_flash.size = PAINTED_DOORS_SIZE
+	_gate.add_child(_gate_flash)
 	_set_gate_state("intact")
 
 
 func _set_gate_state(state: String) -> void:
 	_gate_state = state
-	var path := "res://assets/sprites/props/gate_%s.png" % state
-	if ResourceLoader.exists(path):
-		_gate.texture = load(path)
+	_gate_cracks.visible = state == "damaged"
+	_gate_hole.visible = state == "destroyed"
 
 
 func gate_ground() -> Vector2:
-	var gx := (level.gate_cols.x + level.gate_cols.y + 1) * 0.5 * Defs.CELL
-	return Vector2(gx, float(level.wall_row) * Defs.CELL)
-
-
-func _build_scatter() -> void:
-	pass  # set dressing is part of the painted background
+	return Vector2((level.gate_cols.x + level.gate_cols.y + 1) * 0.5 * Defs.CELL, float(level.wall_row) * Defs.CELL)
 
 
 func _build_hotspots() -> void:
 	for h in level.hotspots:
-		var p := to3(level.hotspot_pos(h))
-		var q := QuadMesh.new()
-		q.size = Vector2(6.0, 6.0)
-		var gm := StandardMaterial3D.new()
-		gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		gm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-		gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		gm.albedo_texture = _soft_dot()
-		gm.albedo_color = Color(1.0, 0.42, 0.15, 0.0)
-		gm.no_depth_test = false
-		var glow := _mesh(q, gm, p + Vector3(0, 0.08, 0), _env_root)
-		glow.rotation.x = -PI * 0.5
-		glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var smoke := CPUParticles3D.new()
+		var at := to_world(level.hotspot_pos(h))
+		var crater := Sprite2D.new()
+		crater.texture = load("res://assets/sprites/props/crater.png")
+		crater.position = at
+		crater.scale = Vector2.ONE * CRATER_WIDTH_M * PX_PER_M / crater.texture.get_width()
+		_world.add_child(crater)
+		var glow := Sprite2D.new()
+		glow.texture = _soft_dot()
+		glow.material = _additive
+		glow.modulate = Color(1.0, 0.42, 0.15, 0.0)
+		glow.position = at
+		glow.scale = Vector2(240.0, 240.0 * DEPTH) / 64.0
+		_world.add_child(glow)
+		_hotspot_glows.append(glow)
+		var smoke := CPUParticles2D.new()
+		smoke.texture = _soft_dot()
 		smoke.amount = 8
 		smoke.lifetime = 4.0
 		smoke.preprocess = 4.0
-		smoke.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
-		smoke.emission_sphere_radius = 0.7
-		smoke.direction = Vector3(0.2, 1, 0)
+		smoke.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+		smoke.emission_sphere_radius = 26.0
+		smoke.direction = Vector2(0.15, -1.0)
 		smoke.spread = 12.0
-		smoke.initial_velocity_min = 0.5
-		smoke.initial_velocity_max = 0.9
-		smoke.gravity = Vector3(0.15, 0.08, 0)
-		smoke.scale_amount_min = 0.8
-		smoke.scale_amount_max = 1.6
-		var curve := Curve.new()
-		curve.add_point(Vector2(0, 0.4))
-		curve.add_point(Vector2(1, 1.5))
-		smoke.scale_amount_curve = curve
-		var grad := Gradient.new()
-		grad.set_color(0, Color(0.5, 0.46, 0.44, 0.0))
-		grad.add_point(0.2, Color(0.5, 0.46, 0.44, 0.32))
-		grad.set_color(grad.get_point_count() - 1, Color(0.55, 0.53, 0.53, 0.0))
-		smoke.color_ramp = grad
-		var sq := QuadMesh.new()
-		sq.size = Vector2(1.4, 1.4)
-		var sm := StandardMaterial3D.new()
-		sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		sm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-		sm.vertex_color_use_as_albedo = true
-		sm.albedo_texture = _soft_dot()
-		sq.material = sm
-		smoke.mesh = sq
-		smoke.position = p + Vector3(0, 0.3, 0)
-		_env_root.add_child(smoke)
-		_hotspot_nodes.append({"glow": gm})
+		smoke.gravity = Vector2(5.0, -3.0)
+		smoke.initial_velocity_min = 18.0
+		smoke.initial_velocity_max = 32.0
+		smoke.scale_amount_min = 0.9
+		smoke.scale_amount_max = 1.7
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color(0.5, 0.46, 0.44, 0.0))
+		ramp.add_point(0.2, Color(0.5, 0.46, 0.44, 0.32))
+		ramp.set_color(ramp.get_point_count() - 1, Color(0.55, 0.53, 0.53, 0.0))
+		smoke.color_ramp = ramp
+		smoke.position = at
+		_world.add_child(smoke)
 	_set_hotspot_intensity(0.0)
 
 
 func _set_hotspot_intensity(v: float) -> void:
-	for h in _hotspot_nodes:
-		(h.glow as StandardMaterial3D).albedo_color.a = 0.15 + v * 0.85
-
-
-var _dot_tex: Texture2D
+	for glow in _hotspot_glows:
+		glow.modulate.a = 0.15 + v * 0.85
 
 
 func _soft_dot() -> Texture2D:
-	if _dot_tex:
-		return _dot_tex
-	var img := Image.create(64, 64, false, Image.FORMAT_RGBA8)
-	for y in 64:
-		for x in 64:
-			var d := Vector2(x - 31.5, y - 31.5).length() / 32.0
-			img.set_pixel(x, y, Color(1, 1, 1, clampf(1.0 - d, 0.0, 1.0) ** 1.8))
-	_dot_tex = ImageTexture.create_from_image(img)
-	return _dot_tex
-
-
-func _build_grid() -> void:
-	var vr := level.view_rect
-	var img := Image.create(vr.size.x, vr.size.y, false, Image.FORMAT_L8)
-	for y in vr.size.y:
-		for x in vr.size.x:
-			var ok := level.is_deployable(Vector2i(vr.position.x + x, vr.position.y + y))
-			img.set_pixel(x, y, Color.WHITE if ok else Color.BLACK)
-	var tex := ImageTexture.create_from_image(img)
-	var sh := Shader.new()
-	sh.code = """
-shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_disabled;
-uniform sampler2D mask : filter_nearest;
-uniform vec2 cells;
-uniform float alpha = 0.6;
-void fragment() {
-	vec2 f = fract(UV * cells);
-	float line = 1.0 - smoothstep(0.0, 0.05, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
-	float ok = texture(mask, UV).r;
-	vec3 col = mix(vec3(1.0, 0.35, 0.3), vec3(0.55, 1.0, 0.9), ok);
-	ALBEDO = col;
-	ALPHA = (line * 0.75 + (ok > 0.5 ? 0.06 : 0.16)) * alpha;
-}
-"""
-	var mat := ShaderMaterial.new()
-	mat.shader = sh
-	mat.set_shader_parameter("mask", tex)
-	mat.set_shader_parameter("cells", Vector2(vr.size))
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(vr.size) * Defs.CELL
-	var centre := (Vector2(vr.position) + Vector2(vr.size) * 0.5) * Defs.CELL
-	_grid = _mesh(plane, mat, to3(centre, 0.05))
-	_grid.visible = false
-
-
-# ================================================================== models
-
-func _load_model(path: String) -> Node3D:
-	if not _scene_cache.has(path):
-		_scene_cache[path] = load(path)
-	var ps: PackedScene = _scene_cache[path]
-	if ps == null:
-		var fallback := Node3D.new()
-		_box(Vector3(1, 1, 1), _mat(Color.MAGENTA), Vector3(0, 0.5, 0), fallback)
-		return fallback
-	return ps.instantiate()
-
-
-func gun_model(type: String) -> Node3D:
-	return _load_model("res://assets/models/turrets/%s_%s.glb" % [Defs.GUNS[type].model, TURRET_PALETTE])
-
-
-func monster_model(type: String) -> Node3D:
-	return _load_model("res://assets/models/monsters/%s_%s.glb" % [Defs.MONSTERS[type].model, MONSTER_PALETTE])
-
-
-func _head_of(n: Node) -> Node3D:
-	return n.find_child("*_Head", true, false) as Node3D
-
-
-func _ring(radius: float, color: Color) -> MeshInstance3D:
-	var sh := Shader.new()
-	sh.code = """
-shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_disabled;
-uniform vec4 color : source_color;
-void fragment() {
-	float d = length(UV - 0.5) * 2.0;
-	float ring = smoothstep(0.955, 0.975, d) - smoothstep(0.99, 1.0, d);
-	float fill = d < 1.0 ? 0.10 : 0.0;
-	ALBEDO = color.rgb;
-	ALPHA = (ring * 0.95 + fill) * color.a;
-}
-"""
-	var mat := ShaderMaterial.new()
-	mat.shader = sh
-	mat.set_shader_parameter("color", color)
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(radius, radius) * 2.0
-	var mi := MeshInstance3D.new()
-	mi.mesh = plane
-	mi.material_override = mat
-	mi.position.y = 0.08
-	return mi
-
-
-func _bar(width: float, color: Color) -> Node3D:
-	var root := Node3D.new()
-	for k in 2:
-		var q := QuadMesh.new()
-		q.size = Vector2(width, 0.16 if k == 0 else 0.11)
-		var m := StandardMaterial3D.new()
-		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-		m.no_depth_test = true
-		m.render_priority = 10 + k
-		m.albedo_color = Color(0.05, 0.06, 0.08, 0.85) if k == 0 else color
-		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		var mi := MeshInstance3D.new()
-		mi.mesh = q
-		mi.material_override = m
-		mi.name = "bg" if k == 0 else "fg"
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		root.add_child(mi)
-	return root
-
-
-func _set_bar(bar: Node3D, frac: float, width: float) -> void:
-	var fg := bar.get_node("fg") as MeshInstance3D
-	frac = clampf(frac, 0.0, 1.0)
-	fg.scale.x = maxf(frac, 0.001)
-	fg.position.x = -width * 0.5 * (1.0 - frac)
+	if _dot == null:
+		var img := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+		for y in 64:
+			for x in 64:
+				var d := Vector2(x - 31.5, y - 31.5).length() / 32.0
+				img.set_pixel(x, y, Color(1, 1, 1, clampf(1.0 - d, 0.0, 1.0) ** 1.8))
+		_dot = ImageTexture.create_from_image(img)
+	return _dot
 
 
 # ================================================================== deployment view
 
+func _make_grid() -> CellOverlay:
+	var overlay := CellOverlay.new()
+	var vr := level.view_rect
+	for y in vr.size.y:
+		for x in vr.size.x:
+			var c := vr.position + Vector2i(x, y)
+			var ok := level.is_deployable(c)
+			var tint := Color(0.55, 1.0, 0.9) if ok else Color(1.0, 0.35, 0.3)
+			overlay.add_cell(_cell_rect(c), Color(tint, 0.05 if ok else 0.12), Color(tint, 0.26))
+	_world.add_child(overlay)
+	return overlay
+
+
 func show_deployment(deployment: Array) -> void:
 	_clear_dynamic()
+	_breaching = false
+	_set_gate_state("intact")  # a retry starts with the gate repaired
 	for i in deployment.size():
 		_add_gun_node(i, deployment[i])
 	_set_hotspot_intensity(0.35)
 
 
 func _clear_dynamic() -> void:
-	for c in _dynamic_root.get_children():
-		c.queue_free()
+	for table in [_gun_nodes, _monster_nodes]:
+		for view in table.values():
+			view.queue_free()
+		table.clear()
 	for c in _fx_root.get_children():
 		c.queue_free()
-	_gun_nodes.clear()
-	_monster_nodes.clear()
 
 
-func _add_gun_node(id: int, d: Dictionary) -> Node3D:
-	var root := Node3D.new()
-	root.position = cell3(d.cell)
-	var model := gun_model(d.type)
-	model.scale = Vector3.ONE * GUN_SCALE
-	Stylize.apply(model, 0.025)
-	root.add_child(model)
-	var head := _head_of(model)
-	if head:
-		head.rotation.y = PI  # face north, toward the threat
+func _make_gun_view(type: String) -> UnitView:
+	var model: String = Defs.GUNS[type].model
+	if TURRET_KITS.has(model):
+		var turret := TurretSprite.new()
+		turret.setup(TURRET_KITS[model])
+		return turret
+	var stand_in := StandInUnit.new()
+	stand_in.setup(load(STAND_IN_ART % model), STAND_IN_WIDTH_M[model], Vector2.ZERO)
+	return stand_in
+
+
+func _add_gun_node(id: int, d: Dictionary) -> UnitView:
+	var view := _make_gun_view(d.type)
+	view.ground = level.cell_center(d.cell)
+	view.position = to_world(view.ground)
 	if Defs.GUNS[d.type].damage <= 0.0:  # decoys get a coloured base so they read apart from real turrets
-		root.add_child(_ring(1.4, Color("#ff6b63") if Defs.GUNS[d.type].blast > 0.0 else Color("#f2b13a")))
-	var bar := _bar(1.6, Color("#5ee08a"))
-	bar.name = "HP"
-	bar.position.y = 3.6
-	root.add_child(bar)
-	_dynamic_root.add_child(root)
-	_gun_nodes[id] = root
-	return root
+		var ring := RangeRing.new()
+		ring.setup(1.4 * PX_PER_M, DEPTH, Color("#ff6b63") if Defs.GUNS[d.type].blast > 0.0 else Color("#f2b13a"))
+		ring.z_index = -1
+		view.add_child(ring)
+	view.add_bar(1.6, TURRET_BAR_HEIGHT_M, Color("#5ee08a"))
+	_entities.add_child(view)
+	_gun_nodes[id] = view
+	return view
 
 
 func set_held(type: String) -> void:
 	if _ghost:
 		_ghost.queue_free()
 		_ghost = null
-	_ghost_type = type
 	_grid.visible = type != ""
 	if type == "":
 		return
-	_ghost = Node3D.new()
-	var model := gun_model(type)
-	model.scale = Vector3.ONE * GUN_SCALE
-	Stylize.apply(model, 0.025)
-	_ghost.add_child(model)
-	var head := _head_of(model)
-	if head:
-		head.rotation.y = PI
-	_ghost_ring = _ring(Defs.GUNS[type].range, Color("#4fd6e0"))
+	_ghost = Node2D.new()
+	_ghost.add_child(_make_gun_view(type))
+	_ghost_ring = RangeRing.new()
+	_ghost_ring.setup(float(Defs.GUNS[type].range) * PX_PER_M, DEPTH, Color("#4fd6e0"))
 	_ghost.add_child(_ghost_ring)
 	var min_range: float = Defs.GUNS[type].min_range
-	if min_range > 0.0:
-		_ghost.add_child(_ring(min_range, Color("#ff6b63")))  # the blind zone around the turret
+	if min_range > 0.0:  # the blind zone around the turret
+		var blind := RangeRing.new()
+		blind.setup(min_range * PX_PER_M, DEPTH, Color("#ff6b63"))
+		_ghost.add_child(blind)
 	_ghost.visible = false
-	_dynamic_root.add_child(_ghost)
-
-
-## Pulsing amber tiles on the field: an area, or a single tile for the most direct hint.
-func show_hint(cells: Array, exact: bool) -> void:
-	clear_hint()
-	var vr := level.view_rect
-	var img := Image.create(vr.size.x, vr.size.y, false, Image.FORMAT_L8)
-	for c in cells:
-		img.set_pixel(c.x - vr.position.x, c.y - vr.position.y, Color.WHITE)
-	var sh := Shader.new()
-	sh.code = """
-shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_disabled;
-uniform sampler2D mask : filter_nearest;
-uniform vec2 cells;
-uniform float strength = 0.4;
-void fragment() {
-	if (texture(mask, UV).r < 0.5) { discard; }
-	vec2 f = fract(UV * cells);
-	float edge = 1.0 - smoothstep(0.0, 0.09, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
-	float pulse = 0.72 + 0.28 * sin(TIME * 4.0);
-	ALBEDO = vec3(1.0, 0.72, 0.22);
-	ALPHA = clamp((edge * 0.9 + strength) * pulse, 0.0, 1.0);
-}
-"""
-	var mat := ShaderMaterial.new()
-	mat.shader = sh
-	mat.set_shader_parameter("mask", ImageTexture.create_from_image(img))
-	mat.set_shader_parameter("cells", Vector2(vr.size))
-	mat.set_shader_parameter("strength", 0.55 if exact else 0.28)
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(vr.size) * Defs.CELL
-	var centre := (Vector2(vr.position) + Vector2(vr.size) * 0.5) * Defs.CELL
-	_hint = _mesh(plane, mat, to3(centre, 0.06))
-	_hint.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-
-
-func clear_hint() -> void:
-	if is_instance_valid(_hint):
-		_hint.queue_free()
-	_hint = null
+	_ghost.z_index = 5
+	_world.add_child(_ghost)
 
 
 func update_ghost(cell: Vector2i, valid: bool) -> void:
 	if not _ghost:
 		return
 	_ghost.visible = level.view_rect.has_point(cell)
-	_ghost.position = cell3(cell)
-	_ghost_valid = valid
-	var col := Color("#4fd6e0") if valid else Color("#ff6b63")
-	(_ghost_ring.material_override as ShaderMaterial).set_shader_parameter("color", col)
+	_ghost.position = to_world(level.cell_center(cell))
+	_ghost_ring.set_color(Color("#4fd6e0") if valid else Color("#ff6b63"))
+
+
+## Pulsing amber tiles on the field: an area, or a single tile for the most direct hint.
+func show_hint(cells: Array, exact: bool) -> void:
+	clear_hint()
+	_hint = CellOverlay.new()
+	for c in cells:
+		_hint.add_cell(_cell_rect(c), Color(1.0, 0.72, 0.22, 0.55 if exact else 0.28), Color(1.0, 0.72, 0.22, 0.9))
+	_world.add_child(_hint)
+	_world.move_child(_hint, _entities.get_index())
+	_hint_tween = create_tween().set_loops()
+	_hint_tween.tween_property(_hint, "modulate:a", 0.45, 0.8)
+	_hint_tween.tween_property(_hint, "modulate:a", 1.0, 0.8)
+
+
+func clear_hint() -> void:
+	if _hint_tween:
+		_hint_tween.kill()
+		_hint_tween = null
+	if is_instance_valid(_hint):
+		_hint.queue_free()
+	_hint = null
 
 
 ## Where a point `height` metres above a gun / the gate appears on the UI canvas.
 func gun_screen_pos(id: int, height: float) -> Vector2:
-	return camera.unproject_position((_gun_nodes[id] as Node3D).position + Vector3.UP * height)
+	return _world.get_transform() * to_world((_gun_nodes[id] as UnitView).ground, height)
 
 
 func gate_screen_pos(height: float) -> Vector2:
-	return camera.unproject_position(to3(gate_ground(), height))
+	return _world.get_transform() * to_world(gate_ground(), height)
 
 
 func screen_to_cell(screen_pos: Vector2) -> Vector2i:
-	var o := camera.project_ray_origin(screen_pos)
-	var n := camera.project_ray_normal(screen_pos)
-	if absf(n.y) < 0.0001:
-		return Vector2i(-1, -1)
-	var t := -o.y / n.y
-	var hit := o + n * t
-	var ws := level.world_size()
-	var p := Vector2(hit.x + ws.x * 0.5, hit.z + ws.y * 0.5)
+	var local := _world.get_transform().affine_inverse() * screen_pos
+	var p := Vector2(local.x / PX_PER_M + _focus.x, local.y / (PX_PER_M * DEPTH) + _focus.y)
 	return Vector2i(floori(p.x / Defs.CELL), floori(p.y / Defs.CELL))
 
 
-var input_enabled := false
-var sim_speed := 1.0  # battle speed multiplier (animations follow it)
-
-
 func _unhandled_input(event: InputEvent) -> void:
-	if not input_enabled or camera == null:
+	if not input_enabled or _world == null:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		var cell := screen_to_cell(event.position)
@@ -685,7 +395,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion:
 		var cell := screen_to_cell(event.position)
-		if _press_cell.x >= 0 and event.position.distance_to(_press_pos) > 14.0:
+		if _press_cell.x >= 0 and event.position.distance_to(_press_pos) > DEPLOY_DRAG_PX:
 			_dragging = true
 		hover_changed.emit(cell)
 
@@ -697,84 +407,48 @@ func begin_battle(s: BattleSim) -> void:
 	set_held("")
 
 
+func _view_dt() -> float:
+	return get_process_delta_time() * maxf(sim_speed, 1.0)
+
+
 func sync(alpha: float) -> void:
 	if sim == null:
 		return
-	_interp = alpha
+	var dt := _view_dt()
 	for g in sim.guns:
-		var node: Node3D = _gun_nodes.get(g.id)
-		if node == null:
+		var turret: UnitView = _gun_nodes.get(g.id)
+		if turret == null:
 			continue
-		if g.alive:
-			var head := _head_of(node)
-			if head and g.target >= 0:
-				var want := atan2(g.aim.x, g.aim.y)
-				head.rotation.y = lerp_angle(head.rotation.y, want, 0.35)
-		_set_bar(node.get_node("HP"), g.hp / g.max_hp, 1.6)
-	var t := Time.get_ticks_msec() / 1000.0
+		turret.update_turret(g.alive and g.target >= 0, atan2(float(g.aim.y), float(g.aim.x)), dt)
+		turret.bar.visible = g.alive and g.hp < g.max_hp
+		turret.bar.set_fraction(g.hp / g.max_hp)
 	for m in sim.monsters:
 		if m.state == "dead":
 			continue
-		var node: Node3D = _monster_nodes.get(m.id)
-		if node == null:
-			node = _spawn_monster_node(m)
-		var p: Vector2 = m.prev_pos.lerp(m.pos, alpha)
-		var y := 0.0
-		var moving: bool = m.prev_pos.distance_to(m.pos) > 0.001
-		if m.state == "emerging":
-			var k: float = 1.0 - m.state_t / Defs.EMERGE_TIME
-			y = lerpf(-1.8, 0.0, k)
-		node.position = to3(p, y)
-		node.rotation.y = lerp_angle(node.rotation.y, atan2(m.facing.x, m.facing.y), 0.25)
-		var ap := node.get_meta("anim", null) as AnimationPlayer
-		if ap:
-			var want := "emerge"
-			var spd := 1.0
-			if m.state == "active":
-				if m.attacking:
-					want = "attack"
-					# one swing per simulated attack
-					spd = ap.get_animation("attack").length * float(m.attack_rate)
-				elif moving:
-					want = "walk"
-					spd = float(m.speed) / float(Defs.MONSTERS[m.type].speed)
-				else:
-					want = "idle"
-			if ap.current_animation != want:
-				ap.play(want, 0.15)
-			ap.speed_scale = spd * (sim_speed if sim_speed > 0.0 else 1.0)
-		else:
-			var body := node.get_child(0) as Node3D
-			if moving:
-				node.position.y += absf(sin(t * 10.0 + m.id)) * 0.08
-			body.position.z = (sin(t * 14.0) * 0.5 + 0.5) * 0.35 if m.attacking else 0.0
-		var bar := node.get_node("HP") as Node3D
-		bar.visible = m.hp < m.max_hp and m.state == "active"
-		_set_bar(bar, m.hp / m.max_hp, 1.2)
+		var view: UnitView = _monster_nodes.get(m.id)
+		if view == null:
+			view = _spawn_monster_view(m)
+		view.tick(m, m.prev_pos.lerp(m.pos, alpha), dt)
+		view.position = to_world(view.ground)
+		view.bar.visible = m.hp < m.max_hp and m.state == "active"
+		view.bar.set_fraction(m.hp / m.max_hp)
 
 
-func _spawn_monster_node(m: Dictionary) -> Node3D:
-	var root := Node3D.new()
-	var model := monster_model(m.type)
-	model.scale = Vector3.ONE * float(Defs.MONSTERS[m.type].model_scale) * MONSTER_SCALE
-	Stylize.apply(model, 0.025)
-	root.add_child(model)
-	var ap := model.find_child("AnimationPlayer", true, false) as AnimationPlayer
-	if ap:
-		for loop_name in ["idle", "walk", "attack"]:
-			if ap.has_animation(loop_name):
-				ap.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
-		ap.play("emerge")
-		root.set_meta("anim", ap)
-	var bar := _bar(1.2, Color("#ff6b63"))
-	bar.name = "HP"
-	bar.position.y = 2.6 if m.type != "brute" else 3.8
-	bar.visible = false
-	root.add_child(bar)
-	root.position = to3(m.pos, -2.0)
-	_dynamic_root.add_child(root)
-	_monster_nodes[m.id] = root
-	return root
+func _spawn_monster_view(m: Dictionary) -> UnitView:
+	var view: UnitView
+	if MONSTER_KITS.has(m.type):
+		var sprite := MonsterSprite.new()
+		sprite.setup(MONSTER_KITS[m.type], m.pos)
+		view = sprite
+	else:
+		var stand_in := StandInUnit.new()
+		stand_in.setup(load(STAND_IN_ART % Defs.MONSTERS[m.type].model), STAND_IN_WIDTH_M[m.type], m.pos)
+		view = stand_in
+	view.add_bar(1.2, MONSTER_BAR_HEIGHT_M[m.type], Color("#ff6b63"))
+	view.position = to_world(m.pos)
+	_entities.add_child(view)
+	_monster_nodes[m.id] = view
+	return view
 
 
 func handle_events(events: Array) -> void:
@@ -794,272 +468,190 @@ func handle_events(events: Array) -> void:
 				_fx_gun_destroyed(e.gun)
 			"monster_attack":
 				_fx_spark(sim.guns[e.gun].pos, Color("#ffb070"))
+				_shake_screen(TURRET_HIT_TREMOR_PX)
 			"gate_hit":
 				var m: Dictionary = sim.monsters[e.monster]
 				_fx_spark(m.pos + Vector2(0, 0.9), Color("#ff6b63"))
+				_shake_screen(GATE_HIT_TREMOR_PX)
 
 
 # ================================================================== effects
 
-func _fade_free(node: Node3D, time: float, grow := 1.0) -> void:
-	var tw := create_tween()
-	tw.set_parallel(true)
+func _puff(at: Vector2, radius_m: float, color: Color, time: float, grow := 1.0, glow := false) -> void:
+	var puff := Sprite2D.new()
+	puff.texture = _soft_dot()
+	puff.modulate = color
+	if glow:
+		puff.material = _additive
+	puff.position = at
+	var start := Vector2(1.0, 0.8) * radius_m * PX_PER_M / 32.0
+	puff.scale = start
+	_fx_root.add_child(puff)
+	var tween := create_tween().set_parallel(true)
 	if grow != 1.0:
-		tw.tween_property(node, "scale", node.scale * grow, time)
-	var mi := node as MeshInstance3D
-	if mi and mi.material_override is StandardMaterial3D:
-		var m := mi.material_override as StandardMaterial3D
-		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		tw.tween_property(m, "albedo_color:a", 0.0, time)
-	tw.chain().tween_callback(node.queue_free)
+		tween.tween_property(puff, "scale", start * grow, time)
+	tween.tween_property(puff, "modulate:a", 0.0, time)
+	tween.chain().tween_callback(puff.queue_free)
+
+
+func _chip(at: Vector2, velocity: Vector2, color: Color, size_px: float, time: float) -> void:
+	var chip := ColorRect.new()
+	chip.color = color
+	chip.size = Vector2.ONE * size_px
+	chip.position = at
+	_fx_root.add_child(chip)
+	var drop := at + velocity * time + Vector2(0, 260.0 * time * time)
+	var tween := create_tween().set_parallel(true)
+	tween.tween_property(chip, "position", drop, time)
+	tween.tween_property(chip, "modulate:a", 0.0, time * 0.4).set_delay(time * 0.6)
+	tween.chain().tween_callback(chip.queue_free)
 
 
 func _fx_warning(hi: int) -> void:
-	var h: Dictionary = _hotspot_nodes[hi]
-	var tw := create_tween()
-	tw.tween_method(func(v: float): (h.glow as StandardMaterial3D).albedo_color.a = 0.15 + v * 0.85,
-		0.0, 1.0, Defs.EMERGE_WARN)
-	tw.tween_method(func(v: float): (h.glow as StandardMaterial3D).albedo_color.a = 0.15 + v * 0.85,
-		1.0, 0.25, 2.5)
-	# dust puffs while the ground shakes
-	for k in 5:
+	var glow := _hotspot_glows[hi]
+	var tween := create_tween()
+	tween.tween_property(glow, "modulate:a", 1.0, Defs.EMERGE_WARN)
+	tween.tween_property(glow, "modulate:a", 0.4, 2.5)
+	for k in 5:  # dust while the ground shakes
 		var p := level.hotspot_pos(level.hotspots[hi]) + Vector2(cos(k * 1.3), sin(k * 1.3)) * 1.4
-		var s := SphereMesh.new()
-		s.radius = 0.5
-		s.height = 0.7
-		var d := _mesh(s, _emissive(Color(0.55, 0.5, 0.42), 0.2, 0.55), to3(p, 0.3), _fx_root)
-		d.scale = Vector3.ONE * 0.3
-		var t2 := create_tween()
-		t2.tween_interval(k * 0.25)
-		t2.tween_property(d, "scale", Vector3.ONE * 1.6, 1.0)
-		t2.parallel().tween_property(d, "position:y", 1.2, 1.0)
-		t2.tween_callback(d.queue_free)
+		get_tree().create_timer(k * 0.25).timeout.connect(func():
+			if _fx_root and is_instance_valid(_fx_root):
+				_puff(to_world(p, 0.3), 0.5, Color(0.55, 0.5, 0.42, 0.55), 1.0, 3.0))
 
 
 func _fx_emerge(p: Vector2) -> void:
-	for k in 6:
-		var b := BoxMesh.new()
-		b.size = Vector3(0.35, 0.3, 0.3)
-		var r := _mesh(b, _mat(Color("#5a4a3e")), to3(p, 0.2), _fx_root)
-		var dir := Vector3(cos(k * 1.05), 0, sin(k * 1.05))
-		var tw := create_tween()
-		tw.set_parallel(true)
-		tw.tween_property(r, "position", r.position + dir * (1.2 + _hash(k) * 0.8) + Vector3(0, 1.2, 0), 0.25)
-		tw.tween_property(r, "rotation", Vector3(3, 2, 1), 0.6)
-		tw.chain().tween_property(r, "position:y", 0.1, 0.35)
-		tw.chain().tween_callback(r.queue_free).set_delay(0.6)
-	var s := SphereMesh.new()
-	s.radius = 1.0
-	s.height = 1.2
-	var dust := _mesh(s, _emissive(Color(0.6, 0.52, 0.42), 0.15, 0.6), to3(p, 0.5), _fx_root)
-	_fade_free(dust, 0.8, 2.2)
-
-
-func _recoil(gun_id: int, amount: float) -> void:
-	var node: Node3D = _gun_nodes.get(gun_id)
-	if node == null:
-		return
-	var head := _head_of(node)
-	if head == null:
-		return
-	if not head.has_meta("rest"):
-		head.set_meta("rest", head.position)
-	var rest: Vector3 = head.get_meta("rest")
-	var back := head.basis.z.normalized() * -amount
-	var tw := create_tween()
-	tw.tween_property(head, "position", rest + back, 0.04)
-	tw.tween_property(head, "position", rest, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	var at := to_world(p, 0.2)
+	for k in 8:
+		var a := k * 0.8
+		_chip(at, Vector2(cos(a) * 70.0, sin(a) * 30.0 - 60.0), Color("#5a4a3e"), 6.0, 0.55)
+	_puff(to_world(p, 0.5), 1.0, Color(0.6, 0.52, 0.42, 0.6), 0.8, 2.2)
 
 
 func _fx_fire(e: Dictionary) -> void:
 	var g: Dictionary = sim.guns[e.gun]
-	_recoil(e.gun, {"mg": 0.05, "cannon": 0.35, "sniper": 0.2}.get(g.type, 0.1))
-	var from := to3(g.pos, 1.2)
-	var to := to3(e.to, 0.7)
-	var col := Color("#ffd27a")
-	var w := 0.06
-	var life := 0.05
-	if g.type == "sniper":
-		col = Color("#5ff3ff")
-		w = 0.1
-		life = 0.18
+	(_gun_nodes[e.gun] as UnitView).fired()
+	var from := to_world(g.pos, 1.8)
+	var to := to_world(e.to, 0.7)
 	if e.get("shell", false):
 		_fx_shell(from, to, g)
 		return
-	var dist := from.distance_to(to)
-	if dist < 0.01:
-		return
-	var tr := _box(Vector3(w, w, dist), _emissive(col, 5.0), (from + to) * 0.5, _fx_root)
-	tr.look_at_from_position((from + to) * 0.5, to, Vector3.UP)
-	_fade_free(tr, life)
-	var s := SphereMesh.new()
-	s.radius = 0.22
-	s.height = 0.44
-	var fl := _mesh(s, _emissive(col, 6.0), from + (to - from).normalized() * 0.9, _fx_root)
-	_fade_free(fl, 0.06)
-	_fx_spark(e.to, col)
+	var sniper: bool = g.type == "sniper"
+	var color := Color("#5ff3ff") if sniper else Color("#ffd27a")
+	var tracer := Line2D.new()
+	tracer.points = PackedVector2Array([from, to])
+	tracer.width = 4.0 if sniper else 2.5
+	tracer.default_color = color
+	tracer.material = _additive
+	_fx_root.add_child(tracer)
+	var tween := create_tween()
+	tween.tween_property(tracer, "modulate:a", 0.0, 0.18 if sniper else 0.06)
+	tween.tween_callback(tracer.queue_free)
+	_fx_spark(e.to, color)
 
 
-func _fx_shell(from: Vector3, to: Vector3, g: Dictionary) -> void:
-	var s := SphereMesh.new()
-	s.radius = 0.2
-	s.height = 0.4
-	var shell := _mesh(s, _emissive(Color("#ffb347"), 4.0), from, _fx_root)
-	var flight: float = from.distance_to(to) / g.projectile_speed
+func _fx_shell(from: Vector2, to: Vector2, g: Dictionary) -> void:
+	var shell := Sprite2D.new()
+	shell.texture = _soft_dot()
+	shell.material = _additive
+	shell.modulate = Color("#ffb347")
+	shell.scale = Vector2.ONE * 0.45
+	_fx_root.add_child(shell)
+	var flight: float = from.distance_to(to) / (float(g.projectile_speed) * PX_PER_M)
 	var arc := func(k: float) -> void:
-		var p := from.lerp(to, k)
-		p.y += sin(k * PI) * 2.5
-		shell.position = p
-	var tw := create_tween()
-	tw.tween_method(arc, 0.0, 1.0, flight)
-	tw.tween_callback(shell.queue_free)
-	var fl := _mesh(SphereMesh.new(), _emissive(Color("#ffcf73"), 6.0), from, _fx_root)
-	fl.scale = Vector3.ONE * 0.8
-	_fade_free(fl, 0.08)
+		shell.position = from.lerp(to, k) - Vector2(0, sin(k * PI) * 2.5 * RISE * PX_PER_M)
+	var tween := create_tween()
+	tween.tween_method(arc, 0.0, 1.0, flight)
+	tween.tween_callback(shell.queue_free)
 
 
 func _fx_explosion(p: Vector2, radius: float) -> void:
-	var s := SphereMesh.new()
-	s.radius = 1.0
-	s.height = 2.0
-	var core := _mesh(s, _emissive(Color("#ff8a3d"), 5.0, 0.9), to3(p, 0.6), _fx_root)
-	core.scale = Vector3.ONE * 0.4
-	_fade_free(core, 0.35, radius * 2.2)
-	var smoke := _mesh(s, _emissive(Color(0.25, 0.22, 0.2), 0.1, 0.7), to3(p, 0.8), _fx_root)
-	smoke.scale = Vector3.ONE * 0.6
-	_fade_free(smoke, 0.9, radius * 1.6)
-	var ring := _ring(radius, Color("#ffb347"))
-	ring.position = to3(p, 0.1)
-	_fx_root.add_child(ring)
-	var tw := create_tween()
-	tw.tween_interval(0.25)
-	tw.tween_callback(ring.queue_free)
+	var at := to_world(p, 0.4)
+	_puff(at, radius * 0.6, Color("#ff9a3d"), 0.35, 1.8, true)
+	_puff(at, radius * 0.35, Color("#ffe2a0"), 0.18, 1.6, true)
+	_puff(to_world(p, 1.0), radius * 0.5, Color(0.25, 0.23, 0.22, 0.6), 1.1, 2.4)
 
 
-func _fx_spark(p: Vector2, col: Color) -> void:
-	var s := SphereMesh.new()
-	s.radius = 0.18
-	s.height = 0.36
-	var sp := _mesh(s, _emissive(col, 5.0), to3(p, 0.8), _fx_root)
-	_fade_free(sp, 0.12, 2.0)
+func _fx_spark(p: Vector2, color: Color) -> void:
+	_puff(to_world(p, 0.7), 0.3, color, 0.14, 1.8, true)
 
 
 func _fx_monster_death(id: int) -> void:
 	if not _monster_nodes.has(id):
 		return
-	var node: Node3D = _monster_nodes[id]
+	var view: UnitView = _monster_nodes[id]
 	_monster_nodes.erase(id)
-	node.get_node("HP").visible = false
-	var tw := create_tween()
-	var ap := node.get_meta("anim", null) as AnimationPlayer
-	if ap and ap.has_animation("death"):
-		ap.speed_scale = maxf(sim_speed, 1.0)
-		ap.play("death", 0.1)
-		tw.tween_interval(1.6 / maxf(sim_speed, 1.0))
-		tw.tween_property(node, "position:y", -1.6, 1.0)
-	else:
-		tw.set_parallel(true)
-		tw.tween_property(node, "rotation:z", 0.6, 0.4)
-		tw.tween_property(node, "position:y", -1.6, 1.2).set_delay(0.3)
-		tw.chain()
-	tw.tween_callback(node.queue_free)
-	var s := SphereMesh.new()
-	var puff := _mesh(s, _emissive(Color("#ff6b40"), 3.0, 0.8), node.position + Vector3(0, 0.6, 0), _fx_root)
-	_fade_free(puff, 0.3, 2.5)
+	view.bar.visible = false
+	view.die(sim_speed)
 
 
 func _fx_gun_destroyed(id: int) -> void:
-	var node: Node3D = _gun_nodes.get(id)
-	if node == null:
+	var view: UnitView = _gun_nodes.get(id)
+	if view == null:
 		return
-	for mi in node.find_children("*", "MeshInstance3D", true, false):
-		if mi.get_parent().name != "HP":
-			(mi as MeshInstance3D).material_override = _wreck_mat
-	var head := _head_of(node)
-	if head:
-		var tw := create_tween()
-		tw.tween_property(head, "rotation:x", 0.5, 0.3)
-	node.get_node("HP").visible = false
-	var s := SphereMesh.new()
-	var boom := _mesh(s, _emissive(Color("#ff9a3d"), 5.0, 0.9), node.position + Vector3(0, 1.2, 0), _fx_root)
-	_fade_free(boom, 0.4, 3.0)
-	var smoke := _mesh(s, _emissive(Color(0.2, 0.2, 0.2), 0.1, 0.6), node.position + Vector3(0, 1.8, 0), _fx_root)
-	_fade_free(smoke, 1.6, 4.0)
+	view.destroyed()
+	_puff(to_world(view.ground, 1.2), 1.0, Color("#ff9a3d"), 0.4, 3.0, true)
+	_puff(to_world(view.ground, 1.8), 1.0, Color(0.2, 0.2, 0.2, 0.6), 1.6, 3.0)
 
 
 func shake_gate() -> void:
-	if _gate == null or _gate_state == "destroyed":
+	if _gate_state == "destroyed":
 		return
 	if sim and _gate_state == "intact" and sim.gate_hp <= level.gate_max_hp * 0.5:
 		_set_gate_state("damaged")
 		_fx_explosion(gate_ground() + Vector2(-1.5, -0.6), 1.4)
-	var tw := create_tween()
-	_gate.modulate = Color(1.0, 0.55, 0.5)
-	tw.tween_property(_gate, "position:x", _gate_pos.x + 0.12, 0.04)
-	tw.tween_property(_gate, "position:x", _gate_pos.x - 0.12, 0.04)
-	tw.tween_property(_gate, "position:x", _gate_pos.x, 0.04)
-	tw.parallel().tween_property(_gate, "modulate", Color.WHITE, 0.25)
+	_gate_flash.color.a = 0.5
+	create_tween().tween_property(_gate_flash, "color:a", 0.0, 0.25)
 	if randi() % 3 == 0:  # visual only; the simulation stays deterministic
-		var s := SphereMesh.new()
-		var p := gate_ground() + Vector2(randf_range(-3.0, 3.0), -0.8)
-		var d := _mesh(s, _emissive(Color(0.6, 0.55, 0.48), 0.2, 0.5), to3(p, 0.6), _fx_root)
-		_fade_free(d, 0.6, 1.8)
+		_puff(to_world(gate_ground() + Vector2(randf_range(-3.0, 3.0), -0.8), 0.6), 0.9, Color(0.6, 0.55, 0.48, 0.5), 0.6, 1.8)
 
 
-## Gate falls: chained explosions, destroyed sprite, debris, dust and camera shake; then the
+## Gate falls: chained explosions, destroyed art, debris and camera shake; then the
 ## surviving monsters charge through the breach (animate_breach).
 func play_breach() -> void:
-	if _gate == null or _breaching:
+	if _breaching:
 		return
 	_breaching = true
 	_breach_t = 0.0
 	var g := gate_ground()
-	var tw := create_tween()
+	var tween := create_tween()
 	for k in 4:
 		var off := Vector2((k - 1.5) * 1.8, -0.5 + (k % 2) * 0.4)
-		tw.tween_callback(func(): _fx_explosion(g + off, 2.2); _shake_camera(0.35))
-		tw.tween_interval(0.16)
-	tw.tween_callback(func():
+		tween.tween_callback(func():
+			_fx_explosion(g + off, 2.2)
+			_shake_screen(10.0))
+		tween.tween_interval(0.16)
+	tween.tween_callback(func():
 		_set_gate_state("destroyed")
 		_fx_explosion(g, 3.4)
-		_shake_camera(0.8)
+		_shake_screen(22.0)
 		for i in 14:
 			_fx_debris(g + Vector2(randf_range(-3.0, 3.0), -0.4)))
 	for i in 3:
-		var dust := _mesh(SphereMesh.new(), _emissive(Color(0.55, 0.5, 0.45), 0.15, 0.55),
-			to3(g + Vector2((i - 1) * 2.5, -1.0), 1.0), _fx_root)
-		dust.scale = Vector3.ONE * 1.2
-		var t2 := create_tween()
-		t2.tween_interval(0.7)
-		t2.tween_property(dust, "scale", Vector3.ONE * 4.5, 1.6)
-		t2.parallel().tween_property(dust.material_override, "albedo_color:a", 0.0, 1.6)
-		t2.tween_callback(dust.queue_free)
+		_puff(to_world(g + Vector2((i - 1) * 2.5, -1.0), 1.0), 1.2, Color(0.55, 0.5, 0.45, 0.55), 2.2, 3.8)
 
 
 func _fx_debris(p: Vector2) -> void:
-	var b := BoxMesh.new()
-	b.size = Vector3(0.35, 0.2, 0.3) * randf_range(0.6, 1.4)
-	var r := _mesh(b, _mat(Color("#3e4752").lerp(Color("#8e9196"), randf()), 0.8, 0.3), to3(p, 1.0), _fx_root)
-	var dir := Vector3(randf_range(-1, 1), 0, randf_range(-0.3, 1.0)).normalized()
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(r, "position", r.position + dir * randf_range(2.0, 5.0) + Vector3(0, 2.5, 0), 0.35)
-	tw.tween_property(r, "rotation", Vector3(randf() * 6, randf() * 6, randf() * 6), 1.0)
-	tw.chain().tween_property(r, "position:y", 0.1, 0.4)
-	tw.chain().tween_interval(1.2)
-	tw.chain().tween_callback(r.queue_free)
+	var velocity := Vector2(randf_range(-150.0, 150.0), randf_range(-240.0, -90.0))
+	_chip(to_world(p, 0.4), velocity, Color("#4a4f55"), randf_range(5.0, 11.0), randf_range(0.7, 1.2))
 
 
-func _shake_camera(strength: float) -> void:
-	var tw := create_tween()
-	for i in 6:
-		tw.tween_property(camera, "h_offset", randf_range(-strength, strength), 0.04)
-		tw.parallel().tween_property(camera, "v_offset", randf_range(-strength, strength), 0.04)
-	tw.tween_property(camera, "h_offset", 0.0, 0.06)
-	tw.parallel().tween_property(camera, "v_offset", 0.0, 0.06)
+func _shake_screen(strength_px: float) -> void:
+	_tremor = maxf(_tremor, strength_px)
 
 
-## After the breach: surviving monsters run through the gate into the settlement.
+## A small full-screen tremor that dies away quickly. Visual only.
+func _process(delta: float) -> void:
+	if _world == null or _tremor <= 0.0:
+		return
+	_tremor *= pow(TREMOR_DECAY, delta)
+	if _tremor < TREMOR_MIN_PX:
+		_tremor = 0.0
+		_fit_to_screen()
+		return
+	_world.position = get_viewport_rect().size * 0.5 + Vector2(randf_range(-1, 1), randf_range(-1, 1)) * _tremor
+
+
+## After the breach: surviving monsters run through the gate.
 func animate_breach(delta: float) -> void:
 	if not _breaching or sim == null:
 		return
@@ -1070,16 +662,43 @@ func animate_breach(delta: float) -> void:
 	for m in sim.monsters:
 		if m.state == "dead" or not _monster_nodes.has(m.id):
 			continue
-		var node: Node3D = _monster_nodes[m.id]
-		var cur := Vector2(node.position.x, node.position.z) + level.world_size() * 0.5
+		var view: UnitView = _monster_nodes[m.id]
+		var cur := view.ground
 		var target := Vector2(clampf(cur.x, g.x - 3.0, g.x + 3.0), g.y + 14.0)
 		if cur.y < g.y - 0.5:
 			target = Vector2(clampf(cur.x, g.x - 2.5, g.x + 2.5), g.y + 1.0)
-		var dir := (target - cur).normalized()
-		var nxt := cur + dir * float(m.speed) * 1.4 * delta
-		node.position = to3(nxt)
-		node.rotation.y = lerp_angle(node.rotation.y, atan2(dir.x, dir.y), 0.2)
-		var ap := node.get_meta("anim", null) as AnimationPlayer
-		if ap and ap.current_animation != "walk":
-			ap.play("walk", 0.15)
-			ap.speed_scale = 1.6
+		view.move_by((target - cur).normalized() * float(m.speed) * 1.4 * delta, delta)
+		view.position = to_world(view.ground)
+
+
+class CellOverlay extends Node2D:
+	var _cells: Array = []
+
+	func add_cell(rect: Rect2, fill: Color, line: Color) -> void:
+		_cells.append({"rect": rect, "fill": fill, "line": line})
+		queue_redraw()
+
+	func _draw() -> void:
+		for c in _cells:
+			draw_rect(c.rect, c.fill)
+			draw_rect(c.rect, c.line, false, 2.5)
+
+
+class RangeRing extends Node2D:
+	var _radius := 0.0
+	var _depth := 1.0
+	var _color := Color.WHITE
+
+	func setup(radius_px: float, depth: float, color: Color) -> void:
+		_radius = radius_px
+		_depth = depth
+		_color = color
+
+	func set_color(color: Color) -> void:
+		_color = color
+		queue_redraw()
+
+	func _draw() -> void:
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, _depth))
+		draw_circle(Vector2.ZERO, _radius, Color(_color, 0.1))
+		draw_arc(Vector2.ZERO, _radius, 0.0, TAU, 96, Color(_color, 0.95), 3.0, true)
