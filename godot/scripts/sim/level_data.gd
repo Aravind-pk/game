@@ -105,6 +105,8 @@ func is_deployable(c: Vector2i) -> bool:
 		return false
 	if c.y >= wall_row - 1:
 		return false  # the row against the wall sits under the gate plate
+	if c.x == view_rect.position.x or c.x == view_rect.end.x - 1:
+		return false  # the outer columns are half off a phone screen
 	for r in no_build:
 		if r.has_point(c):
 			return false
@@ -151,6 +153,12 @@ func order_budget() -> int:
 	if orders >= 0:
 		return orders
 	if int(id) < 4:
+		return 0
+	var brutes := false  # Heavy only is the one order: it only means something when brutes come
+	for h in hotspots:
+		for g in h.groups:
+			brutes = brutes or g.type == Defs.ORDERS.heavy.target
+	if not brutes:
 		return 0
 	for g in guns:
 		if Defs.order_for(g.type) != "":

@@ -93,6 +93,7 @@ export class Map2D {
     const [vx, vy, vw, vh] = this.view;
     if (x < vx || y < vy || x >= vx + vw || y >= vy + vh) return false;
     if (y >= this.wallRow - 1 || this.isObstacle(x, y)) return false; // the row against the wall sits under the gate plate
+    if (x === vx || x === vx + vw - 1) return false; // the outer columns are half off a phone screen
     if (this.noBuild.some(([ox, oy, w, h]) => x >= ox && y >= oy && x < ox + w && y < oy + h)) return false;
     if (this.fixed.some((g) => g.cell[0] === x && g.cell[1] === y)) return false;
     return !this.hotspots.some((h) => dist(x, y, h.cell[0], h.cell[1]) < 1.5);
