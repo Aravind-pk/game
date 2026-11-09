@@ -47,7 +47,9 @@ ground position, and effects. It reads the simulation and never changes it.
   footprint keeps monsters off the prop's real base. Run with `-- footprints` to see them.
 - **The wall** has 12 frames chosen by gate HP: cracks, then sparks, then the collapse below 12%, ending in the breach.
 - **Units without a kit** (`stand_in_unit.gd`) use a single piece of artwork until they get one.
-  Currently: Mule, Needle, Rift Runner and Faultbreaker.
+  Every unit currently has a kit. The Mule, Needle, Faultbreaker and Rift Runner kits are built by
+  `tools/sprites/build_pending_kits.py <kit>` from `art/sprites/<kit>/build.json`; see
+  `docs/sprite-kits-report.md` for how they were made and what is still a fallback.
 
 ### Adding art
 

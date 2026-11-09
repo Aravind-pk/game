@@ -45,11 +45,23 @@ var _aim_angle := deg_to_rad(AIM_DEGREES[REST_AIM])
 var _shot_ms := -1.0
 var _destroy_ms := -1.0
 var _destroy_flip := false
+var _aim_degrees: Array = AIM_DEGREES.duplicate()
+var _muzzle_px: Array = MUZZLE_PX.duplicate()
+var _recoil_px := KICK_PX
 
 
 func setup(kit_name: String, flash_texture: Texture2D, flash_material: Material) -> void:
 	var kit := SpriteKits.get_kit("turrets", kit_name)
 	_anims = kit.anims
+	_aim_degrees = _anims.aim.get("angles", AIM_DEGREES).duplicate()
+	_muzzle_px = MUZZLE_PX.duplicate()
+	if _anims.aim.has("muzzles"):
+		_muzzle_px.clear()
+		for tip in _anims.aim.muzzles:
+			_muzzle_px.append(Vector2(float(tip[0]), float(tip[1])))
+	_recoil_px = float(_anims.aim.get("recoil_px", KICK_PX))
+	_aim = _nearest_aim(-PI / 2.0)
+	_aim_angle = deg_to_rad(float(_aim_degrees[_aim]))
 	_base_sprite = Sprite2D.new()
 	_base_sprite.texture = kit.texture
 	_base_sprite.centered = false
@@ -78,7 +90,8 @@ func setup(kit_name: String, flash_texture: Texture2D, flash_material: Material)
 func update_turret(has_target: bool, aim_angle: float, dt: float) -> void:
 	if _destroy_ms >= 0.0:
 		_destroy_ms += dt * 1000.0
-		_show("destroy", mini(int(_destroy_ms / DESTROY_FRAME_MS), LAST_DESTROY_FRAME), _destroy_flip)
+		var frame_ms := float(_anims.destroy.get("frame_ms", DESTROY_FRAME_MS))
+		_show("destroy", mini(int(_destroy_ms / frame_ms), _anims.destroy.frames.size() - 1), _destroy_flip)
 		return
 	if has_target:
 		_pan_toward(aim_angle, dt)
@@ -98,7 +111,7 @@ func _update_shot(dt: float) -> void:
 	var barrel := _barrel_direction()
 	# Only the rotating head recoils; the bearing and pedestal stay planted.
 	var recovery := 1.0 - _shot_ms / KICK_MS
-	_sprite.position = -barrel * KICK_PX * recovery * recovery
+	_sprite.position = -barrel * _recoil_px * recovery * recovery
 	_flash.visible = _shot_ms < FLASH_MS
 	# The flash starts at the muzzle and points the way the barrel does.
 	_flash.rotation = barrel.angle()
@@ -113,11 +126,11 @@ func fired() -> void:
 
 
 func muzzle_offset() -> Vector2:
-	return MUZZLE_PX[_aim] * _art_scale() + _sprite.position
+	return _muzzle_px[_aim] * _art_scale() + _sprite.position
 
 
 func _barrel_direction() -> Vector2:
-	return Vector2.from_angle(deg_to_rad(AIM_DEGREES[_aim]))
+	return Vector2.from_angle(deg_to_rad(float(_aim_degrees[_aim])))
 
 
 func _art_scale() -> float:
@@ -130,7 +143,7 @@ func destroyed() -> void:
 	_sprite.position = Vector2.ZERO
 	_flash.visible = false
 	# The destruction art points east, so mirror it for a turret aimed west.
-	_destroy_flip = cos(deg_to_rad(AIM_DEGREES[_aim])) < 0.0
+	_destroy_flip = cos(deg_to_rad(float(_aim_degrees[_aim]))) < 0.0
 	if bar:
 		bar.visible = false
 
@@ -150,8 +163,8 @@ func _pan_toward(angle: float, dt: float) -> void:
 
 func _nearest_aim(angle: float) -> int:
 	var best := 0
-	for i in AIM_DEGREES.size():
-		if absf(angle_difference(deg_to_rad(AIM_DEGREES[i]), angle)) < absf(angle_difference(deg_to_rad(AIM_DEGREES[best]), angle)):
+	for i in _aim_degrees.size():
+		if absf(angle_difference(deg_to_rad(float(_aim_degrees[i])), angle)) < absf(angle_difference(deg_to_rad(float(_aim_degrees[best])), angle)):
 			best = i
 	return best
 

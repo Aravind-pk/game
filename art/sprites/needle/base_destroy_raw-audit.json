@@ -1,0 +1,149 @@
+{
+  "image": {
+    "width": 1536,
+    "height": 1024,
+    "transparentPixels": 1097083,
+    "nonOpaquePixels": 1572864
+  },
+  "alphaThreshold": 128,
+  "frames": [
+    {
+      "id": "0",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 512,
+        "h": 512
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 95,
+        "top": 243,
+        "right": 511,
+        "bottom": 459
+      },
+      "opaquePixels": 45241,
+      "touchesEdges": [
+        "right"
+      ]
+    },
+    {
+      "id": "1",
+      "rect": {
+        "x": 512,
+        "y": 0,
+        "w": 512,
+        "h": 512
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 0,
+        "top": 143,
+        "right": 511,
+        "bottom": 459
+      },
+      "opaquePixels": 78626,
+      "touchesEdges": [
+        "left",
+        "right"
+      ]
+    },
+    {
+      "id": "2",
+      "rect": {
+        "x": 1024,
+        "y": 0,
+        "w": 512,
+        "h": 512
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 0,
+        "top": 134,
+        "right": 481,
+        "bottom": 459
+      },
+      "opaquePixels": 77389,
+      "touchesEdges": [
+        "left"
+      ]
+    },
+    {
+      "id": "3",
+      "rect": {
+        "x": 0,
+        "y": 512,
+        "w": 512,
+        "h": 512
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 11,
+        "top": 107,
+        "right": 511,
+        "bottom": 408
+      },
+      "opaquePixels": 67264,
+      "touchesEdges": [
+        "right"
+      ]
+    },
+    {
+      "id": "4",
+      "rect": {
+        "x": 512,
+        "y": 512,
+        "w": 512,
+        "h": 512
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 0,
+        "top": 162,
+        "right": 511,
+        "bottom": 408
+      },
+      "opaquePixels": 61555,
+      "touchesEdges": [
+        "left",
+        "right"
+      ]
+    },
+    {
+      "id": "5",
+      "rect": {
+        "x": 1024,
+        "y": 512,
+        "w": 512,
+        "h": 512
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 0,
+        "top": 192,
+        "right": 489,
+        "bottom": 408
+      },
+      "opaquePixels": 57753,
+      "touchesEdges": [
+        "left"
+      ]
+    }
+  ],
+  "duplicates": [],
+  "alphaBottomSpan": 51,
+  "warnings": [
+    "Frame 0 touches right: inspect possible clipping.",
+    "Frame 1 touches left, right: inspect possible clipping.",
+    "Frame 2 touches left: inspect possible clipping.",
+    "Frame 3 touches right: inspect possible clipping.",
+    "Frame 4 touches left, right: inspect possible clipping.",
+    "Frame 5 touches left: inspect possible clipping."
+  ]
+}

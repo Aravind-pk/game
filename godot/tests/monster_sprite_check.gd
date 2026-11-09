@@ -14,6 +14,8 @@ func _init() -> void:
 	root.add_child(sprite)
 	sprite.setup("burrower", Vector2.ZERO)
 	_check_turret()
+	_check_pending_turrets()
+	_check_pending_monsters()
 	_check_footprint_avoidance()
 	_check_wheel(sprite)
 	_check_emerge_to_walk(sprite)
@@ -27,6 +29,54 @@ func _init() -> void:
 
 func _monster(state: String) -> Dictionary:
 	return {"state": state, "state_t": 0.0, "attacking": false, "facing": Vector2(0, 1), "attack_rate": 1.0, "cooldown": 1.0}
+
+
+func _check_pending_turrets() -> void:
+	for kit_name in Battlefield.TURRET_KITS.values():
+		if kit_name == "kestrel":
+			continue
+		var turret := TurretSprite.new()
+		root.add_child(turret)
+		turret.setup(kit_name, null, null)
+		_expect(turret._anims.aim.frames.size() == 14, "%s has 14 aim frames" % kit_name)
+		_expect(turret._muzzle_px.size() == turret._aim_degrees.size(), "%s muzzle coverage" % kit_name)
+		for angle in turret._aim_degrees:
+			turret.update_turret(true, deg_to_rad(float(angle)), 1.0)
+			_expect(turret._base_sprite.position == Vector2.ZERO, "%s base stays fixed" % kit_name)
+			turret.fired()
+			turret.update_turret(true, deg_to_rad(float(angle)), 0.2)
+			_expect(turret._sprite.position.is_zero_approx(), "%s recoil recovers" % kit_name)
+		turret.destroyed()
+		for i in 120:
+			turret.update_turret(false, 0.0, DT)
+		_expect(not turret._base_sprite.visible, "%s wreck includes its own base" % kit_name)
+		turret.queue_free()
+
+
+func _check_pending_monsters() -> void:
+	for kit_name in Battlefield.MONSTER_KITS.values():
+		if kit_name == "burrower":
+			continue
+		var sprite := MonsterSprite.new()
+		root.add_child(sprite)
+		sprite.setup(kit_name, Vector2.ZERO)
+		for heading in ["S", "SW", "E", "NE", "N"]:
+			_expect(sprite._anims["walk_" + heading].frames.size() == 8, "%s walk %s coverage" % [kit_name, heading])
+		for heading in ["S", "SW", "E"]:
+			_expect(sprite._anims["attack_" + heading].frames.size() == 6, "%s attack %s coverage" % [kit_name, heading])
+		_expect(sprite._anims.death_S.frames.size() == 10 and sprite._anims.death_E.frames.size() == 10, "%s death coverage" % kit_name)
+		_expect(sprite._anims.emerge.frames.size() == 12, "%s emerge coverage" % kit_name)
+		_expect(sprite._wheel.size() == 8, "%s uses eight authored turn holds" % kit_name)
+		_check_emerge_to_walk(sprite)
+		_check_full_circle(sprite)
+		_check_attack(sprite)
+		for heading in [0.0, PI * 0.5, PI, PI * 1.5]:
+			sprite._dir = sprite.DIR_ORDER[sprite._nearest_dir(heading)]
+			sprite.die(1.0)
+			for i in 90:
+				sprite._process(DT)
+			_expect(sprite._state == "dead", "%s death plays for facing %s" % [kit_name, heading])
+		sprite.queue_free()
 
 
 func _check_turret() -> void:

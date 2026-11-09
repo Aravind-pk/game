@@ -1,0 +1,128 @@
+{
+  "image": {
+    "width": 1536,
+    "height": 1024,
+    "transparentPixels": 860639,
+    "nonOpaquePixels": 1572864
+  },
+  "alphaThreshold": 128,
+  "frames": [
+    {
+      "id": "0",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 512,
+        "h": 512
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 40,
+        "top": 252,
+        "right": 445,
+        "bottom": 467
+      },
+      "opaquePixels": 57160,
+      "touchesEdges": []
+    },
+    {
+      "id": "1",
+      "rect": {
+        "x": 512,
+        "y": 0,
+        "w": 512,
+        "h": 512
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 2,
+        "top": 88,
+        "right": 477,
+        "bottom": 466
+      },
+      "opaquePixels": 106726,
+      "touchesEdges": []
+    },
+    {
+      "id": "2",
+      "rect": {
+        "x": 1024,
+        "y": 0,
+        "w": 512,
+        "h": 512
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 10,
+        "top": 101,
+        "right": 484,
+        "bottom": 467
+      },
+      "opaquePixels": 103636,
+      "touchesEdges": []
+    },
+    {
+      "id": "3",
+      "rect": {
+        "x": 0,
+        "y": 512,
+        "w": 512,
+        "h": 512
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 37,
+        "top": 36,
+        "right": 490,
+        "bottom": 466
+      },
+      "opaquePixels": 106051,
+      "touchesEdges": []
+    },
+    {
+      "id": "4",
+      "rect": {
+        "x": 512,
+        "y": 512,
+        "w": 512,
+        "h": 512
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 9,
+        "top": 121,
+        "right": 460,
+        "bottom": 463
+      },
+      "opaquePixels": 84473,
+      "touchesEdges": []
+    },
+    {
+      "id": "5",
+      "rect": {
+        "x": 1024,
+        "y": 512,
+        "w": 512,
+        "h": 512
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 14,
+        "top": 205,
+        "right": 458,
+        "bottom": 465
+      },
+      "opaquePixels": 75491,
+      "touchesEdges": []
+    }
+  ],
+  "duplicates": [],
+  "alphaBottomSpan": 4,
+  "warnings": []
+}

@@ -1,0 +1,18 @@
+{
+  "heads_raw.png": {
+    "sha256": "94523a1cd1cac5d9c7aee8d27375d0dab9576e597e2237ba5e25d524479d031c",
+    "size": [
+      1774,
+      887
+    ],
+    "mode": "RGBA"
+  },
+  "base_destroy_raw.png": {
+    "sha256": "4b8d1631d8139d3a921a88de5421e9cb74e170149d9adad586e61f805b626e10",
+    "size": [
+      1536,
+      1024
+    ],
+    "mode": "RGBA"
+  }
+}

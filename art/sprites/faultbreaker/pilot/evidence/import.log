@@ -1,0 +1,256 @@
+Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org
+
+[   0% ] [90m[1mfirst_scan_filesystem[22m | Started Project initialization (5 steps)[39m[0m
+[   0% ] [90m[1mfirst_scan_filesystem[22m | Scanning file structure...[39m[0m
+[  16% ] [90m[1mfirst_scan_filesystem[22m | Loading global class names...[39m[0m
+[  33% ] [90m[1mfirst_scan_filesystem[22m | Verifying GDExtensions...[39m[0m
+[  50% ] [90m[1mfirst_scan_filesystem[22m | Creating autoload scripts...[39m[0m
+[  66% ] [90m[1mfirst_scan_filesystem[22m | Initializing plugins...[39m[0m
+[  83% ] [90m[1mfirst_scan_filesystem[22m | Starting file scan...[39m[0m
+[92m[ DONE ][39m [1mfirst_scan_filesystem[22m
+[0m
+[   0% ] [90m[1mupdate_scripts_classes[22m | Started Registering global classes... (22 steps)[39m[0m
+[   0% ] [90m[1mupdate_scripts_classes[22m | Battlefield[39m[0m
+[   4% ] [90m[1mupdate_scripts_classes[22m | HealthBar[39m[0m
+[   8% ] [90m[1mupdate_scripts_classes[22m | [39m[0m
+[  13% ] [90m[1mupdate_scripts_classes[22m | MonsterSprite[39m[0m
+[  17% ] [90m[1mupdate_scripts_classes[22m | RadarView[39m[0m
+[  21% ] [90m[1mupdate_scripts_classes[22m | ReconTimeline[39m[0m
+[  26% ] [90m[1mupdate_scripts_classes[22m | ShadowSprite[39m[0m
+[  30% ] [90m[1mupdate_scripts_classes[22m | SpriteKits[39m[0m
+[  34% ] [90m[1mupdate_scripts_classes[22m | StandInUnit[39m[0m
+[  39% ] [90m[1mupdate_scripts_classes[22m | TurretSprite[39m[0m
+[  43% ] [90m[1mupdate_scripts_classes[22m | UnitView[39m[0m
+[  47% ] [90m[1mupdate_scripts_classes[22m | BattleSim[39m[0m
+[  52% ] [90m[1mupdate_scripts_classes[22m | Defs[39m[0m
+[  56% ] [90m[1mupdate_scripts_classes[22m | LevelData[39m[0m
+[  60% ] [90m[1mupdate_scripts_classes[22m | LevelHints[39m[0m
+[  65% ] [90m[1mupdate_scripts_classes[22m | HeaderPlate[39m[0m
+[  69% ] [90m[1mupdate_scripts_classes[22m | SkewPlate[39m[0m
+[  73% ] [90m[1mupdate_scripts_classes[22m | UiKit[39m[0m
+[  78% ] [90m[1mupdate_scripts_classes[22m | [39m[0m
+[  82% ] [90m[1mupdate_scripts_classes[22m | [39m[0m
+[  86% ] [90m[1mupdate_scripts_classes[22m | [39m[0m
+[  91% ] [90m[1mupdate_scripts_classes[22m | [39m[0m
+[92m[ DONE ][39m [1mupdate_scripts_classes[22m
+[0m
+[   0% ] [90m[1m_update_scan_actions[22m | Started Scanning actions... (68 steps)[39m[0m
+[   0% ] [90m[1m_update_scan_actions[22m | apron.png[39m[0m
+[   1% ] [90m[1m_update_scan_actions[22m | north_gate_field.jpg[39m[0m
+[   2% ] [90m[1m_update_scan_actions[22m | burrower.png[39m[0m
+[   4% ] [90m[1m_update_scan_actions[22m | props.png[39m[0m
+[   5% ] [90m[1m_update_scan_actions[22m | kestrel.png[39m[0m
+[   7% ] [90m[1m_update_scan_actions[22m | wall_00.png[39m[0m
+[   8% ] [90m[1m_update_scan_actions[22m | wall_01.png[39m[0m
+[  10% ] [90m[1m_update_scan_actions[22m | wall_02.png[39m[0m
+[  11% ] [90m[1m_update_scan_actions[22m | wall_03.png[39m[0m
+[  13% ] [90m[1m_update_scan_actions[22m | wall_04.png[39m[0m
+[  14% ] [90m[1m_update_scan_actions[22m | wall_05.png[39m[0m
+[  15% ] [90m[1m_update_scan_actions[22m | wall_06.png[39m[0m
+[  17% ] [90m[1m_update_scan_actions[22m | wall_07.png[39m[0m
+[  18% ] [90m[1m_update_scan_actions[22m | wall_08.png[39m[0m
+[  20% ] [90m[1m_update_scan_actions[22m | wall_09.png[39m[0m
+[  21% ] [90m[1m_update_scan_actions[22m | wall_10.png[39m[0m
+[  23% ] [90m[1m_update_scan_actions[22m | wall_11.png[39m[0m
+[  24% ] [90m[1m_update_scan_actions[22m | faultbreaker.png[39m[0m
+[  26% ] [90m[1m_update_scan_actions[22m | header_skyline.jpg[39m[0m
+[  27% ] [90m[1m_update_scan_actions[22m | hero_gate.jpg[39m[0m
+[  28% ] [90m[1m_update_scan_actions[22m | kestrel.png[39m[0m
+[  30% ] [90m[1m_update_scan_actions[22m | mule.png[39m[0m
+[  31% ] [90m[1m_update_scan_actions[22m | needle.png[39m[0m
+[  33% ] [90m[1m_update_scan_actions[22m | pause_gate.jpg[39m[0m
+[  34% ] [90m[1m_update_scan_actions[22m | rift_runner.png[39m[0m
+[  36% ] [90m[1m_update_scan_actions[22m | shale_digger.png[39m[0m
+[  37% ] [90m[1m_update_scan_actions[22m | Barlow-Bold.ttf[39m[0m
+[  39% ] [90m[1m_update_scan_actions[22m | Barlow-Medium.ttf[39m[0m
+[  40% ] [90m[1m_update_scan_actions[22m | Barlow-SemiBold.ttf[39m[0m
+[  42% ] [90m[1m_update_scan_actions[22m | BarlowCondensed-Bold.ttf[39m[0m
+[  43% ] [90m[1m_update_scan_actions[22m | BarlowCondensed-ExtraBold.ttf[39m[0m
+[  44% ] [90m[1m_update_scan_actions[22m | Rokkitt-Variable.ttf[39m[0m
+[  46% ] [90m[1m_update_scan_actions[22m | ammo.svg[39m[0m
+[  47% ] [90m[1m_update_scan_actions[22m | bulb.svg[39m[0m
+[  49% ] [90m[1m_update_scan_actions[22m | check.svg[39m[0m
+[  50% ] [90m[1m_update_scan_actions[22m | chevron.svg[39m[0m
+[  52% ] [90m[1m_update_scan_actions[22m | chevron_left.svg[39m[0m
+[  53% ] [90m[1m_update_scan_actions[22m | close.svg[39m[0m
+[  55% ] [90m[1m_update_scan_actions[22m | cross.svg[39m[0m
+[  56% ] [90m[1m_update_scan_actions[22m | doc.svg[39m[0m
+[  57% ] [90m[1m_update_scan_actions[22m | emblem_breached.svg[39m[0m
+[  59% ] [90m[1m_update_scan_actions[22m | emblem_held.svg[39m[0m
+[  60% ] [90m[1m_update_scan_actions[22m | gear.svg[39m[0m
+[  62% ] [90m[1m_update_scan_actions[22m | info.svg[39m[0m
+[  63% ] [90m[1m_update_scan_actions[22m | move.svg[39m[0m
+[  65% ] [90m[1m_update_scan_actions[22m | next.svg[39m[0m
+[  66% ] [90m[1m_update_scan_actions[22m | pause.svg[39m[0m
+[  68% ] [90m[1m_update_scan_actions[22m | pause_solid.svg[39m[0m
+[  69% ] [90m[1m_update_scan_actions[22m | pin.svg[39m[0m
+[  71% ] [90m[1m_update_scan_actions[22m | play.svg[39m[0m
+[  72% ] [90m[1m_update_scan_actions[22m | play_solid.svg[39m[0m
+[  73% ] [90m[1m_update_scan_actions[22m | radar.svg[39m[0m
+[  75% ] [90m[1m_update_scan_actions[22m | retry.svg[39m[0m
+[  76% ] [90m[1m_update_scan_actions[22m | rounds.svg[39m[0m
+[  78% ] [90m[1m_update_scan_actions[22m | shield.svg[39m[0m
+[  79% ] [90m[1m_update_scan_actions[22m | skip.svg[39m[0m
+[  81% ] [90m[1m_update_scan_actions[22m | skull.svg[39m[0m
+[  82% ] [90m[1m_update_scan_actions[22m | star.svg[39m[0m
+[  84% ] [90m[1m_update_scan_actions[22m | star_empty.svg[39m[0m
+[  85% ] [90m[1m_update_scan_actions[22m | trash.svg[39m[0m
+[  86% ] [90m[1m_update_scan_actions[22m | turret.svg[39m[0m
+[  88% ] [90m[1m_update_scan_actions[22m | faultbreaker.png[39m[0m
+[  89% ] [90m[1m_update_scan_actions[22m | kestrel.png[39m[0m
+[  91% ] [90m[1m_update_scan_actions[22m | mule.png[39m[0m
+[  92% ] [90m[1m_update_scan_actions[22m | needle.png[39m[0m
+[  94% ] [90m[1m_update_scan_actions[22m | rift_runner.png[39m[0m
+[  95% ] [90m[1m_update_scan_actions[22m | shale_digger.png[39m[0m
+[  97% ] [90m[1m_update_scan_actions[22m | north_gate_mark.svg[39m[0m
+[92m[ DONE ][39m [1m_update_scan_actions[22m
+[0m
+[   0% ] [90m[1mreimport[22m | Started (Re)Importing Assets (68 steps)[39m[0m
+[   0% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[   1% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[   2% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[   4% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[   5% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[   7% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[   8% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  10% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  11% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  13% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  14% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  15% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  17% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  18% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  20% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  21% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  23% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  24% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  26% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  27% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  28% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  30% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  31% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  33% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  34% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  36% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  37% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  39% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  40% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  42% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  43% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  44% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  46% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  47% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  49% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  50% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  52% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  53% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  55% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  56% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  57% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  59% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  60% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  62% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  63% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  65% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  66% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  68% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  69% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  71% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  72% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  73% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  75% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  76% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  78% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  79% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  81% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  82% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  84% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  85% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  86% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  88% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  89% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  91% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  92% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  94% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  95% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[  97% ] [90m[1mreimport[22m | Preparing files to reimport...[39m[0m
+[   0% ] [90m[1mreimport[22m | Executing pre-reimport operations...[39m[0m
+[   0% ] [90m[1mreimport[22m | Rokkitt-Variable.ttf[39m[0m
+[   1% ] [90m[1mreimport[22m | BarlowCondensed-ExtraBold.ttf[39m[0m
+[   2% ] [90m[1mreimport[22m | BarlowCondensed-Bold.ttf[39m[0m
+[   4% ] [90m[1mreimport[22m | Barlow-SemiBold.ttf[39m[0m
+[   5% ] [90m[1mreimport[22m | Barlow-Medium.ttf[39m[0m
+[   7% ] [90m[1mreimport[22m | Barlow-Bold.ttf[39m[0m
+[   8% ] [90m[1mreimport[22m | Rokkitt-Variable.ttf[39m[0m
+[  10% ] [90m[1mreimport[22m | BarlowCondensed-ExtraBold.ttf[39m[0m
+[  11% ] [90m[1mreimport[22m | BarlowCondensed-Bold.ttf[39m[0m
+[  13% ] [90m[1mreimport[22m | Barlow-SemiBold.ttf[39m[0m
+[  14% ] [90m[1mreimport[22m | Barlow-Medium.ttf[39m[0m
+[  15% ] [90m[1mreimport[22m | Barlow-Bold.ttf[39m[0m
+[  17% ] [90m[1mreimport[22m | pin.svg[39m[0m
+[  18% ] [90m[1mreimport[22m | pause_solid.svg[39m[0m
+[  20% ] [90m[1mreimport[22m | pause.svg[39m[0m
+[  21% ] [90m[1mreimport[22m | next.svg[39m[0m
+[  23% ] [90m[1mreimport[22m | move.svg[39m[0m
+[  24% ] [90m[1mreimport[22m | info.svg[39m[0m
+[  26% ] [90m[1mreimport[22m | gear.svg[39m[0m
+[  27% ] [90m[1mreimport[22m | emblem_held.svg[39m[0m
+[  28% ] [90m[1mreimport[22m | emblem_breached.svg[39m[0m
+[  30% ] [90m[1mreimport[22m | doc.svg[39m[0m
+[  31% ] [90m[1mreimport[22m | cross.svg[39m[0m
+[  33% ] [90m[1mreimport[22m | close.svg[39m[0m
+[  34% ] [90m[1mreimport[22m | north_gate_mark.svg[39m[0m
+[  36% ] [90m[1mreimport[22m | shale_digger.png[39m[0m
+[  37% ] [90m[1mreimport[22m | rift_runner.png[39m[0m
+[  39% ] [90m[1mreimport[22m | needle.png[39m[0m
+[  40% ] [90m[1mreimport[22m | mule.png[39m[0m
+[  42% ] [90m[1mreimport[22m | kestrel.png[39m[0m
+[  43% ] [90m[1mreimport[22m | faultbreaker.png[39m[0m
+[  44% ] [90m[1mreimport[22m | turret.svg[39m[0m
+[  46% ] [90m[1mreimport[22m | trash.svg[39m[0m
+[  47% ] [90m[1mreimport[22m | star_empty.svg[39m[0m
+[  49% ] [90m[1mreimport[22m | star.svg[39m[0m
+[  50% ] [90m[1mreimport[22m | skull.svg[39m[0m
+[  52% ] [90m[1mreimport[22m | skip.svg[39m[0m
+[  53% ] [90m[1mreimport[22m | shield.svg[39m[0m
+[  55% ] [90m[1mreimport[22m | rounds.svg[39m[0m
+[  56% ] [90m[1mreimport[22m | retry.svg[39m[0m
+[  57% ] [90m[1mreimport[22m | radar.svg[39m[0m
+[  59% ] [90m[1mreimport[22m | play_solid.svg[39m[0m
+[  60% ] [90m[1mreimport[22m | play.svg[39m[0m
+[  62% ] [90m[1mreimport[22m | apron.png[39m[0m
+[  63% ] [90m[1mreimport[22m | north_gate_field.jpg[39m[0m
+[  65% ] [90m[1mreimport[22m | burrower.png[39m[0m
+[  66% ] [90m[1mreimport[22m | props.png[39m[0m
+[  68% ] [90m[1mreimport[22m | kestrel.png[39m[0m
+[  69% ] [90m[1mreimport[22m | wall_00.png[39m[0m
+[  71% ] [90m[1mreimport[22m | wall_01.png[39m[0m
+[  72% ] [90m[1mreimport[22m | wall_02.png[39m[0m
+[  73% ] [90m[1mreimport[22m | wall_03.png[39m[0m
+[  75% ] [90m[1mreimport[22m | wall_04.png[39m[0m
+[  76% ] [90m[1mreimport[22m | wall_05.png[39m[0m
+[  78% ] [90m[1mreimport[22m | wall_06.png[39m[0m
+[  79% ] [90m[1mreimport[22m | wall_07.png[39m[0m
+[  81% ] [90m[1mreimport[22m | wall_08.png[39m[0m
+[  82% ] [90m[1mreimport[22m | wall_09.png[39m[0m
+[  84% ] [90m[1mreimport[22m | wall_10.png[39m[0m
+[  85% ] [90m[1mreimport[22m | wall_11.png[39m[0m
+[  86% ] [90m[1mreimport[22m | faultbreaker.png[39m[0m
+[  88% ] [90m[1mreimport[22m | header_skyline.jpg[39m[0m
+[  89% ] [90m[1mreimport[22m | hero_gate.jpg[39m[0m
+[  91% ] [90m[1mreimport[22m | kestrel.png[39m[0m
+[  92% ] [90m[1mreimport[22m | mule.png[39m[0m
+[  94% ] [90m[1mreimport[22m | needle.png[39m[0m
+[  95% ] [90m[1mreimport[22m | pause_gate.jpg[39m[0m
+[  97% ] [90m[1mreimport[22m | rift_runner.png[39m[0m
+[  98% ] [90m[1mreimport[22m | Finalizing Asset Import...[39m[0m
+[92m[ DONE ][39m [1mreimport[22m
+[0m
+[   0% ] [90m[1mreimport[22m | Started (Re)Importing Assets (68 steps)[39m[0m
+[   0% ] [90m[1mreimport[22m | Executing post-reimport operations...[39m[0m
+[92m[ DONE ][39m [1mreimport[22m
+[0m
+[   0% ] [90m[1mloading_editor_layout[22m | Started Loading editor (5 steps)[39m[0m
+[   0% ] [90m[1mloading_editor_layout[22m | Loading editor layout...[39m[0m
+[92m[ DONE ][39m [1mloading_editor_layout[22m
+[0m
