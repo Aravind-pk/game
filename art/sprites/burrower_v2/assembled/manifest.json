@@ -1,0 +1,58 @@
+{
+  "walk_S.png": {
+    "sha256": "c191ef5062f914adb45aebb840233704eab7e2cce5a6b41e21abfcea8d15d4db",
+    "grid": [
+      4,
+      2
+    ],
+    "shared_scale": 0.3856041131105398
+  },
+  "walk_E_NE.png": {
+    "sha256": "10ddae0bba43bc04bf4e743e100a287dea983fca1540662ce47445814e086364",
+    "grid": [
+      4,
+      4
+    ],
+    "shared_scale": 0.6782945736434108
+  },
+  "walk_N_SW.png": {
+    "sha256": "0c75b19d43a6d86041e976993d88a1ca41878f942f6feb0f49517df67930450f",
+    "grid": [
+      4,
+      4
+    ],
+    "shared_scale": 0.6072874493927125
+  },
+  "attack_S_SW_E.png": {
+    "sha256": "58a029620aa73355ba2143343f3b3f6efc82b4521ab40a97c0709aee391c5947",
+    "grid": [
+      6,
+      3
+    ],
+    "shared_scale": 0.5639097744360902
+  },
+  "death_S_E.png": {
+    "sha256": "f40183b1cd4b638f9ade85463a64f76a29f2b0e37896c1efb0f374a5f8b26068",
+    "grid": [
+      5,
+      4
+    ],
+    "shared_scale": 0.6302521008403361
+  },
+  "emerge.png": {
+    "sha256": "01586b9171391e70e11fe6dea69fa4854e0c7136ef3394d47e942acb51369c03",
+    "grid": [
+      4,
+      3
+    ],
+    "shared_scale": 0.46153846153846156
+  },
+  "turntable.png": {
+    "sha256": "f136ccbef984a769f7ae66322224817eabd60a35ddf4980b02ac613c1db33db0",
+    "grid": [
+      4,
+      4
+    ],
+    "shared_scale": 0.5494505494505495
+  }
+}
