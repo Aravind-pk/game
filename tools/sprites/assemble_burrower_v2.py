@@ -1,6 +1,7 @@
 from pathlib import Path
 import json,math,hashlib
 import numpy as np
+from extract_kit import components
 from PIL import Image,ImageDraw
 ROOT=Path(__file__).resolve().parents[2]
 SRC=ROOT/'art/sprites/burrower_v2'
@@ -13,6 +14,10 @@ for name,cols,rows,groups,reference in specs:
  for i in range(cols*rows):
   l=round((i%cols)*im.width/cols);t=round((i//cols)*im.height/rows);r=round((i%cols+1)*im.width/cols);b=round((i//cols+1)*im.height/rows)
   a=np.array(im.crop((l,t,r,b)));a[a[:,:,3]<160]=0
+  if name != "emerge.png":
+   comps=components(a[:,:,3]>0)
+   if comps:
+    keep=np.zeros(a.shape[:2],bool);main=max(comps,key=len);keep[main[:,0],main[:,1]]=True;a[~keep]=0
   cell=Image.fromarray(a);box=cell.getbbox();assert box,name
   cells.append(cell);boxes.append(box)
  # Calibrate sheet against reference standing body width, keep one scale for entire sheet.
