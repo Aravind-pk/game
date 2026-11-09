@@ -38,6 +38,7 @@ for name,cols,rows,groups,reference in specs:
    if key.startswith('walk'):
     row_start=(i//cols)*cols
     frame_baseline=float(np.median([b[3] for b in boxes[row_start:row_start+cols]]))
+   if key.startswith("walk") or key.startswith("death") or key == "turntable":
     # Register the upper shell, excluding moving foreclaws and hind feet.
     aa=np.array(cell)[:,:,3]; top=boxes[i][1];band=aa[top:top+max(1,round((boxes[i][3]-top)*.3))]
     yy,xx=np.where(band>160)
