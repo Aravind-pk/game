@@ -81,6 +81,7 @@ var _routes: Node2D               # predicted monster paths, shown while deployi
 var _focus_rings: Node2D          # range / lure / blind rings around the selected turret
 var _last_plan: Node2D            # outlines of the last battle's layout, after a defeat
 var _breach_route := -1           # hotspot whose route broke the gate last time
+var _last_layout: Array = []
 var _gun_nodes := {}              # deployment index / sim gun id -> UnitView
 var _monster_nodes := {}          # monster id -> UnitView
 var _hotspot_glows: Array[Sprite2D] = []
@@ -111,7 +112,6 @@ func build(lv: LevelData) -> void:
 	_routes = null
 	_focus_rings = null
 	_last_plan = null
-	_breach_route = -1
 	_focus_mark = null
 	_focus_tween = null
 	_focus_cell = Vector2i(-1, -1)
@@ -478,6 +478,7 @@ func show_deployment(deployment: Array) -> void:
 		_add_gun_node(i, deployment[i])
 	_set_hotspot_intensity(0.35)
 	show_routes(deployment)
+	_draw_last_plan(deployment)
 
 
 ## Dashed lines from every fissure to the gate along the path the monsters will take with this
@@ -492,8 +493,10 @@ func show_routes(deployment: Array) -> void:
 	probe.setup(level, deployment)
 	for h in level.hotspots:
 		var heavy := false
+		var fast := false
 		for g in h.groups:
 			heavy = heavy or g.type == "brute"
+			fast = fast or g.type == "stalker"
 		var line := DashedPath.new()
 		var pts := PackedVector2Array()
 		for p in probe.route_from(level.hotspot_pos(h)):
@@ -502,16 +505,22 @@ func show_routes(deployment: Array) -> void:
 		if breach:  # the route that broke the gate last time: solid and strong
 			line.setup(_smooth(pts), Color("#f85936"), 9.0, false, true)
 		else:
-			line.setup(_smooth(pts), Color("#ffcb5e") if heavy else Color("#f2775a"), 7.0 if heavy else 5.0, heavy)
+			var col := Color("#ffcb5e") if heavy else (Color("#ff9ad5") if fast else Color("#f2775a"))
+			line.setup(_smooth(pts), col, 7.0 if heavy else 5.0, heavy, false, fast)
 		_routes.add_child(line)
 
 
-## After a defeat: dashed outlines where turrets stood last time (only those since moved), and
-## the route that broke the gate drawn solid.
-func show_last_plan(last: Array, now: Array, breach_hotspot: int) -> void:
+## Remembers the last battle's layout and the hotspot that broke the gate, for the retry.
+func set_last_plan(last: Array, breach_hotspot: int) -> void:
+	_last_layout = last.duplicate(true)
+	_breach_route = breach_hotspot
+
+
+## Dashed outlines where turrets stood last time (only those since moved).
+func _draw_last_plan(now: Array) -> void:
+	var last := _last_layout
 	if is_instance_valid(_last_plan):
 		_last_plan.queue_free()
-	_breach_route = breach_hotspot
 	_last_plan = Node2D.new()
 	_world.add_child(_last_plan)
 	_world.move_child(_last_plan, _entities.get_index())
@@ -524,7 +533,6 @@ func show_last_plan(last: Array, now: Array, breach_hotspot: int) -> void:
 		var mark := GhostTile.new()
 		mark.rect = _cell_rect(d.cell)
 		_last_plan.add_child(mark)
-	show_routes(now)
 
 
 func hide_routes() -> void:
@@ -1136,19 +1144,22 @@ class DashedPath extends Node2D:
 
 	var _solid := false
 
-	func setup(pts: PackedVector2Array, color: Color, width: float, dotted: bool, solid := false) -> void:
+	var _long := false
+
+	func setup(pts: PackedVector2Array, color: Color, width: float, dotted: bool, solid := false, long := false) -> void:
 		_pts = pts
 		_color = color
 		_width = width
 		_dotted = dotted
 		_solid = solid
+		_long = long
 
 	func _draw() -> void:
 		if _solid:
 			draw_polyline(_pts, Color(_color, 0.95), _width, true)
 			return
-		var on := 22.0 if not _dotted else 4.0
-		var off := 14.0 if not _dotted else 16.0
+		var on := 40.0 if _long else (22.0 if not _dotted else 4.0)
+		var off := 10.0 if _long else (14.0 if not _dotted else 16.0)
 		var carry := 0.0
 		var drawing := true
 		for i in _pts.size() - 1:

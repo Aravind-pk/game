@@ -9,7 +9,7 @@ const f = Math.fround;
 export const SIM_DT = 1.0 / 30.0;
 export const CELL = 2.0;
 /** A turret order limits which monster type it fires at (matches ORDERS in defs.gd). */
-export const ORDER_TARGET = { heavy: 'brute', fast: 'stalker' };
+export const ORDER_TARGET = { heavy: 'brute' };
 const EMERGE_WARN = 1.6;
 const EMERGE_TIME = 0.9;
 const RETARGET_INTERVAL = 0.25;
@@ -18,17 +18,17 @@ const INF = 1 << 30;
 const NEIGHBOURS = [[0, 1], [-1, 1], [1, 1], [-1, 0], [1, 0], [-1, -1], [1, -1], [0, -1]];
 
 export const GUNS = {
-  mg: { hp: 120, damage: 7, fire_rate: 6, range: 8, splash: 0, projectile_speed: 0, radius: 0.8, min_range: 0, falloff_start: 3, falloff_floor: 0.35, blast: 0, blast_radius: 0 },
+  mg: { hp: 120, damage: 7, fire_rate: 6, range: 8, splash: 0, projectile_speed: 0, radius: 0.8, min_range: 0, falloff_start: 4, falloff_floor: 0.55, blast: 0, blast_radius: 0 },
   cannon: { hp: 170, damage: 42, fire_rate: 0.55, range: 11, splash: 2.6, projectile_speed: 16, radius: 1.0, min_range: 4, falloff_start: 11, falloff_floor: 1, blast: 0, blast_radius: 0 },
   decoy: { hp: 220, damage: 0, fire_rate: 1, range: 6, splash: 0, projectile_speed: 0, radius: 0.9, min_range: 0, falloff_start: 6, falloff_floor: 1, blast: 0, blast_radius: 0 },
   rigged: { hp: 90, damage: 0, fire_rate: 1, range: 6, splash: 0, projectile_speed: 0, radius: 0.9, min_range: 0, falloff_start: 6, falloff_floor: 1, blast: 110, blast_radius: 4.5 },
-  sniper: { hp: 70, damage: 70, fire_rate: 0.45, range: 20, splash: 0, projectile_speed: 0, radius: 0.7, min_range: 7, falloff_start: 20, falloff_floor: 1, blast: 0, blast_radius: 0 },
+  sniper: { hp: 90, damage: 110, fire_rate: 0.35, range: 20, splash: 0, projectile_speed: 0, radius: 0.7, min_range: 7, falloff_start: 20, falloff_floor: 1, blast: 0, blast_radius: 0 },
 };
 
 export const MONSTERS = {
   burrower: { base_level: 1, hp: 32, speed: 2.3, damage: 7, attack_rate: 1.0, detect: 6, attack_range: 1.0, radius: 0.55 },
-  stalker: { base_level: 2, hp: 48, speed: 4.4, damage: 9, attack_rate: 1.5, detect: 9, attack_range: 1.0, radius: 0.55 },
-  brute: { base_level: 3, hp: 300, speed: 1.25, damage: 32, attack_rate: 0.6, detect: 5, attack_range: 1.6, radius: 1.15 },
+  stalker: { base_level: 2, hp: 48, speed: 4.4, damage: 9, attack_rate: 1.2, detect: 7, attack_range: 1.0, radius: 0.55 },
+  brute: { base_level: 3, hp: 300, speed: 1.25, damage: 18, attack_rate: 0.5, detect: 5, attack_range: 1.6, radius: 1.15 },
 };
 
 export function gunStats(type, level) {
@@ -92,7 +92,7 @@ export class Map2D {
   isDeployable(x, y) {
     const [vx, vy, vw, vh] = this.view;
     if (x < vx || y < vy || x >= vx + vw || y >= vy + vh) return false;
-    if (y >= this.wallRow || this.isObstacle(x, y)) return false;
+    if (y >= this.wallRow - 1 || this.isObstacle(x, y)) return false; // the row against the wall sits under the gate plate
     if (this.noBuild.some(([ox, oy, w, h]) => x >= ox && y >= oy && x < ox + w && y < oy + h)) return false;
     if (this.fixed.some((g) => g.cell[0] === x && g.cell[1] === y)) return false;
     return !this.hotspots.some((h) => dist(x, y, h.cell[0], h.cell[1]) < 1.5);

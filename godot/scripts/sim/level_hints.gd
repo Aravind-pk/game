@@ -8,14 +8,22 @@ extends RefCounted
 ##   solved:  every turret is on the tile of one complete solution
 ##   slot:    {type, cell, zone} the turret to deal with next (absent when solved)
 ##   move:    true if no spare turret of that type is left, so a placed one has to move
-static func next_step(level: LevelData, deployment: Array) -> Dictionary:
+##   solution: index of the solution followed
+## `stick_to` keeps later hints on one solution once the player has started following it, so the
+## marked tile does not jump to a different plan after every move.
+static func next_step(level: LevelData, deployment: Array, stick_to := -1) -> Dictionary:
+	if stick_to >= 0 and stick_to < level.solutions.size():
+		var kept := _match(level.solutions[stick_to], deployment)
+		kept.solution = stick_to
+		return kept
 	var best := {}
 	var best_score := -1
-	for sol in level.solutions:
-		var m := _match(sol, deployment)
+	for i in level.solutions.size():
+		var m := _match(level.solutions[i], deployment)
 		if m.score > best_score:
 			best_score = m.score
 			best = m
+			best.solution = i
 	return best
 
 

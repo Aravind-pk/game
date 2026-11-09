@@ -450,8 +450,8 @@ static func set_ammo_chip(p: PanelContainer, ammo: int, max_ammo: int) -> void:
 	sb.content_margin_bottom = px(1)
 	p.add_theme_stylebox_override("panel", sb)
 	var l := p.get_node("Value") as Label
-	l.text = "EMPTY" if empty else "%d / %d" % [ammo, max_ammo]
-	l.add_theme_color_override("font_color", AMBER if empty else INK)
+	l.text = "EMPTY" if empty else "%d" % ammo
+	l.add_theme_color_override("font_color", AMBER if empty else (AMBER if ammo * 5 <= max_ammo else INK))
 
 
 # ---------------------------------------------------------------- deployment tray card

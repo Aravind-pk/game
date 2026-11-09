@@ -22,14 +22,14 @@ const OUTPUT = join(here, '../../godot/levels');
 
 // Two search depths: the hand-specced levels get the thorough one, the campaign batch the quick one.
 let PRESSURES = [1, 1.15, 1.3, 1.45, 1.6, 1.8, 2.0];
-let SLACKS = [0.25, 0.12, 0.05];
+let SLACKS = [0.35, 0.25, 0.18]; // ammo above what the best plan uses: a near-miss layout should still be able to win
 let TUNE_SAMPLES = 3000;
 let FINAL_SAMPLES = 40000;
 let CLIMB_ITERS = 250;
 let TIGHTEN_ROUNDS = 4;
 function useQuickSearch() {
   PRESSURES = [1, 1.25, 1.5, 1.8, 2.2];
-  SLACKS = [0.25, 0.12, 0.05];
+  SLACKS = [0.35, 0.25, 0.18];
   TUNE_SAMPLES = 2000;
   FINAL_SAMPLES = 12000;
   CLIMB_ITERS = 130;
@@ -462,6 +462,7 @@ async function main() {
   const only = new Set(process.argv.slice(2));
   const pool = makePool(Number(process.env.FORGE_WORKERS) || Math.max(1, availableParallelism() - 1));
   const log = (m) => console.log(m);
+  if (process.env.FORGE_QUICK) useQuickSearch();
   if (only.has('--campaign')) {
     const range = campaignRange();
     const nums = process.argv.slice(2).filter((a) => /^\d+$/.test(a)).map(Number);

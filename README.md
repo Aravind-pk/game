@@ -17,12 +17,13 @@ The game is portrait 1080×1920 and uses the Compatibility renderer.
   your turrets, and the wave's order budget.
 - **Recon** (its own step): the spawn map with each group's route to the gate, and a timeline of
   when each group surfaces and roughly when it reaches the gate.
-- **Deploy**: the field shows visuals only. Dashed red routes (amber dots for brutes) update as
+- **Deploy**: the field shows visuals only. Dashed routes (red for burrowers, long pink dashes for runners, amber dots for brutes) update as
   turrets bend them. Holding or selecting a turret shows its range (cyan ring), full-damage zone
   (cyan disc), lure ring (dashed red: monsters inside leave their route to attack it) and blind
-  zone (hatched). Wave 01 names these once with three coach cards; later waves don't.
-- **Orders**: a Cannon can be set to *Heavy only* and a Sniper to *Fast only*, from a small budget
-  per wave (1 from wave 04, or `orders` in the level file). MG Turrets take no orders.
+  zone (hatched). Wave 01 names these once with three coach cards; waves 02–04 each get one card for the
+  thing they introduce (blind zone, sniper, orders); later waves have no coach text.
+- **Orders**: a Sniper can be set to *Heavy only*, from a small budget per wave (1 from wave 04,
+  or `orders` in the level file). Other turrets take no orders.
 - **Defend**: 1×/2×/4× and Skip, with a three-line ticker of key moments. When every turret is
   empty and monsters remain, the battle stops with *Defense Depleted*.
 - **Result**: victory gives up to three stars (held, untouched, 20% ammo left), saved per level.
@@ -82,6 +83,33 @@ extracting. To use a new kit in the game, add it to `MONSTER_KITS` or `TURRET_KI
   (see below). All of it is data-driven.
 - Three-stage hints: two written clues worked out from a winning plan, then the area where the next
   turret works, then the exact tile.
+
+### Combat numbers and roles
+
+Each turret has one job, and each monster has a turret that answers it:
+
+| Turret | Per shot | Rate | DPS | Range | HP | Job |
+|---|---:|---:|---:|---|---:|---|
+| MG Turret | 7 (55% beyond 4 m) | 6/s | 42 close, 23 far | 8 m | 120 | Shreds swarms and runners up close |
+| Cannon | 42, 2.6 m splash | 0.55/s | 23 per target | 11 m, blind inside 4 m | 170 | One-shots burrower groups; slow on a brute (8 shells) |
+| Sniper | 110 | 0.35/s | 38 | 20 m, blind inside 7 m | 90 | One-shots runners, 3 rounds per brute |
+
+| Monster | HP | Speed | Hit | Rate | DPS | Notices turrets |
+|---|---:|---:|---:|---:|---:|---|
+| Burrower | 32 | 2.3 m/s | 7 | 1/s | 7 | 6 m |
+| Runner | 48 | 4.4 m/s | 9 | 1.2/s | 11 | 7 m (inside an MG's range) |
+| Brute | 300 | 1.25 m/s | 18 | 0.5/s | 9 | 5 m |
+
+Why these numbers: a brute used to hit for 32, so the 60 HP gate fell in two hits and a sniper in three,
+which made one leaking brute an instant loss. It now takes four hits on the gate and seven on an MG,
+so a near-miss shows up as gate damage instead of a breach. The sniper was the only turret that can
+stop a brute efficiently, but its 70 damage over-killed burrowers and needed five shots per brute;
+at 110 it needs three, and the **Heavy only** order (Sniper only) is what saves those rounds. The MG's
+long-range damage fell to 35%, which made placement one tile too far a silent failure; it now keeps
+55%. Runners noticed turrets from 9 m, outside the MG's 8 m reach, so they always got the first hit.
+
+Levels are re-tuned by the forge against these numbers with 18–35% spare ammunition (it was 5–25%),
+and no turret can go on the row against the wall, where the gate plate sits.
 
 ### Mechanics
 

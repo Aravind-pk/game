@@ -103,6 +103,8 @@ func is_wall(c: Vector2i) -> bool:
 func is_deployable(c: Vector2i) -> bool:
 	if not view_rect.has_point(c) or is_wall(c) or is_obstacle(c):
 		return false
+	if c.y >= wall_row - 1:
+		return false  # the row against the wall sits under the gate plate
 	for r in no_build:
 		if r.has_point(c):
 			return false

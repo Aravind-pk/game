@@ -12,11 +12,10 @@ const RETARGET_INTERVAL := 0.25     # how often monsters look for guns
 const MAX_BATTLE_TIME := 600.0
 
 # ---------------------------------------------------------------- orders
-# One fixed order per turret type, from a small per-wave budget. An order limits the turret to
-# one monster type; it fires at nothing else. MG Turrets and decoys take no orders.
+# One order, from a small per-wave budget: a Sniper set to Heavy only saves its rounds for brutes
+# and fires at nothing else. MG Turrets, Cannons and decoys take no orders.
 const ORDERS := {
-	"heavy": {"label": "Heavy only", "target": "brute", "gun": "cannon"},
-	"fast": {"label": "Fast only", "target": "stalker", "gun": "sniper"},
+	"heavy": {"label": "Heavy only", "target": "brute", "gun": "sniper"},
 }
 
 
@@ -35,7 +34,7 @@ const GUNS := {
 		"name": "Kestrel", "model": "kestrel", "desc": "High Fire Rate",
 		"hp": 120.0, "damage": 7.0, "fire_rate": 6.0, "range": 8.0,
 		"splash": 0.0, "projectile_speed": 0.0, "radius": 0.8,
-		"min_range": 0.0, "falloff_start": 3.0, "falloff_floor": 0.35, "blast": 0.0, "blast_radius": 0.0,
+		"min_range": 0.0, "falloff_start": 4.0, "falloff_floor": 0.55, "blast": 0.0, "blast_radius": 0.0,
 	},
 	"cannon": {
 		"name": "Mule", "model": "mule", "desc": "AoE Damage",
@@ -45,7 +44,7 @@ const GUNS := {
 	},
 	"sniper": {
 		"name": "Needle", "model": "needle", "desc": "Long Range",
-		"hp": 70.0, "damage": 70.0, "fire_rate": 0.45, "range": 20.0,
+		"hp": 90.0, "damage": 110.0, "fire_rate": 0.35, "range": 20.0,
 		"splash": 0.0, "projectile_speed": 0.0, "radius": 0.7,
 		"min_range": 7.0, "falloff_start": 20.0, "falloff_floor": 1.0, "blast": 0.0, "blast_radius": 0.0,
 	},
@@ -73,12 +72,12 @@ const MONSTERS := {
 	},
 	"stalker": {
 		"name": "Rift Runner", "model": "rift_runner", "base_level": 2, "desc": "Fast",
-		"hp": 48.0, "speed": 4.4, "damage": 9.0, "attack_rate": 1.5,
-		"detect": 9.0, "attack_range": 1.0, "radius": 0.55,
+		"hp": 48.0, "speed": 4.4, "damage": 9.0, "attack_rate": 1.2,
+		"detect": 7.0, "attack_range": 1.0, "radius": 0.55,
 	},
 	"brute": {
 		"name": "Faultbreaker", "model": "faultbreaker", "base_level": 3, "desc": "Tank",
-		"hp": 300.0, "speed": 1.25, "damage": 32.0, "attack_rate": 0.6,
+		"hp": 300.0, "speed": 1.25, "damage": 18.0, "attack_rate": 0.5,
 		"detect": 5.0, "attack_range": 1.6, "radius": 1.15,
 	},
 }

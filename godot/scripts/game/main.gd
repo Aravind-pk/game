@@ -31,8 +31,8 @@ const GUN_UI := {
 }
 const MONSTER_UI := {
 	"burrower": {"one": "Burrower", "many": "Burrowers", "desc": "Swarm. Attacks turrets near its route.", "counter": ["mg", "cannon"]},
-	"stalker": {"one": "Runner", "many": "Runners", "desc": "Fast. Gets past slow turrets.", "counter": ["mg", "sniper"]},
-	"brute": {"one": "Brute", "many": "Brutes", "desc": "Slow, tough. Flattens turrets and the gate.", "counter": ["cannon", "sniper"]},
+	"stalker": {"one": "Runner", "many": "Runners", "desc": "Fast. Slips past slow turrets.", "counter": ["mg", "sniper"]},
+	"brute": {"one": "Brute", "many": "Brutes", "desc": "Slow, 300 HP. Flattens turrets and the gate.", "counter": ["sniper", "cannon"]},
 }
 
 var battlefield: Battlefield
@@ -56,13 +56,14 @@ var _end_timer := -1.0
 var _log: Array = []          # key moments of the current battle: [{t, kind, text}]
 var _ammo_seen := {}          # gun id -> ammo last frame, to notice a turret running dry
 var _first_brute_t := -1.0
+var _seen_hotspots := {}
 var _breach_hotspot := -1     # hotspot of the first monster to hit the gate
 var _depleted_shown := false
 var _last_dep: Array = []     # the layout of the last battle, ghosted on retry
 var _last_cause := ""         # one-line reason the last battle was lost
 var _last_breach := -1
 var _stars := {}              # level index -> best stars earned
-var _tutorial_seen := false
+var _tutorials_seen := {}     # wave id -> true once its coach cards were read
 var _tutorial_step := -1
 var _tutorial_card: Control
 var _speed_btns: Array = []
@@ -111,6 +112,7 @@ var _hint_text := ""
 var _hint_dep_hash := 0       # the layout a written clue was given for
 var _hints_used := 0
 var _intel_shown := 0
+var _hint_solution := -1      # once a hint points at a solution, later hints follow the same one
 
 
 func _ready() -> void:
@@ -141,6 +143,8 @@ func _ready() -> void:
 func start_level(i: int) -> void:
 	level_index = i
 	level = LevelData.load_file(level_paths[i])
+	battlefield.set_last_plan([], -1)
+	_last_cause = ""
 	battlefield.build(level)
 	guns.clear()
 	for g in level.guns:
@@ -155,6 +159,7 @@ func start_level(i: int) -> void:
 	sim = null
 	_hints_used = 0
 	_intel_shown = 0
+	_hint_solution = -1
 	_clear_hint_mark()
 	_rebuild_cards()
 	_set_phase(Phase.BRIEFING)
@@ -181,24 +186,31 @@ func _set_phase(p: Phase) -> void:
 
 func begin_deployment() -> void:
 	_set_phase(Phase.DEPLOYMENT)
-	if level_index == 0 and (not _tutorial_seen or _args.has("tutorial")):
+	if TUTORIALS.has(level.id) and (not _tutorials_seen.has(level.id) or _args.has("tutorial")):
 		_tutorial_step = 0
 		_show_tutorial()
 
 
 ## Wave 01 only: three cards that name the field's markings once. Every later wave shows the
 ## markings without words.
-const TUTORIAL := [
-	["Routes", "Monsters follow the dashed red lines to the gate. Turrets bend them."],
-	["Range", "Pick up a turret: it hits anything inside the blue ring. Closer hits harder."],
-	["Lure", "Monsters inside the dashed red ring leave their route and attack the turret."],
-]
+## Each new mechanic is named once, on the wave that brings it in.
+const TUTORIALS := {
+	"01": [
+		["Routes", "Monsters follow the dashed red lines to the gate. Turrets bend them."],
+		["Range", "Pick up a turret: it hits anything inside the blue ring. Closer hits harder."],
+		["Lure", "Monsters inside the dashed red ring leave their route and attack the turret."],
+	],
+	"02": [["Blind zone", "The Cannon splashes groups but can't fire inside its hatched ring. Keep it behind the line."]],
+	"03": [["Sniper", "One shot kills a runner. It reaches far but is blind up close, and has few rounds."]],
+	"04": [["Orders", "Brutes take 3 Sniper rounds. Select the Sniper and set Heavy only to save its rounds for them."]],
+}
 
 
 func _show_tutorial() -> void:
 	if is_instance_valid(_tutorial_card):
 		_tutorial_card.queue_free()
-	if _tutorial_step < 0 or _tutorial_step >= TUTORIAL.size():
+	var cards: Array = TUTORIALS.get(level.id, [])
+	if _tutorial_step < 0 or _tutorial_step >= cards.size():
 		return
 	var p: Array = UiKit.panel(11, 6)
 	var card: PanelContainer = p[0]
@@ -209,14 +221,15 @@ func _show_tutorial() -> void:
 	card.offset_top = UiKit.px(HEADER_PT + 10)
 	var v: VBoxContainer = p[1]
 	var head := UiKit.hbox(8)
-	head.add_child(UiKit.text(TUTORIAL[_tutorial_step][0], "label", UiKit.FRIENDLY))
+	head.add_child(UiKit.text(cards[_tutorial_step][0], "label", UiKit.FRIENDLY))
 	head.add_child(UiKit.spacer())
-	head.add_child(UiKit.text("%d / %d" % [_tutorial_step + 1, TUTORIAL.size()], "small", UiKit.INK_MUTED))
+	if cards.size() > 1:
+		head.add_child(UiKit.text("%d / %d" % [_tutorial_step + 1, cards.size()], "small", UiKit.INK_MUTED))
 	v.add_child(head)
-	var body := UiKit.text(TUTORIAL[_tutorial_step][1], "body")
+	var body := UiKit.text(cards[_tutorial_step][1], "body")
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(body)
-	var next := UiKit.action("Next" if _tutorial_step < TUTORIAL.size() - 1 else "Got it", _tutorial_next, "secondary", "")
+	var next := UiKit.action("Next" if _tutorial_step < cards.size() - 1 else "Got it", _tutorial_next, "secondary", "")
 	next.custom_minimum_size.y = UiKit.px(34)
 	v.add_child(next)
 	_ui.get_child(0).add_child(card)
@@ -225,7 +238,7 @@ func _show_tutorial() -> void:
 
 func _tutorial_next() -> void:
 	_tutorial_step += 1
-	if _tutorial_step >= TUTORIAL.size():
+	if _tutorial_step >= TUTORIALS.get(level.id, []).size():
 		_end_tutorial()
 	else:
 		_show_tutorial()
@@ -233,7 +246,7 @@ func _tutorial_next() -> void:
 
 func _end_tutorial() -> void:
 	if _tutorial_step >= 0:
-		_tutorial_seen = true
+		_tutorials_seen[level.id] = true
 		_save_progress()
 	_tutorial_step = -1
 	if is_instance_valid(_tutorial_card):
@@ -263,6 +276,7 @@ func defend() -> void:
 	_log.clear()
 	_ammo_seen.clear()
 	_first_brute_t = -1.0
+	_seen_hotspots.clear()
 	_breach_hotspot = -1
 	_depleted_shown = false
 	_last_dep = deployment.duplicate(true)
@@ -275,8 +289,8 @@ func retry() -> void:
 	# the previous deployment is kept so the player adjusts instead of starting over
 	sim = null
 	battlefield.sim = null
+	battlefield.set_last_plan(_last_dep, _last_breach)
 	_set_phase(Phase.DEPLOYMENT)
-	battlefield.show_last_plan(_last_dep, deployment, _last_breach)
 
 
 func next_level() -> void:
@@ -377,11 +391,11 @@ func _gun_name(g: Dictionary) -> String:
 	var same := sim.guns.filter(func(x): return x.type == g.type)
 	if same.size() < 2:
 		return GUN_UI[g.type].name
-	var half := level.world_size().x * 0.5
-	var west: bool = g.pos.x < half
-	var twin := same.filter(func(x): return x.id != g.id and (x.pos.x < half) == west)
-	if twin.is_empty():
-		return "%s %s" % [GUN_UI[g.type].short, "West" if west else "East"]
+	if same.size() == 2:
+		var other: Dictionary = same[1] if same[0].id == g.id else same[0]
+		if absf(other.pos.x - g.pos.x) >= Defs.CELL:
+			return "%s %s" % [GUN_UI[g.type].short, "Left" if g.pos.x < other.pos.x else "Right"]
+		return "%s %s" % [GUN_UI[g.type].short, "Front" if g.pos.y < other.pos.y else "Back"]
 	return "%s %d" % [GUN_UI[g.type].short, same.find(g) + 1]
 
 
@@ -392,6 +406,10 @@ func _record(events: Array) -> void:
 		match e.type:
 			"emerge":
 				var m: Dictionary = sim.monsters[e.monster]
+				if not _seen_hotspots.has(e.hotspot):
+					_seen_hotspots[e.hotspot] = true
+					if m.type != "brute":
+						_log_moment(t, "%s surfacing · %s" % [MONSTER_UI[m.type].many, level.hotspots[e.hotspot].name], "info")
 				if m.type == "brute":
 					if _first_brute_t < 0.0:
 						_first_brute_t = t
@@ -433,7 +451,14 @@ func _cause() -> String:
 						GUN_UI[g.type].ammo.to_lower().trim_suffix("s")]
 	var lost := sim.guns.filter(func(x): return not x.alive and int(x.max_ammo) > 0)
 	if lost.size() > 0:
-		return "%s was destroyed. Monsters near a route attack turrets." % _gun_name(lost[0])
+		var gun: Dictionary = lost[0]
+		var at := ""
+		for m in _log:
+			if m.kind == "lost" and m.text == "%s destroyed" % _gun_name(gun):
+				at = " at %s" % _clock(m.t)
+		if float(gun.min_range) > 0.0:
+			return "%s was destroyed%s. Monsters got inside its blind zone." % [_gun_name(gun), at]
+		return "%s was destroyed%s. Monsters near a route attack turrets." % [_gun_name(gun), at]
 	if _defense_spent():
 		return "Every turret ran dry with %d still coming." % sim.remaining_enemies()
 	return "%d monsters got through to the gate." % sim.remaining_enemies()
@@ -656,7 +681,7 @@ func _say_hint(line: String) -> void:
 func request_hint() -> void:
 	if phase != Phase.DEPLOYMENT:
 		return
-	var step := LevelHints.next_step(level, deployment)
+	var step := LevelHints.next_step(level, deployment, _hint_solution)
 	if step.is_empty():
 		_toast_msg("No hints for this wave.")
 		return
@@ -672,6 +697,7 @@ func request_hint() -> void:
 		_say_hint(level.intel[_intel_shown - 1])
 		return
 	# a second tap on the same target narrows the marked area down to the exact tile
+	_hint_solution = int(step.get("solution", -1))
 	var slot: Dictionary = step.slot
 	var exact: bool = not _hint_slot.is_empty() and _hint_slot.cell == slot.cell
 	_hint_slot = slot
@@ -685,7 +711,7 @@ func request_hint() -> void:
 ## A hint stops applying once the player has acted on it.
 func _sync_hint() -> void:
 	if not _hint_slot.is_empty():
-		var step := LevelHints.next_step(level, deployment)
+		var step := LevelHints.next_step(level, deployment, _hint_solution)
 		if step.is_empty() or step.solved or step.slot.cell != _hint_slot.cell:
 			_clear_hint_mark()
 	elif _hint_text != "" and deployment.hash() != _hint_dep_hash:
@@ -869,6 +895,7 @@ func _refresh_ticker() -> void:
 			var col: Color = {"brute": UiKit.AMBER, "lost": UiKit.THREAT, "empty": UiKit.AMBER}.get(m.kind, UiKit.INK)
 			line.add_child(UiKit.text(m.text, "small", col))
 		_ticker.add_child(line)
+	(_ticker.get_parent() as Control).modulate.a = 0.0 if _log.is_empty() else 1.0  # keeps its space, so the gate plate never jumps
 
 
 func _toast_msg(t: String, col := UiKit.INK) -> void:
@@ -1043,7 +1070,9 @@ func _refresh_chips() -> void:
 		UiKit.set_ammo_chip(chip, g.ammo, g.max_ammo)
 		var s := chip.get_combined_minimum_size()
 		chip.size = s
-		chip.position = battlefield.gun_screen_pos(g.id, AMMO_CHIP_HEIGHT_M) - Vector2(s.x * 0.5, s.y)
+		var p := battlefield.gun_screen_pos(g.id, AMMO_CHIP_HEIGHT_M) - Vector2(s.x * 0.5, s.y)
+		var w := _chips_layer.size.x
+		chip.position = Vector2(clampf(p.x, UiKit.px(4), w - s.x - UiKit.px(4)), p.y)
 
 
 # ================================================================== overlays
@@ -1153,7 +1182,8 @@ func _show_briefing() -> void:
 		var noun: String = ui.one if e.count == 1 else ui.many
 		var counters := []
 		for c in ui.counter:
-			counters.append(GUN_UI[c].name)
+			if guns.any(func(g): return g.type == c):
+				counters.append(GUN_UI[c].name)
 		v.add_child(UiKit.enemy_row("%d %s" % [e.count, noun], ui.desc,
 			_art(Defs.MONSTERS[e.type].model), counters))
 
@@ -1406,7 +1436,7 @@ func _show_report() -> void:
 	v.add_child(cause)
 
 	v.add_child(UiKit.section("Key Moments", UiKit.THREAT, "label_lg"))
-	var moments := _log.slice(maxi(0, _log.size() - 6))
+	var moments := _key_moments(7)
 	for m in moments:
 		var r := UiKit.hbox(8)
 		r.add_child(UiKit.text(_clock(m.t), "small", UiKit.INK_MUTED))
@@ -1447,14 +1477,27 @@ func _show_report() -> void:
 	s.add_child(row)
 
 
+## Up to `n` moments, keeping losses and empty turrets over routine ones, in time order.
+func _key_moments(n: int) -> Array:
+	var rank := {"lost": 0, "empty": 1, "brute": 2, "info": 3}
+	var picked := _log.duplicate()
+	picked.sort_custom(func(a, b): return rank.get(a.kind, 3) < rank.get(b.kind, 3) or (rank.get(a.kind, 3) == rank.get(b.kind, 3) and a.t < b.t))
+	picked = picked.slice(0, n)
+	picked.sort_custom(func(a, b): return a.t < b.t)
+	return picked
+
+
 ## A next step to try, only when the game can point at one.
 func _report_tip() -> String:
-	if _last_cause.begins_with("The Cannon") and level.order_budget() > 0:
-		return "Try · Cannon order: Heavy only"
 	if _last_cause.begins_with("The Sniper") and level.order_budget() > 0:
-		return "Try · Sniper order: Fast only"
+		return "Try · Sniper order: Heavy only"
+	for type in ["cannon", "sniper"]:
+		if _last_cause.begins_with(GUN_UI[type].name) and "destroyed" in _last_cause:
+			return "Try · it can't fire inside the hatched ring: keep it back from the route"
 	if "destroyed" in _last_cause:
-		return "Try · keep turrets outside the red lure rings"
+		return "Try · keep turrets outside the red lure rings, or behind another turret"
+	if "ran dry" in _last_cause:
+		return "Try · a turret that fired too early: move it back, closer to the gate"
 	return ""
 
 
@@ -1519,14 +1562,16 @@ func _load_progress() -> void:
 		if st is Dictionary:
 			for k in st:
 				_stars[int(k)] = int(st[k])
-		_tutorial_seen = bool(d.get("tutorial", false))
+		var seen = d.get("tutorials", {})
+		if seen is Dictionary:
+			_tutorials_seen = seen
 
 
 func _save_progress() -> void:
 	var f := FileAccess.open(PROGRESS_FILE, FileAccess.WRITE)
 	if f:
 		f.store_string(JSON.stringify({"unlocked": unlocked, "cleared": _cleared.keys(),
-			"stars": _stars, "tutorial": _tutorial_seen}))
+			"stars": _stars, "tutorials": _tutorials_seen}))
 
 
 # ================================================================== automation (screenshots / CI)
