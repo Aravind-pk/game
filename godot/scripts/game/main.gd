@@ -294,8 +294,14 @@ func retry() -> void:
 	_set_phase(Phase.DEPLOYMENT)
 
 
+func _is_last_level() -> bool:
+	return level_index + 1 >= level_paths.size()
+
+
+## The campaign ends on its last wave: there is no next level to wrap around to.
 func next_level() -> void:
-	start_level(level_index + 1 if level_index + 1 < level_paths.size() else 0)
+	if not _is_last_level():
+		start_level(level_index + 1)
 
 
 func toggle_pause() -> void:
@@ -465,19 +471,19 @@ func _cause() -> String:
 	return "%d monsters got through to the gate." % sim.remaining_enemies()
 
 
-## Gate held, untouched, and at least a fifth of the ammunition left.
-func _stars_earned() -> int:
-	var n := 1
-	if sim.gate_hp >= level.gate_max_hp:
-		n += 1
+## The three stars, in the order their tiles are shown: gate held, gate untouched, and at least
+## a fifth of the ammunition left. The last two are independent of each other.
+func _star_flags() -> Array[bool]:
 	var total := 0
 	var left := 0
 	for g in sim.guns:
 		total += int(g.max_ammo)
 		left += int(g.ammo)
-	if total > 0 and float(left) / float(total) >= 0.2:
-		n += 1
-	return n
+	return [true, sim.gate_hp >= level.gate_max_hp, total > 0 and float(left) / float(total) >= 0.2]
+
+
+func _stars_earned() -> int:
+	return _star_flags().count(true)
 
 
 # ================================================================== placement
@@ -1253,7 +1259,8 @@ func _range_rules() -> String:
 	return " ".join(parts)
 
 
-## Every level as a small card. Any of them can be played, whatever the player has cleared.
+## Every level as a small card. Waves past the first uncleared one are locked, like the
+## briefing's next arrow (`unlock_all` opens them for testing).
 func _show_levels(back: Callable) -> void:
 	var s := _open_sheet()
 	var p: Array = UiKit.panel(12, 8)
@@ -1268,7 +1275,7 @@ func _show_levels(back: Callable) -> void:
 	var titles := _titles_of_levels()
 	for i in level_paths.size():
 		grid.add_child(UiKit.level_card(i + 1, titles[i], _cleared.has(i), i == level_index, _play_level.bind(i),
-			int(_stars.get(i, 0))))
+			int(_stars.get(i, 0)), i > unlocked))
 	s.add_child(UiKit.action("Back", back, "secondary", ""))
 
 
@@ -1390,10 +1397,11 @@ func _show_victory() -> void:
 	v.add_child(UiKit.gap(EMBLEM_PT * 0.45))
 	v.add_child(UiKit.text("Gate Held", "result", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER))
 	v.add_child(UiKit.text("Victory", "plate", UiKit.FRIENDLY, HORIZONTAL_ALIGNMENT_CENTER))
-	var earned := _stars_earned()
+	var flags := _star_flags()
+	var earned := flags.count(true)
 	var row := UiKit.hbox(6)
 	for k in 3:
-		row.add_child(UiKit.star_tile(["Held", "Untouched", "20% Ammo"][k], k < earned))
+		row.add_child(UiKit.star_tile(["Held", "Untouched", "20% Ammo"][k], flags[k]))
 	v.add_child(row)
 	var table := UiKit.inset(10, 4, UiKit.LINE)
 	var rows := UiKit.vbox(3)
@@ -1409,9 +1417,18 @@ func _show_victory() -> void:
 			rows.add_child(UiKit.rule(UiKit.LINE_DIM))
 		rows.add_child(UiKit.stat_row(data[i][0], data[i][1]))
 	v.add_child(table)
-	v.add_child(UiKit.action("Next Wave", next_level))
+	if _is_last_level():
+		var total_stars := 0
+		for k in _stars:
+			total_stars += int(_stars[k])
+		v.add_child(UiKit.text("Campaign complete · %d / %d stars" % [total_stars, level_paths.size() * 3],
+			"label", UiKit.AMBER, HORIZONTAL_ALIGNMENT_CENTER))
+		v.add_child(UiKit.action("All Levels", _show_levels.bind(_show_result)))
+	else:
+		v.add_child(UiKit.action("Next Wave", next_level))
 	v.add_child(UiKit.action("Replay for 3 stars" if earned < 3 else "Replay Wave", retry, "secondary", ""))
-	v.add_child(UiKit.action("All Levels", _show_levels.bind(_show_result), "secondary", ""))
+	if not _is_last_level():
+		v.add_child(UiKit.action("All Levels", _show_levels.bind(_show_result), "secondary", ""))
 
 
 ## The after-action report: what went wrong, the key moments, and how each turret did.

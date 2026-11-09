@@ -78,7 +78,7 @@ extracting. To use a new kit in the game, add it to `MONSTER_KITS` or `TURRET_KI
 - Turrets target the closest monster automatically and have limited ammo. Cannon shells fly and
   splash, sniper beams have long range. Destroyed turrets become wrecks that no longer block movement.
 - Spawn radar (full map, hotspots + counts), briefing panel, victory/defeat, retry, next level,
-  saved progress.
+  saved progress. Waves unlock in order.
 - 50 levels in `godot/levels/*.json` in five chapters, each made and tuned by the level forge
   (see below). All of it is data-driven.
 - Three-stage hints: two written clues worked out from a winning plan, then the area where the next
@@ -262,8 +262,8 @@ art/
   backgrounds/       Source battlefield painting
   sprites/           Source sprite sheets and props
   concepts/          Concept sheets
-  blender/           Procedural model scripts (source of truth): units (build_all.py), props (build_props.py)
-  previews/          Renders, colour-study sheets, TripoSR comparison
+  previews/          Contact sheets and review pages
 tools/level_engine/  Level forge: Node port of the simulation, level generator, specs
-tools/triposr/       CPU TripoSR runner used for the comparison
+tools/sprites/       Sprite sheet extraction and atlas assembly
+tools/web/           Web build packaging
 ```

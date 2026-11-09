@@ -228,13 +228,18 @@ static func action(label: String, cb: Callable, variant := "primary", icon_name 
 
 
 ## Small card on the levels screen: its number, its name, and a tick once cleared.
-static func level_card(number: int, title_text: String, cleared: bool, current: bool, cb: Callable, stars := 0) -> Button:
+static func level_card(number: int, title_text: String, cleared: bool, current: bool, cb: Callable, stars := 0,
+		locked := false) -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(0, px(82))
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.clip_contents = true
-	b.pressed.connect(cb)
+	if locked:
+		b.disabled = true
+		b.modulate.a = 0.4
+	else:
+		b.pressed.connect(cb)
 	for st in ["normal", "hover", "pressed", "disabled"]:
 		b.add_theme_stylebox_override(st, box(PANEL_RAISED if current else PANEL, 6, AMBER if current else LINE_DIM, 2.0 if current else 1.0))
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
