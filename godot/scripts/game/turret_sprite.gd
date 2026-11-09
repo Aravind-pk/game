@@ -1,33 +1,47 @@
 class_name TurretSprite
 extends UnitView
-## A turret drawn from a sprite kit: 14 aim directions, a muzzle flash and destruction.
+## A turret drawn from a sprite kit: 16 aim directions, a muzzle flash and destruction.
 
 const ATLAS_PX_PER_M := 47.7       # the base is about 2.6 m across
-const PAN_FRAME_MS := 30.0         # time on each aim direction while swinging round
+const PAN_SPEED := TAU             # radians per second, independent of uneven atlas spacing
 const FLASH_MS := 70.0             # how long the muzzle flash shows
 const KICK_MS := 140.0             # how long the barrel takes to settle after a shot
-const KICK_PX := 3.5
+const KICK_PX := 1.5
 const FLASH_LENGTH_PX := 40.0
 const FLASH_WIDTH_PX := 22.0
 const DOT_SIZE := 64.0             # size of the soft dot the flash is made from
 const DESTROY_FRAME_MS := 95.0
-const REST_AIM := 7                # faces north, toward the threat, until it has a target
+const REST_AIM := 8                # faces north, toward the threat, until it has a target
 
 # The direction each aim frame's barrel points on screen, in degrees, with 0 facing east.
-const AIM_DEGREES: Array[float] = [90.0, 59.0, 45.0, -1.0, -4.0, -33.0, -64.0, -90.0, -120.0, -145.0, -169.0, 178.0, 161.0, 140.0]
-# The centre of the barrel's end in each aim frame, in atlas pixels from the turret's ground point.
+const AIM_DEGREES: Array[float] = [90.0, 57.211, 32.741, 14.914, 0.0, -14.914, -32.741, -57.211, -90.0, -122.789, -147.259, -165.086, -180.0, 165.086, 147.259, 122.789]
+# Calibrated muzzle tips in the registered 16-direction atlas.
 const MUZZLE_PX: Array[Vector2] = [
-	Vector2(0, -44), Vector2(11, -42), Vector2(23, -37), Vector2(45, -61), Vector2(52, -64),
-	Vector2(34, -82), Vector2(17, -95), Vector2(-2, -96), Vector2(-20, -94), Vector2(-34, -84),
-	Vector2(-46, -69), Vector2(-53, -58), Vector2(-43, -45), Vector2(-31, -34),
+	Vector2(0.300, -44.000),
+	Vector2(20.400, -48.200),
+	Vector2(30.300, -44.900),
+	Vector2(40.500, -52.700),
+	Vector2(53.400, -70.100),
+	Vector2(44.100, -82.100),
+	Vector2(31.800, -93.500),
+	Vector2(20.400, -101.900),
+	Vector2(0.300, -100.700),
+	Vector2(-22.500, -99.800),
+	Vector2(-31.800, -93.800),
+	Vector2(-41.400, -83.300),
+	Vector2(-52.500, -72.200),
+	Vector2(-41.100, -58.100),
+	Vector2(-31.500, -46.700),
+	Vector2(-9.000, -43.100),
 ]
 const LAST_DESTROY_FRAME := 11
 
 var _anims: Dictionary
+var _base_sprite: Sprite2D
 var _sprite: Sprite2D
 var _flash: Sprite2D
 var _aim := REST_AIM
-var _pan_ms := 0.0
+var _aim_angle := deg_to_rad(AIM_DEGREES[REST_AIM])
 var _shot_ms := -1.0
 var _destroy_ms := -1.0
 var _destroy_flip := false
@@ -36,6 +50,15 @@ var _destroy_flip := false
 func setup(kit_name: String, flash_texture: Texture2D, flash_material: Material) -> void:
 	var kit := SpriteKits.get_kit("turrets", kit_name)
 	_anims = kit.anims
+	_base_sprite = Sprite2D.new()
+	_base_sprite.texture = kit.texture
+	_base_sprite.centered = false
+	_base_sprite.region_enabled = true
+	_base_sprite.scale = Vector2.ONE * _art_scale()
+	var base_frame: Dictionary = _anims.base.frames[0]
+	_base_sprite.region_rect = Rect2(base_frame.x, base_frame.y, base_frame.w, base_frame.h)
+	_base_sprite.offset = Vector2(-base_frame.ax, -base_frame.ay)
+	add_child(_base_sprite)
 	_sprite = Sprite2D.new()
 	_sprite.texture = kit.texture
 	_sprite.region_enabled = true
@@ -73,7 +96,9 @@ func _update_shot(dt: float) -> void:
 		_flash.visible = false
 		return
 	var barrel := _barrel_direction()
-	_sprite.position = -barrel * KICK_PX * (1.0 - _shot_ms / KICK_MS)
+	# Only the rotating head recoils; the bearing and pedestal stay planted.
+	var recovery := 1.0 - _shot_ms / KICK_MS
+	_sprite.position = -barrel * KICK_PX * recovery * recovery
 	_flash.visible = _shot_ms < FLASH_MS
 	# The flash starts at the muzzle and points the way the barrel does.
 	_flash.rotation = barrel.angle()
@@ -84,10 +109,11 @@ func fired() -> void:
 	if _destroy_ms < 0.0:
 		_shot_ms = 0.0
 		_flash.scale = Vector2(FLASH_LENGTH_PX, FLASH_WIDTH_PX) * randf_range(0.85, 1.15) / DOT_SIZE
+		_update_shot(0.0)  # show the flash on the firing frame, including low frame rates
 
 
 func muzzle_offset() -> Vector2:
-	return MUZZLE_PX[_aim] * _art_scale()
+	return MUZZLE_PX[_aim] * _art_scale() + _sprite.position
 
 
 func _barrel_direction() -> Vector2:
@@ -111,20 +137,15 @@ func destroyed() -> void:
 
 func tint(color: Color) -> void:
 	_sprite.modulate = color
+	_base_sprite.modulate = color
 
 
-## Swings one aim frame at a time, so the barrel never snaps across.
+## Turn at a constant angular speed, then select the nearest available pose.
+## Counting atlas indices gives unequal speeds and can choose the longer arc.
 func _pan_toward(angle: float, dt: float) -> void:
-	var goal := _nearest_aim(angle)
-	if goal == _aim:
-		_pan_ms = 0.0
-		return
-	_pan_ms += dt * 1000.0
-	var count := AIM_DEGREES.size()
-	while _pan_ms >= PAN_FRAME_MS and _aim != goal:
-		_pan_ms -= PAN_FRAME_MS
-		var way := 1 if posmod(goal - _aim, count) <= count / 2 else -1
-		_aim = posmod(_aim + way, count)
+	var delta := angle_difference(_aim_angle, angle)
+	_aim_angle = wrapf(_aim_angle + clampf(delta, -PAN_SPEED * dt, PAN_SPEED * dt), -PI, PI)
+	_aim = _nearest_aim(_aim_angle)
 
 
 func _nearest_aim(angle: float) -> int:
@@ -136,6 +157,7 @@ func _nearest_aim(angle: float) -> int:
 
 
 func _show(anim: String, index: int, flip: bool) -> void:
+	_base_sprite.visible = anim == "aim"
 	var f: Dictionary = _anims[anim].frames[index]
 	var w := float(f.w)
 	_sprite.region_rect = Rect2(float(f.x), float(f.y), w, float(f.h))
