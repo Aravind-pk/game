@@ -85,7 +85,7 @@ func _check_turret() -> void:
 	turret.setup("kestrel", null, null)
 	_expect(turret._anims.aim.frames.size() == 16, "turret has 16 aim frames")
 	_expect(turret.MUZZLE_PX.size() == 16 and turret.AIM_DEGREES.size() == 16, "every aim frame has a muzzle and an angle")
-	_expect(turret._anims.destroy.frames.size() == 12, "turret has 12 destruction frames")
+	_expect(turret._anims.destroy.frames.size() == 8, "Kestrel has eight v3 destruction frames")
 	var last := turret._aim
 	for i in 200:
 		turret.update_turret(true, PI * 0.5, DT)
