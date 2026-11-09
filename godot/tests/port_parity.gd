@@ -20,7 +20,7 @@ func _init() -> void:
 		var dep := []
 		for d in c.deployment:
 			dep.append({"type": d.type, "level": int(d.level), "ammo": int(d.ammo),
-				"cell": Vector2i(int(d.cell[0]), int(d.cell[1]))})
+				"cell": Vector2i(int(d.cell[0]), int(d.cell[1])), "order": str(d.get("order", ""))})
 		var sim := BattleSim.new()
 		sim.setup(levels[c.file], BattleSim.canonical_order(dep))
 		var t1 := Time.get_ticks_msec()

@@ -19,6 +19,7 @@ const AMMO_CHIP_HEIGHT_M := 4.6
 const FOCUS_X_HEIGHT_M := 4.6
 const CARRY_START_PX := 14.0
 const LEVEL_GRID_COLUMNS := 4
+const GATE_PLATE_ABOVE_FOOT_PT := 6.0
 
 ## On-screen wording for the keys used in level data.
 const GUN_UI := {
@@ -29,9 +30,9 @@ const GUN_UI := {
 	"rigged": {"name": "Rigged Decoy", "short": "Rigged", "ammo": ""},
 }
 const MONSTER_UI := {
-	"burrower": {"one": "Burrower", "many": "Burrowers", "desc": "Fast diggers. Emerge in groups."},
-	"stalker": {"one": "Stalker", "many": "Stalkers", "desc": "Armored and aggressive."},
-	"brute": {"one": "Brute", "many": "Brutes", "desc": "Heavily armored. High durability."},
+	"burrower": {"one": "Burrower", "many": "Burrowers", "desc": "Swarm. Attacks turrets near its route.", "counter": ["mg", "cannon"]},
+	"stalker": {"one": "Runner", "many": "Runners", "desc": "Fast. Gets past slow turrets.", "counter": ["mg", "sniper"]},
+	"brute": {"one": "Brute", "many": "Brutes", "desc": "Slow, tough. Flattens turrets and the gate.", "counter": ["cannon", "sniper"]},
 }
 
 var battlefield: Battlefield
@@ -43,6 +44,7 @@ var _level_titles: Array[String] = []
 var level: LevelData
 var guns: Array = []          # one entry per available turret: {type, level, ammo}
 var deployment: Array = []    # [{type, level, ammo, cell, gun}]
+var _orders := {}             # gun index -> order key, from the wave's small order budget
 var held := -1                # index into guns currently held for placement
 var focused := -1             # index into guns of the placed turret selected for moving or removing
 var phase := Phase.BRIEFING
@@ -51,6 +53,20 @@ var speed := 1.0
 var paused := false
 var _accum := 0.0
 var _end_timer := -1.0
+var _log: Array = []          # key moments of the current battle: [{t, kind, text}]
+var _ammo_seen := {}          # gun id -> ammo last frame, to notice a turret running dry
+var _first_brute_t := -1.0
+var _breach_hotspot := -1     # hotspot of the first monster to hit the gate
+var _depleted_shown := false
+var _last_dep: Array = []     # the layout of the last battle, ghosted on retry
+var _last_cause := ""         # one-line reason the last battle was lost
+var _last_breach := -1
+var _stars := {}              # level index -> best stars earned
+var _tutorial_seen := false
+var _tutorial_step := -1
+var _tutorial_card: Control
+var _speed_btns: Array = []
+var _ticker: VBoxContainer
 var _args := {}
 var _shot_done := false
 
@@ -77,8 +93,9 @@ var _carry_press := -1        # card pressed but not yet moved far enough to cou
 var _carry_press_pos := Vector2.ZERO
 var _suppress_card_tap := false
 var _combat_bar: Control
-var _speed_label: Label
 var _hint_label: Label
+var _hint_box: Control
+var _order_btn: Button
 var _ammo_chips := {}         # gun id -> chip
 var _overlay: Control
 var _toast: Label
@@ -134,6 +151,7 @@ func start_level(i: int) -> void:
 		deployment.append({"type": g.type, "level": g.level, "ammo": g.ammo, "cell": g.cell, "gun": -1})
 	held = -1
 	focused = -1
+	_orders.clear()
 	sim = null
 	_hints_used = 0
 	_intel_shown = 0
@@ -163,6 +181,64 @@ func _set_phase(p: Phase) -> void:
 
 func begin_deployment() -> void:
 	_set_phase(Phase.DEPLOYMENT)
+	if level_index == 0 and (not _tutorial_seen or _args.has("tutorial")):
+		_tutorial_step = 0
+		_show_tutorial()
+
+
+## Wave 01 only: three cards that name the field's markings once. Every later wave shows the
+## markings without words.
+const TUTORIAL := [
+	["Routes", "Monsters follow the dashed red lines to the gate. Turrets bend them."],
+	["Range", "Pick up a turret: it hits anything inside the blue ring. Closer hits harder."],
+	["Lure", "Monsters inside the dashed red ring leave their route and attack the turret."],
+]
+
+
+func _show_tutorial() -> void:
+	if is_instance_valid(_tutorial_card):
+		_tutorial_card.queue_free()
+	if _tutorial_step < 0 or _tutorial_step >= TUTORIAL.size():
+		return
+	var p: Array = UiKit.panel(11, 6)
+	var card: PanelContainer = p[0]
+	(card.get_theme_stylebox("panel") as StyleBoxFlat).border_color = UiKit.FRIENDLY
+	card.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	card.offset_left = UiKit.px(EDGE_PT)
+	card.offset_right = -UiKit.px(EDGE_PT + 120)
+	card.offset_top = UiKit.px(HEADER_PT + 10)
+	var v: VBoxContainer = p[1]
+	var head := UiKit.hbox(8)
+	head.add_child(UiKit.text(TUTORIAL[_tutorial_step][0], "label", UiKit.FRIENDLY))
+	head.add_child(UiKit.spacer())
+	head.add_child(UiKit.text("%d / %d" % [_tutorial_step + 1, TUTORIAL.size()], "small", UiKit.INK_MUTED))
+	v.add_child(head)
+	var body := UiKit.text(TUTORIAL[_tutorial_step][1], "body")
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(body)
+	var next := UiKit.action("Next" if _tutorial_step < TUTORIAL.size() - 1 else "Got it", _tutorial_next, "secondary", "")
+	next.custom_minimum_size.y = UiKit.px(34)
+	v.add_child(next)
+	_ui.get_child(0).add_child(card)
+	_tutorial_card = card
+
+
+func _tutorial_next() -> void:
+	_tutorial_step += 1
+	if _tutorial_step >= TUTORIAL.size():
+		_end_tutorial()
+	else:
+		_show_tutorial()
+
+
+func _end_tutorial() -> void:
+	if _tutorial_step >= 0:
+		_tutorial_seen = true
+		_save_progress()
+	_tutorial_step = -1
+	if is_instance_valid(_tutorial_card):
+		_tutorial_card.queue_free()
+	_tutorial_card = null
 
 
 func defend() -> void:
@@ -181,7 +257,18 @@ func defend() -> void:
 	battlefield.sim_speed = speed
 	_accum = 0.0
 	_end_timer = -1.0
+	_set_speed(speed if speed in [1.0, 2.0, 4.0] else 1.0)
+	if _args.get("phase", "") == "result":
+		speed = 8.0
+	_log.clear()
+	_ammo_seen.clear()
+	_first_brute_t = -1.0
+	_breach_hotspot = -1
+	_depleted_shown = false
+	_last_dep = deployment.duplicate(true)
+	_end_tutorial()
 	_set_phase(Phase.COMBAT)
+	_refresh_ticker()
 
 
 func retry() -> void:
@@ -189,6 +276,7 @@ func retry() -> void:
 	sim = null
 	battlefield.sim = null
 	_set_phase(Phase.DEPLOYMENT)
+	battlefield.show_last_plan(_last_dep, deployment, _last_breach)
 
 
 func next_level() -> void:
@@ -218,6 +306,7 @@ func _process(delta: float) -> void:
 		for e in sim.events:
 			if e.type == "gate_hit":
 				battlefield.shake_gate()
+		_record(sim.events)
 		battlefield.handle_events(sim.events)
 		sim.events.clear()
 		_accum -= Defs.SIM_DT
@@ -229,6 +318,10 @@ func _process(delta: float) -> void:
 	else:
 		battlefield.sync(clampf(_accum / Defs.SIM_DT, 0.0, 1.0))
 	_refresh_hud()
+	if sim.state == BattleSim.State.RUNNING and not _depleted_shown and _defense_spent():
+		_depleted_shown = true
+		_show_depleted()
+		return
 	if sim.state != BattleSim.State.RUNNING:
 		if _end_timer < 0.0:
 			_end_timer = 1.4
@@ -237,11 +330,128 @@ func _process(delta: float) -> void:
 				battlefield.play_breach()
 		_end_timer -= delta
 		if _end_timer <= 0.0:
-			if sim.state == BattleSim.State.VICTORY:
-				unlocked = maxi(unlocked, mini(level_index + 1, level_paths.size() - 1))
-				_cleared[level_index] = true
-				_save_progress()
-			_set_phase(Phase.RESULT)
+			_finish_battle()
+
+
+## Everything that happens once a battle is over, whether watched or skipped.
+func _finish_battle() -> void:
+	if sim.state == BattleSim.State.VICTORY:
+		unlocked = maxi(unlocked, mini(level_index + 1, level_paths.size() - 1))
+		_cleared[level_index] = true
+		_stars[level_index] = maxi(int(_stars.get(level_index, 0)), _stars_earned())
+		_save_progress()
+		_last_cause = ""
+		_last_breach = -1
+	else:
+		_last_cause = _cause()
+		_last_breach = _breach_hotspot
+	_set_phase(Phase.RESULT)
+	if _args.has("retry"):
+		retry.call_deferred()
+
+
+## Runs the rest of the battle at once and goes to the result.
+func skip_battle() -> void:
+	if phase != Phase.COMBAT or sim == null:
+		return
+	paused = false
+	while sim.state == BattleSim.State.RUNNING:
+		sim.step()
+		_record(sim.events)
+		sim.events.clear()
+	_finish_battle()
+
+
+## Nothing left that can hurt a monster while some are still coming: the wave is lost.
+func _defense_spent() -> bool:
+	if sim.remaining_enemies() == 0:
+		return false
+	for g in sim.guns:
+		if g.alive and (int(g.ammo) > 0 or float(g.blast) > 0.0):
+			return false
+	return true
+
+
+## "Cannon", or "MG West" / "MG 2" when the wave has more than one of that turret.
+func _gun_name(g: Dictionary) -> String:
+	var same := sim.guns.filter(func(x): return x.type == g.type)
+	if same.size() < 2:
+		return GUN_UI[g.type].name
+	var half := level.world_size().x * 0.5
+	var west: bool = g.pos.x < half
+	var twin := same.filter(func(x): return x.id != g.id and (x.pos.x < half) == west)
+	if twin.is_empty():
+		return "%s %s" % [GUN_UI[g.type].short, "West" if west else "East"]
+	return "%s %d" % [GUN_UI[g.type].short, same.find(g) + 1]
+
+
+## Turns the simulation's events into the few moments a player cares about.
+func _record(events: Array) -> void:
+	var t := sim.time
+	for e in events:
+		match e.type:
+			"emerge":
+				var m: Dictionary = sim.monsters[e.monster]
+				if m.type == "brute":
+					if _first_brute_t < 0.0:
+						_first_brute_t = t
+					var n := sim.monsters.filter(func(x): return x.type == "brute").size()
+					_log_moment(t, "Brute %d surfaced" % n, "brute")
+			"gun_destroyed":
+				_log_moment(t, "%s destroyed" % _gun_name(sim.guns[e.gun]), "lost")
+			"gate_hit":
+				if _breach_hotspot < 0:
+					_breach_hotspot = int(sim.monsters[e.monster].hotspot)
+					_log_moment(t, "Gate under attack", "lost")
+	for g in sim.guns:
+		var before := int(_ammo_seen.get(g.id, g.max_ammo))
+		if before > 0 and int(g.ammo) == 0 and int(g.max_ammo) > 0:
+			_log_moment(t, "%s out of %s" % [_gun_name(g), GUN_UI[g.type].ammo.to_lower()], "empty")
+		elif before > 1 and int(g.ammo) == 1 and int(g.max_ammo) <= 10:
+			_log_moment(t, "%s · 1 %s left" % [_gun_name(g), GUN_UI[g.type].ammo.to_lower().trim_suffix("s")], "empty")
+		_ammo_seen[g.id] = int(g.ammo)
+
+
+func _log_moment(t: float, text: String, kind: String) -> void:
+	_log.append({"t": t, "text": text, "kind": kind})
+	if phase == Phase.COMBAT:
+		_refresh_ticker()
+
+
+static func _clock(t: float) -> String:
+	return "%d:%02d" % [int(t) / 60, int(t) % 60]
+
+
+## One line on why the wave was lost, built from what actually happened.
+func _cause() -> String:
+	for g in sim.guns:
+		if g.type in ["cannon", "sniper"] and _first_brute_t >= 0.0 and int(g.ammo) == 0:
+			for m in _log:
+				if m.kind == "empty" and m.text == "%s out of %s" % [_gun_name(g), GUN_UI[g.type].ammo.to_lower()] \
+						and m.t < _first_brute_t + 2.0:
+					return "The %s spent every %s before the brutes arrived." % [_gun_name(g),
+						GUN_UI[g.type].ammo.to_lower().trim_suffix("s")]
+	var lost := sim.guns.filter(func(x): return not x.alive and int(x.max_ammo) > 0)
+	if lost.size() > 0:
+		return "%s was destroyed. Monsters near a route attack turrets." % _gun_name(lost[0])
+	if _defense_spent():
+		return "Every turret ran dry with %d still coming." % sim.remaining_enemies()
+	return "%d monsters got through to the gate." % sim.remaining_enemies()
+
+
+## Gate held, untouched, and at least a fifth of the ammunition left.
+func _stars_earned() -> int:
+	var n := 1
+	if sim.gate_hp >= level.gate_max_hp:
+		n += 1
+	var total := 0
+	var left := 0
+	for g in sim.guns:
+		total += int(g.max_ammo)
+		left += int(g.ammo)
+	if total > 0 and float(left) / float(total) >= 0.2:
+		n += 1
+	return n
 
 
 # ================================================================== placement
@@ -295,7 +505,8 @@ func place(gi: int, c: Vector2i) -> bool:
 	if not _valid_cell(c) or _dep_of_gun(gi) >= 0:
 		return false
 	var g: Dictionary = guns[gi]
-	deployment.append({"type": g.type, "level": g.level, "ammo": g.ammo, "cell": c, "gun": gi})
+	deployment.append({"type": g.type, "level": g.level, "ammo": g.ammo, "cell": c, "gun": gi,
+		"order": _orders.get(gi, "")})
 	return true
 
 
@@ -453,6 +664,9 @@ func request_hint() -> void:
 		_say_hint("This layout holds the gate. Press Defend.")
 		return
 	_hints_used += 1
+	if _last_cause != "" and _intel_shown == 0 and _hint_text != _last_cause:
+		_say_hint(_last_cause)
+		return
 	if _intel_shown < mini(level.intel.size(), 2):
 		_intel_shown += 1
 		_say_hint(level.intel[_intel_shown - 1])
@@ -501,26 +715,27 @@ func _build_ui() -> void:
 	root.add_child(hd[0])
 	_wave_sub = hd[1]
 
-	# ---- counters + pause, under the header
-	_counters = UiKit.hbox(8)
-	_counters.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_counters.offset_left = m
-	_counters.offset_right = -m
-	_counters.offset_top = UiKit.px(HEADER_PT + 8)
+	# ---- counters + pause, in the right side of the header so the field below stays clear
+	_counters = UiKit.hbox(5)
+	_counters.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_counters.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_counters.offset_right = -UiKit.px(8)
+	_counters.offset_top = UiKit.px((HEADER_PT - 32.0) * 0.5)
 	root.add_child(_counters)
 	var enemies := UiKit.counter("", "Incoming")
 	_counters.add_child(enemies[0])
 	_skull_val = enemies[1]
 	_skull_cap = enemies[2]
-	_counters.add_child(UiKit.spacer())
+	_skull_cap.visible = false
 	var turrets := UiKit.counter("turret", "Deployed")
 	_counters.add_child(turrets[0])
 	_turret_val = turrets[1]
 	_turret_cap = turrets[2]
+	_turret_cap.visible = false
 	_pause_btn = UiKit.icon_button("pause_solid", toggle_pause, 32, 16)
 	_counters.add_child(_pause_btn)
 
-	# ---- deployment tray: hint, tools + turret cards, DEFEND
+	# ---- deployment tray: hint, turret cards, tools + DEFEND
 	_tray = UiKit.vbox(7)
 	_anchor_bottom(_tray, root)
 	var hint := UiKit.inset(10, 3)
@@ -533,12 +748,10 @@ func _build_ui() -> void:
 	hint_row.add_child(_hint_label)
 	_set_panel_fill(hint)
 	_tray.add_child(hint)
-	var row := UiKit.hbox(5)
-	_tray.add_child(row)
-	row.add_child(UiKit.tool_tile("Radar", _show_radar, "pin"))
-	row.add_child(UiKit.tool_tile("Briefing", _show_briefing, "doc"))
-	row.add_child(UiKit.tool_tile("Clear", clear_deployment, "close"))
-	row.add_child(UiKit.tool_tile("Hint", request_hint, "info"))
+	_hint_box = hint
+	_order_btn = UiKit.order_button(toggle_order)
+	_order_btn.visible = false
+	_tray.add_child(_order_btn)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -548,30 +761,33 @@ func _build_ui() -> void:
 	_cards_box = UiKit.hbox(5)
 	_cards_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_cards_box)
-	_tray.add_child(UiKit.action("Defend", defend))
+	var row := UiKit.hbox(5)
+	_tray.add_child(row)
+	row.add_child(UiKit.icon_button("radar", _show_radar, 50, 22))
+	row.add_child(UiKit.icon_button("bulb", request_hint, 50, 22))
+	row.add_child(UiKit.icon_button("close", clear_deployment, 50, 20))
+	var defend_btn := UiKit.action("Defend", defend)
+	defend_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(defend_btn)
 
-	# ---- combat bar
-	_combat_bar = UiKit.hbox(7)
+	# ---- combat bar: the last three key moments, then speed and skip
+	_combat_bar = UiKit.vbox(6)
 	_anchor_bottom(_combat_bar, root)
-	var auto := UiKit.inset(12, 7, UiKit.LINE)
-	_set_panel_fill(auto)
-	auto.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var auto_row := UiKit.hbox(10)
-	auto.add_child(auto_row)
-	auto_row.add_child(UiKit.glyph("gear", 20))
-	auto_row.add_child(UiKit.text("Automatic Defense", "label_lg"))
-	_combat_bar.add_child(auto)
-	var speed_btn := UiKit.icon_button("chevron", _toggle_speed, 38, 12)
-	speed_btn.custom_minimum_size.x = UiKit.px(64)
-	var speed_row := UiKit.hbox(2)
-	speed_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	speed_row.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_speed_label = UiKit.text("1×", "plate")
-	speed_row.add_child(_speed_label)
-	speed_row.add_child(UiKit.glyph("chevron", 12))
-	speed_btn.get_child(0).queue_free()
-	speed_btn.add_child(speed_row)
-	_combat_bar.add_child(speed_btn)
+	var tbox := UiKit.inset(10, 5, UiKit.LINE_DIM)
+	(tbox.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = UiKit.PANEL_GLASS
+	_ticker = UiKit.vbox(2)
+	tbox.add_child(_ticker)
+	_combat_bar.add_child(tbox)
+	var crow := UiKit.hbox(6)
+	_combat_bar.add_child(crow)
+	for n in [1, 2, 4]:
+		var b := UiKit.speed_button("%d×" % n, _set_speed.bind(float(n)))
+		crow.add_child(b)
+		_speed_btns.append(b)
+	var skip := UiKit.action("Skip", skip_battle, "secondary", "skip")
+	skip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	skip.custom_minimum_size.y = UiKit.px(46)
+	crow.add_child(skip)
 
 	# ---- gate integrity plate, sits on the gate itself
 	var gb := UiKit.gate_bar()
@@ -613,14 +829,17 @@ func _set_panel_fill(p: PanelContainer) -> void:
 
 
 func _layout_gate_pill() -> void:
-	# centred just below the gate, but never under the bottom controls
+	# on the gate door itself, never in the field where turrets go
 	if battlefield == null or battlefield.level == null or level == null:
 		return
 	var s := _gate_box.get_combined_minimum_size()
 	var p := battlefield.wall_foot_screen_pos()
-	var limit := _gate_box.get_parent_control().size.y - _bottom_ui_height() - s.y - UiKit.px(8)
 	_gate_box.size = s
-	_gate_box.position = Vector2(p.x - s.x * 0.5, minf(p.y + UiKit.px(4), limit))
+	# on the door, or just above the bottom controls when they cover the door
+	var y := p.y - s.y - UiKit.px(GATE_PLATE_ABOVE_FOOT_PT)
+	var root_h := _gate_box.get_parent_control().size.y
+	y = minf(y, root_h - _bottom_ui_height() - s.y - UiKit.px(6))
+	_gate_box.position = Vector2(p.x - s.x * 0.5, y)
 
 
 func _bottom_ui_height() -> float:
@@ -628,10 +847,28 @@ func _bottom_ui_height() -> float:
 	return 0.0 if c == null else c.get_combined_minimum_size().y + UiKit.px(EDGE_PT)
 
 
-func _toggle_speed() -> void:
-	speed = 2.0 if speed == 1.0 else 1.0
+func _set_speed(v: float) -> void:
+	speed = v
 	battlefield.sim_speed = speed
-	_speed_label.text = "2×" if speed == 2.0 else "1×"
+	for i in _speed_btns.size():
+		UiKit.set_speed_button(_speed_btns[i], [1.0, 2.0, 4.0][i] == speed)
+
+
+func _refresh_ticker() -> void:
+	for c in _ticker.get_children():
+		c.queue_free()
+	var recent := _log.slice(maxi(0, _log.size() - 3))
+	recent.reverse()
+	for k in 3:
+		var line := UiKit.hbox(8)
+		line.custom_minimum_size.y = UiKit.px(18)
+		if k < recent.size():
+			var m: Dictionary = recent[k]
+			line.modulate.a = 1.0 - 0.28 * k
+			line.add_child(UiKit.text(_clock(m.t), "small", UiKit.INK_MUTED))
+			var col: Color = {"brute": UiKit.AMBER, "lost": UiKit.THREAT, "empty": UiKit.AMBER}.get(m.kind, UiKit.INK)
+			line.add_child(UiKit.text(m.text, "small", col))
+		_ticker.add_child(line)
 
 
 func _toast_msg(t: String, col := UiKit.INK) -> void:
@@ -682,10 +919,11 @@ func _rebuild_cards() -> void:
 func _refresh() -> void:
 	if level == null:
 		return
-	_wave_sub.text = "WAVE %s · %s" % [level.id, level.title.trim_prefix("The ").to_upper()]
+	_wave_sub.text = _subtitle()
 	for gi in _cards.size():
 		UiKit.set_card_state(_cards[gi], held == gi or focused == gi, _dep_of_gun(gi) >= 0, focused == gi)
 	_update_focus()
+	_sync_order_button()
 	_sync_hint()
 	if _hint_text != "":
 		_hint_label.text = _hint_text
@@ -700,6 +938,54 @@ func _refresh() -> void:
 	_layout_gate_pill.call_deferred()
 
 
+## Header subtitle: the wave name while reading, the step once on the field.
+func _subtitle() -> String:
+	match phase:
+		Phase.DEPLOYMENT:
+			return "WAVE %s · DEPLOY" % level.id
+		Phase.COMBAT:
+			var t := int(sim.time) if sim != null else 0
+			return "WAVE %s · %d:%02d" % [level.id, t / 60, t % 60]
+		Phase.RESULT:
+			return "WAVE %s · DEBRIEF" % level.id
+	return "WAVE %s · %s" % [level.id, level.title.trim_prefix("The ").to_upper()]
+
+
+func _orders_left() -> int:
+	return level.order_budget() - _orders.size()
+
+
+## Gives or takes back the selected turret's one order.
+func toggle_order() -> void:
+	if focused < 0:
+		return
+	var key := Defs.order_for(guns[focused].type)
+	if key == "":
+		return
+	if _orders.has(focused):
+		_orders.erase(focused)
+	elif _orders_left() > 0:
+		_orders[focused] = key
+	else:
+		_toast_msg("No orders left this wave.", UiKit.THREAT)
+		return
+	var di := _dep_of_gun(focused)
+	if di >= 0:
+		deployment[di].order = _orders.get(focused, "")
+	battlefield.show_deployment(deployment)
+	_refresh()
+
+
+func _sync_order_button() -> void:
+	var key := Defs.order_for(guns[focused].type) if focused >= 0 and phase == Phase.DEPLOYMENT else ""
+	var show := key != "" and level.order_budget() > 0 and _dep_of_gun(focused) >= 0
+	_order_btn.visible = show
+	_hint_box.visible = not show
+	if show:
+		UiKit.set_order_button(_order_btn, Defs.ORDERS[key].label, Defs.MONSTERS[Defs.ORDERS[key].target].model,
+			_orders.has(focused), _orders_left(), level.order_budget())
+
+
 ## Marks the selected turret's tile and floats its X above it.
 func _update_focus() -> void:
 	var di := _dep_of_gun(focused) if focused >= 0 else -1
@@ -707,12 +993,16 @@ func _update_focus() -> void:
 	_remove_x.visible = showing
 	if showing:
 		battlefield.show_focus(deployment[di].cell)
+		battlefield.show_focus_rings(deployment[di].cell, deployment[di].type)
 		_remove_x.position = battlefield.gun_screen_pos(di, FOCUS_X_HEIGHT_M) - _remove_x.size * 0.5
 	else:
 		battlefield.clear_focus()
+		battlefield.clear_focus_rings()
 
 
 func _refresh_hud() -> void:
+	if phase == Phase.COMBAT:
+		_wave_sub.text = _subtitle()
 	if sim != null and phase in [Phase.COMBAT, Phase.RESULT]:
 		_skull_val.text = str(sim.remaining_enemies())
 		_skull_cap.text = "REMAINING"
@@ -727,7 +1017,7 @@ func _refresh_hud() -> void:
 	else:
 		_skull_val.text = str(level.total_enemies())
 		_skull_cap.text = "INCOMING"
-		_turret_val.text = "%d / %d" % [_placed_count(), guns.size()]
+		_turret_val.text = "%d/%d" % [_placed_count(), guns.size()]
 		_turret_cap.text = "DEPLOYED"
 		UiKit.set_gate(_gate_bar, _gate_val, level.gate_max_hp, level.gate_max_hp)
 
@@ -781,6 +1071,12 @@ func _open_sheet() -> VBoxContainer:
 	_toast_t = 0.0
 	_toast.modulate.a = 0.0
 	_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	var scrim := ColorRect.new()  # reading screens sit on a dark wash, so the field never competes
+	scrim.color = Color(UiKit.BG, 0.88)
+	scrim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scrim.offset_top = UiKit.px(HEADER_PT)
+	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_overlay.add_child(scrim)
 	var scroll := ScrollContainer.new()
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
 	scroll.offset_left = UiKit.px(EDGE_PT)
@@ -824,22 +1120,21 @@ func _open_dialog(width_pt: float, raise_pt: float, emblem: Control) -> VBoxCont
 
 func _show_briefing() -> void:
 	var s := _open_sheet()
-	var p: Array = UiKit.panel(12, 5)
+	s.add_child(UiKit.stepper(0))
+	var p: Array = UiKit.panel(12, 7)
 	s.add_child(p[0])
 	var v: VBoxContainer = p[1]
 
 	var head := UiKit.hbox(6)
-	var title_col := UiKit.vbox(0)
-	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	UiKit.titled(title_col, level.title, "Mission Briefing")
-	head.add_child(title_col)
+	var title := UiKit.text(level.title, "title")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.clip_text = true
+	head.add_child(title)
 	if level_index > 0:
 		head.add_child(UiKit.icon_button("chevron_left", func(): start_level(level_index - 1), 30, 14))
 	if level_index < unlocked:
 		head.add_child(UiKit.icon_button("chevron", func(): start_level(level_index + 1), 30, 14))
 	v.add_child(head)
-
-	v.add_child(UiKit.image(load("res://assets/ui/art/hero_gate.jpg"), 0, 72, true))
 
 	var gate := UiKit.hbox(8)
 	gate.add_child(UiKit.text("Gate Integrity", "label"))
@@ -850,52 +1145,57 @@ func _show_briefing() -> void:
 	bar.max_value = 1.0
 	bar.value = 1.0
 	v.add_child(bar)
-	v.add_child(UiKit.rule())
+	v.add_child(UiKit.text(_gate_tolerance(), "caption", UiKit.INK_MUTED))
 
 	v.add_child(UiKit.section("Incoming · %d" % level.total_enemies()))
 	for e in level.enemy_summary():
 		var ui: Dictionary = MONSTER_UI[e.type]
 		var noun: String = ui.one if e.count == 1 else ui.many
-		v.add_child(UiKit.enemy_row("%d %s · Lv %d" % [e.count, noun, e.level], ui.desc,
-			_art(Defs.MONSTERS[e.type].model)))
+		var counters := []
+		for c in ui.counter:
+			counters.append(GUN_UI[c].name)
+		v.add_child(UiKit.enemy_row("%d %s" % [e.count, noun], ui.desc,
+			_art(Defs.MONSTERS[e.type].model), counters))
 
-	v.add_child(UiKit.section("Available Defenses", UiKit.AMBER, "label_lg"))
+	var turrets_head := UiKit.section("Your Turrets · %d" % guns.size(), UiKit.AMBER)
+	if level.order_budget() > 0:
+		turrets_head.add_child(UiKit.spacer())
+		turrets_head.add_child(UiKit.text("Orders · %d" % level.order_budget(), "small", UiKit.AMBER))
+	v.add_child(turrets_head)
 	var grid := GridContainer.new()
 	grid.columns = 3
 	grid.add_theme_constant_override("h_separation", UiKit.px(6))
 	grid.add_theme_constant_override("v_separation", UiKit.px(6))
 	grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var counts := {}
 	for g in guns:
-		var ui: Dictionary = GUN_UI[g.type]
+		counts[g.type] = int(counts.get(g.type, 0)) + 1
+	for type in counts:
+		var g: Dictionary = guns.filter(func(x): return x.type == type)[0]
+		var ui: Dictionary = GUN_UI[type]
+		var name_line: String = ui.short if counts[type] == 1 else "%s ×%d" % [ui.short, counts[type]]
 		var ammo_line: String = "No ammo" if g.ammo <= 0 else "%d %s" % [g.ammo, ui.ammo]
-		grid.add_child(UiKit.defense_card(ui.name, ammo_line, _gun_art(g.type)))
+		grid.add_child(UiKit.defense_card(name_line, ammo_line, _gun_art(type)))
 	v.add_child(grid)
-	var rules := _range_rules()
 	if level.note != "":
-		rules = (level.note + " " + rules).strip_edges()
-	if rules != "":
-		var note := UiKit.text(rules, "caption", UiKit.INK_MUTED)
+		var note := UiKit.text(level.note, "caption", UiKit.INK_MUTED)
 		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(note)
 
-	var preview := UiKit.inset(10, 7, UiKit.LINE_DIM)
-	var pr := UiKit.hbox(10)
-	preview.add_child(pr)
-	var cap := UiKit.vbox(-2)
-	cap.alignment = BoxContainer.ALIGNMENT_CENTER
-	cap.add_child(UiKit.text("Spawn", "label_lg"))
-	cap.add_child(UiKit.text("Preview", "label_lg"))
-	pr.add_child(cap)
-	var radar := RadarView.new()
-	radar.compact = true
-	radar.custom_minimum_size = Vector2(0, UiKit.px(70))
-	radar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	radar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	radar.set_level(level, deployment)
-	pr.add_child(radar)
-	v.add_child(preview)
+	if phase == Phase.BRIEFING:
+		s.add_child(UiKit.action("Next · Recon", _show_recon))
+	else:
+		s.add_child(UiKit.action("Back to Deployment", _close_overlay, "secondary", ""))
 
-	v.add_child(UiKit.action("Plan Deployment", begin_deployment if phase == Phase.BRIEFING else _close_overlay))
+
+## How much punishment the gate takes, in the wave's own monsters.
+func _gate_tolerance() -> String:
+	var parts := []
+	for e in level.enemy_summary():
+		var hit: float = Defs.monster_stats(e.type, e.level).damage
+		var n := int(ceil(level.gate_max_hp / hit))
+		parts.append("%d %s %s" % [n, MONSTER_UI[e.type].one.to_lower(), "hit" if n == 1 else "hits"])
+	return "Falls after %s." % " or ".join(parts)
 
 
 ## One line on how range works for the turrets in this wave.
@@ -933,7 +1233,8 @@ func _show_levels(back: Callable) -> void:
 	v.add_child(grid)
 	var titles := _titles_of_levels()
 	for i in level_paths.size():
-		grid.add_child(UiKit.level_card(i + 1, titles[i], _cleared.has(i), i == level_index, _play_level.bind(i)))
+		grid.add_child(UiKit.level_card(i + 1, titles[i], _cleared.has(i), i == level_index, _play_level.bind(i),
+			int(_stars.get(i, 0))))
 	s.add_child(UiKit.action("Back", back, "secondary", ""))
 
 
@@ -952,38 +1253,47 @@ func _play_level(i: int) -> void:
 
 
 func _show_radar() -> void:
+	_show_recon()
+
+
+## Step 2 of every wave: where they come from, the path they take, and when they arrive.
+func _show_recon() -> void:
 	var s := _open_sheet()
-	var p: Array = UiKit.panel(15, 10)
+	var entering := phase == Phase.BRIEFING
+	if entering:
+		s.add_child(UiKit.stepper(1))
+	var p: Array = UiKit.panel(12, 8)
 	s.add_child(p[0])
 	var v: VBoxContainer = p[1]
-	UiKit.titled(v, "Enemy Spawn Radar", "Full Battlefield")
+	v.add_child(UiKit.section("Spawn Map"))
 	var radar := RadarView.new()
-	radar.custom_minimum_size = Vector2(0, UiKit.px(345))
+	radar.custom_minimum_size = Vector2(0, UiKit.px(300))
 	radar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	radar.set_level(level, deployment)
 	v.add_child(radar)
 
-	var stats := UiKit.inset(8, 6, UiKit.LINE)
-	var row := UiKit.hbox(6)
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	stats.add_child(row)
-	var totals := {}
-	for e in level.enemy_summary():
-		totals[e.type] = int(totals.get(e.type, 0)) + int(e.count)
-	var first := true
-	for type in totals:
-		if not first:
-			row.add_child(UiKit.slash(UiKit.LINE, 22))
-		first = false
-		var col := UiKit.vbox(-3)
-		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		col.add_child(UiKit.text(str(totals[type]), "plate", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER))
-		var ui: Dictionary = MONSTER_UI[type]
-		col.add_child(UiKit.text(ui.one if totals[type] == 1 else ui.many, "label", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER))
-		row.add_child(col)
-	v.add_child(stats)
-	v.add_child(_radar_legend())
-	s.add_child(UiKit.action("Back to Deployment", _close_overlay))
+	var tp: Array = UiKit.panel(12, 6)
+	s.add_child(tp[0])
+	var tv: VBoxContainer = tp[1]
+	tv.add_child(UiKit.section("Timeline"))
+	var timeline := ReconTimeline.new()
+	timeline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	timeline.set_level(level, deployment)
+	tv.add_child(timeline)
+
+	var row := UiKit.hbox(8)
+	if entering:
+		var back := UiKit.action("Back", _show_briefing, "secondary", "")
+		back.custom_minimum_size = Vector2(UiKit.px(100), UiKit.px(50))
+		row.add_child(back)
+		var go := UiKit.action("Deploy", begin_deployment)
+		go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(go)
+	else:
+		var close := UiKit.action("Back to Deployment", _close_overlay, "secondary", "")
+		close.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(close)
+	s.add_child(row)
 
 
 func _radar_legend() -> HBoxContainer:
@@ -1033,65 +1343,143 @@ func _show_pause() -> void:
 
 
 func _show_result() -> void:
+	if sim.state == BattleSim.State.VICTORY:
+		_show_victory()
+	else:
+		_show_report()
+
+
+func _show_victory() -> void:
 	var s := sim.summary()
-	var won := sim.state == BattleSim.State.VICTORY
-	var accent := UiKit.FRIENDLY if won else UiKit.THREAT
-	var emblem := UiKit.image(load("res://assets/ui/glyphs/emblem_%s.svg" % ("held" if won else "breached")),
-		EMBLEM_PT, EMBLEM_PT)
-	var v := _open_dialog(320, 230, emblem)
-
-	var top := UiKit.hbox(0)
-	top.add_child(UiKit.rule(UiKit.LINE))
-	var hole := Control.new()
-	hole.custom_minimum_size.x = UiKit.px(EMBLEM_PT + 8)
-	top.add_child(hole)
-	top.add_child(UiKit.rule(UiKit.LINE))
-	v.add_child(top)
-	v.add_child(UiKit.gap(EMBLEM_PT * 0.3))
-	v.add_child(UiKit.text("Gate Held" if won else "Gate Breached", "result", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER))
-	var sub := UiKit.text("Victory" if won else "Defeat", "plate", accent, HORIZONTAL_ALIGNMENT_CENTER)
-	v.add_child(sub)
-	v.add_child(UiKit.rule(accent, 0, 1.2))
-	v.add_child(UiKit.text("%s secured." % level.title if won else "Your deployment has been saved.",
-		"body", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER))
-
+	var emblem := UiKit.image(load("res://assets/ui/glyphs/emblem_held.svg"), EMBLEM_PT, EMBLEM_PT)
+	var v := _open_dialog(320, 200, emblem)
+	v.add_child(UiKit.gap(EMBLEM_PT * 0.45))
+	v.add_child(UiKit.text("Gate Held", "result", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(UiKit.text("Victory", "plate", UiKit.FRIENDLY, HORIZONTAL_ALIGNMENT_CENTER))
+	var earned := _stars_earned()
+	var row := UiKit.hbox(6)
+	for k in 3:
+		row.add_child(UiKit.star_tile(["Held", "Untouched", "20% Ammo"][k], k < earned))
+	v.add_child(row)
 	var table := UiKit.inset(10, 4, UiKit.LINE)
 	var rows := UiKit.vbox(3)
 	table.add_child(rows)
+	var total := 0
+	for g in sim.guns:
+		total += int(g.max_ammo)
 	var data := [["Gate Integrity", "%d / %d" % [ceili(s.gate_hp), s.gate_max]],
 		["Hostiles Eliminated", "%d / %d" % [s.kills, s.total_enemies]],
-		["Turrets Survived", "%d / %d" % [s.guns_survived, s.guns_total]]]
-	if _hints_used > 0:
-		data.append(["Hints Used", str(_hints_used)])
+		["Ammunition Left", "%d%%" % (roundi(100.0 * s.ammo_left / maxf(total, 1)))]]
 	for i in data.size():
 		if i > 0:
 			rows.add_child(UiKit.rule(UiKit.LINE_DIM))
 		rows.add_child(UiKit.stat_row(data[i][0], data[i][1]))
 	v.add_child(table)
+	v.add_child(UiKit.action("Next Wave", next_level))
+	v.add_child(UiKit.action("Replay for 3 stars" if earned < 3 else "Replay Wave", retry, "secondary", ""))
+	v.add_child(UiKit.action("All Levels", _show_levels.bind(_show_result), "secondary", ""))
 
-	var empty := 0
+
+## The after-action report: what went wrong, the key moments, and how each turret did.
+func _show_report() -> void:
+	var s := _open_sheet()
+	var p: Array = UiKit.panel(12, 8)
+	s.add_child(p[0])
+	var v: VBoxContainer = p[1]
+	var head := UiKit.hbox(8)
+	var title := UiKit.text("Gate Breached", "title")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	head.add_child(UiKit.text("Defeat · %s" % _clock(sim.time), "small", UiKit.THREAT))
+	v.add_child(head)
+
+	var cause := UiKit.inset(10, 7, UiKit.THREAT)
+	var cv := UiKit.vbox(3)
+	cause.add_child(cv)
+	cv.add_child(UiKit.text("Cause", "small", UiKit.THREAT))
+	var line := UiKit.text(_last_cause, "body")
+	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	cv.add_child(line)
+	var tip := _report_tip()
+	if tip != "":
+		cv.add_child(UiKit.text(tip, "small", UiKit.FRIENDLY))
+	v.add_child(cause)
+
+	v.add_child(UiKit.section("Key Moments", UiKit.THREAT, "label_lg"))
+	var moments := _log.slice(maxi(0, _log.size() - 6))
+	for m in moments:
+		var r := UiKit.hbox(8)
+		r.add_child(UiKit.text(_clock(m.t), "small", UiKit.INK_MUTED))
+		var col: Color = {"brute": UiKit.AMBER, "lost": UiKit.THREAT, "empty": UiKit.AMBER}.get(m.kind, UiKit.INK)
+		r.add_child(UiKit.text(m.text, "small", col))
+		v.add_child(r)
+
+	v.add_child(UiKit.section("Turrets", UiKit.AMBER, "label_lg"))
+	var table := UiKit.inset(10, 4, UiKit.LINE)
+	var rows := UiKit.vbox(2)
+	table.add_child(rows)
 	for g in sim.guns:
-		if g.ammo <= 0 and g.max_ammo > 0:
-			empty += 1
-	if empty > 0:
-		var note := UiKit.hbox(6)
-		note.alignment = BoxContainer.ALIGNMENT_CENTER
-		note.add_child(UiKit.slash(UiKit.AMBER, 11))
-		note.add_child(UiKit.slash(UiKit.AMBER, 11))
-		note.add_child(UiKit.text("%d %s exhausted %s ammunition." % [empty, "turret" if empty == 1 else "turrets",
-			"its" if empty == 1 else "their"], "caption", UiKit.INK))
-		v.add_child(note)
+		if int(g.max_ammo) <= 0:
+			continue
+		var r := UiKit.hbox(8)
+		var n := UiKit.text(_gun_name(g), "small")
+		n.custom_minimum_size.x = UiKit.px(96)
+		r.add_child(n)
+		var used := UiKit.text("%d / %d" % [int(g.max_ammo) - int(g.ammo), int(g.max_ammo)], "small")
+		used.custom_minimum_size.x = UiKit.px(70)
+		r.add_child(used)
+		var note := "Standing" if g.alive else "Lost"
+		var ncol := UiKit.INK_MUTED if g.alive else UiKit.THREAT
+		if g.alive and int(g.ammo) == 0:
+			note = "Ran dry"
+			ncol = UiKit.AMBER
+		r.add_child(UiKit.text(note, "small", ncol))
+		rows.add_child(r)
+	v.add_child(table)
 
-	v.add_child(UiKit.gap(2))
-	if won:
-		v.add_child(UiKit.action("Next Wave", next_level))
-		v.add_child(UiKit.action("Replay Wave", retry, "secondary", ""))
-		v.add_child(UiKit.action("All Levels", _show_levels.bind(_show_result), "secondary", ""))
-	else:
-		v.add_child(UiKit.action("Adjust Deployment", retry, "primary", ""))
-		var tip := "Stuck? Tap Hint while planning." if not level.solutions.is_empty() else "Return to planning with your turrets in place."
-		v.add_child(UiKit.text(tip, "caption", UiKit.INK,
-			HORIZONTAL_ALIGNMENT_CENTER))
+	var row := UiKit.hbox(8)
+	var levels := UiKit.action("Waves", _show_levels.bind(_show_result), "secondary", "")
+	levels.custom_minimum_size = Vector2(UiKit.px(100), UiKit.px(50))
+	row.add_child(levels)
+	var adjust := UiKit.action("Adjust Deployment", retry, "primary", "")
+	adjust.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(adjust)
+	s.add_child(row)
+
+
+## A next step to try, only when the game can point at one.
+func _report_tip() -> String:
+	if _last_cause.begins_with("The Cannon") and level.order_budget() > 0:
+		return "Try · Cannon order: Heavy only"
+	if _last_cause.begins_with("The Sniper") and level.order_budget() > 0:
+		return "Try · Sniper order: Fast only"
+	if "destroyed" in _last_cause:
+		return "Try · keep turrets outside the red lure rings"
+	return ""
+
+
+## Shown the moment a battle can no longer be won.
+func _show_depleted() -> void:
+	paused = true
+	var tile := PanelContainer.new()
+	tile.add_theme_stylebox_override("panel", UiKit.box(UiKit.PANEL, 6, UiKit.AMBER, 1.4))
+	tile.custom_minimum_size = Vector2.ONE * UiKit.px(EMBLEM_PT * 0.8)
+	var c := CenterContainer.new()
+	var slashes := UiKit.hbox(4)
+	slashes.add_child(UiKit.slash(UiKit.AMBER, 22))
+	slashes.add_child(UiKit.slash(UiKit.AMBER, 22))
+	c.add_child(slashes)
+	tile.add_child(c)
+	var v := _open_dialog(300, 170, tile)
+	v.add_child(UiKit.gap(EMBLEM_PT * 0.4))
+	v.add_child(UiKit.text("Defense Depleted", "title", UiKit.INK, HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(UiKit.text("Decided at %s" % _clock(sim.time), "small", UiKit.THREAT, HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(UiKit.text("All turrets are empty. %d remain." % sim.remaining_enemies(), "body", UiKit.INK,
+		HORIZONTAL_ALIGNMENT_CENTER))
+	v.add_child(UiKit.action("See Report", skip_battle))
+	v.add_child(UiKit.action("Watch to End", func():
+		paused = false
+		_close_overlay(), "secondary", ""))
 
 
 ## Drag anywhere on an open sheet to scroll it, with mouse or touch. Godot's ScrollContainer
@@ -1127,12 +1515,18 @@ func _load_progress() -> void:
 		unlocked = int(d.get("unlocked", 0))
 		for i in d.get("cleared", []):
 			_cleared[int(i)] = true
+		var st = d.get("stars", {})
+		if st is Dictionary:
+			for k in st:
+				_stars[int(k)] = int(st[k])
+		_tutorial_seen = bool(d.get("tutorial", false))
 
 
 func _save_progress() -> void:
 	var f := FileAccess.open(PROGRESS_FILE, FileAccess.WRITE)
 	if f:
-		f.store_string(JSON.stringify({"unlocked": unlocked, "cleared": _cleared.keys()}))
+		f.store_string(JSON.stringify({"unlocked": unlocked, "cleared": _cleared.keys(),
+			"stars": _stars, "tutorial": _tutorial_seen}))
 
 
 # ================================================================== automation (screenshots / CI)
@@ -1160,6 +1554,8 @@ func _apply_automation() -> void:
 		"radar":
 			begin_deployment()
 			_show_radar()
+		"recon":
+			_show_recon()
 		"levels":
 			begin_deployment()
 			_show_levels(_close_overlay)
@@ -1173,7 +1569,13 @@ func _apply_automation() -> void:
 	if p == "pause":
 		get_tree().create_timer(float(_args.get("shot_time", "3")) - 0.5).timeout.connect(toggle_pause)
 	if _args.has("focus") and _placed_count() > 0:
-		select_card(deployment[deployment.size() - 1].gun)
+		var pick: Dictionary = deployment[deployment.size() - 1]
+		for d in deployment:
+			if d.type == str(_args.focus):
+				pick = d
+		select_card(pick.gun)
+		if _args.has("order"):
+			toggle_order()
 	if _args.has("shot"):
 		get_tree().create_timer(float(_args.get("shot_time", "1.5"))).timeout.connect(_take_shot)
 

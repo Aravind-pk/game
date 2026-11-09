@@ -16,6 +16,7 @@ var no_build: Array[Rect2i] = []  # unstable ground: monsters cross it, turrets 
 var fixed: Array = []            # [{type, level, ammo, cell}] holdout turrets already in place
 var map_id: String               # which painted background this level uses
 var note: String                 # one-line briefing note, usually introducing a mechanic
+var orders := 0                  # turret orders the player may give this wave
 var hotspots: Array = []         # [{name, cell: Vector2, delay, groups: [{type, level, count, interval}]}]
 var guns: Array = []             # [{type, level, ammo, count}]
 var intel: Array = []            # plain-language clues written by the level forge
@@ -37,6 +38,7 @@ static func from_dict(d: Dictionary) -> LevelData:
 	L.title = str(d.title)
 	L.map_id = str(d.get("map", d.id))
 	L.note = str(d.get("note", ""))
+	L.orders = int(d.get("orders", -1))
 	L.cols = int(d.cols)
 	L.rows = int(d.rows)
 	var v: Array = d.view
@@ -140,3 +142,15 @@ func hotspot_count(h: Dictionary) -> int:
 	for g in h.groups:
 		n += int(g.count)
 	return n
+
+
+## Orders this wave: the level's own number, else one from wave 04 on when a turret can take one.
+func order_budget() -> int:
+	if orders >= 0:
+		return orders
+	if int(id) < 4:
+		return 0
+	for g in guns:
+		if Defs.order_for(g.type) != "":
+			return 1
+	return 0

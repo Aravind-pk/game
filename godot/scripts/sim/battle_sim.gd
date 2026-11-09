@@ -52,7 +52,7 @@ func setup(lv: LevelData, deployment: Array) -> void:
 			"blast": s.blast, "blast_radius": s.blast_radius,
 			"projectile_speed": s.projectile_speed, "radius": s.radius, "ammo": int(d.ammo),
 			"max_ammo": int(d.ammo), "cooldown": 0.0, "alive": true, "aim": Vector2(0, -1),
-			"target": -1,
+			"target": -1, "only": Defs.ORDERS[d.order].target if Defs.ORDERS.has(d.get("order", "")) else "",
 		})
 	# spawn schedule: each hotspot runs its groups in order after its delay
 	for hi in lv.hotspots.size():
@@ -319,7 +319,7 @@ func _update_guns() -> void:
 		if not g.alive:
 			continue
 		g.cooldown = maxf(g.cooldown - Defs.SIM_DT, -Defs.SIM_DT)
-		var t := _closest_monster(g.pos, g.range, g.min_range)
+		var t := _closest_monster(g.pos, g.range, g.min_range, g.only)
 		g.target = t
 		if t < 0:
 			continue
@@ -347,11 +347,13 @@ func _direct_damage(g: Dictionary, m: Dictionary) -> float:
 	return g.damage * (1.0 - fade * (1.0 - g.falloff_floor))
 
 
-func _closest_monster(pos: Vector2, rng: float, min_rng: float) -> int:
+func _closest_monster(pos: Vector2, rng: float, min_rng: float, only := "") -> int:
 	var best := -1
 	var best_d := INF * 1.0
 	for m in monsters:
 		if m.state != "active" or m.hp <= 0.0:
+			continue
+		if only != "" and m.type != only:
 			continue
 		var d: float = pos.distance_to(m.pos) - m.radius
 		if d <= rng and d >= min_rng and d < best_d:
@@ -470,3 +472,35 @@ func _flow_dir(pos: Vector2, gx0: float, gx1: float, gy: float) -> Vector2:
 			best = v
 			best_c = nc
 	return (level.cell_center(best_c) - pos).normalized()
+
+
+## Preview only, never used by the battle: the cell-centre path a monster takes from `start`
+## to the gate through the current flow field (turrets block cells, so placement bends it).
+func route_from(start: Vector2) -> PackedVector2Array:
+	var out := PackedVector2Array([start])
+	var c := _cell_of(start)
+	for _i in level.cols * level.rows:
+		if not _in_grid(c) or _is_blocked_cell(c):
+			break
+		var here := _flow[c.y * level.cols + c.x]
+		if here == 0 or here == INF:
+			break
+		var best := here
+		var best_c := c
+		for d in NEIGHBOURS:
+			var nc: Vector2i = c + d
+			if _is_blocked_cell(nc):
+				continue
+			if d.x != 0 and d.y != 0 and (_is_blocked_cell(Vector2i(c.x + d.x, c.y)) \
+					or _is_blocked_cell(Vector2i(c.x, c.y + d.y))):
+				continue
+			var v := _flow[nc.y * level.cols + nc.x]
+			if v < best:
+				best = v
+				best_c = nc
+		if best_c == c:
+			break
+		c = best_c
+		out.append(level.cell_center(c))
+	out.append(Vector2(out[out.size() - 1].x, float(level.wall_row) * Defs.CELL))
+	return out

@@ -11,6 +11,22 @@ const EMERGE_TIME := 0.9            # monster climbing out (not targetable yet)
 const RETARGET_INTERVAL := 0.25     # how often monsters look for guns
 const MAX_BATTLE_TIME := 600.0
 
+# ---------------------------------------------------------------- orders
+# One fixed order per turret type, from a small per-wave budget. An order limits the turret to
+# one monster type; it fires at nothing else. MG Turrets and decoys take no orders.
+const ORDERS := {
+	"heavy": {"label": "Heavy only", "target": "brute", "gun": "cannon"},
+	"fast": {"label": "Fast only", "target": "stalker", "gun": "sniper"},
+}
+
+
+## The order a turret type can take, or "".
+static func order_for(gun_type: String) -> String:
+	for k in ORDERS:
+		if ORDERS[k].gun == gun_type:
+			return k
+	return ""
+
 # ---------------------------------------------------------------- guns
 # min_range: targets closer than this can't be hit. Damage fades linearly from full at
 # falloff_start to damage * falloff_floor at max range.

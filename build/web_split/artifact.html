@@ -126,7 +126,7 @@ body { background: var(--bg) !important; color: var(--ink); }
 		<script>
 // Reassemble chunked engine/pack files (host limits single files to 15 MB).
 (function () {
-  var PARTS = {"index.pck": 2, "index.wasm": 5};
+  var PARTS = {"index.wasm": 5, "index.pck": 2};
   var TYPES = {"index.wasm": "application/wasm", "index.pck": "application/octet-stream"};
   var status = null;
   var realFetch = window.fetch.bind(window);
@@ -167,7 +167,7 @@ body { background: var(--bg) !important; color: var(--ink); }
 </script>
 <script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":0,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":16803112,"index.wasm":38034280},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":0,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":16817632,"index.wasm":38034280},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 

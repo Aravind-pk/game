@@ -49,6 +49,7 @@ const GATE_HIT_TREMOR_PX := 7.0
 const TURRET_HIT_TREMOR_PX := 3.5
 const TREMOR_DECAY := 0.002       # share of the tremor left after one second
 const TREMOR_MIN_PX := 0.15
+const GATE_CLEARANCE_PX := -150.0   # where the foot of the wall sits against the bottom edge (negative: just past it)
 
 var level: LevelData
 var sim: BattleSim
@@ -76,6 +77,10 @@ var _focus_tween: Tween
 var _focus_cell := Vector2i(-1, -1)
 var _ghost: Node2D
 var _ghost_ring: RangeRing
+var _routes: Node2D               # predicted monster paths, shown while deploying
+var _focus_rings: Node2D          # range / lure / blind rings around the selected turret
+var _last_plan: Node2D            # outlines of the last battle's layout, after a defeat
+var _breach_route := -1           # hotspot whose route broke the gate last time
 var _gun_nodes := {}              # deployment index / sim gun id -> UnitView
 var _monster_nodes := {}          # monster id -> UnitView
 var _hotspot_glows: Array[Sprite2D] = []
@@ -88,6 +93,8 @@ var _dragging := false
 var _breaching := false
 var _breach_t := 0.0
 var _tremor := 0.0                # current screen shake strength, in pixels
+var _bottom_inset := 0.0          # screen pixels covered by the bottom controls
+var _lift := 0.0                  # how far the field is raised so the gate clears those controls
 
 
 # ================================================================== setup
@@ -101,6 +108,10 @@ func build(lv: LevelData) -> void:
 	_hotspot_glows.clear()
 	_ghost = null
 	_hint = null
+	_routes = null
+	_focus_rings = null
+	_last_plan = null
+	_breach_route = -1
 	_focus_mark = null
 	_focus_tween = null
 	_focus_cell = Vector2i(-1, -1)
@@ -143,8 +154,25 @@ func _fit_to_screen() -> void:
 	if _world == null:
 		return
 	var view := get_viewport_rect().size
-	_world.position = view * 0.5
 	_world.scale = Vector2.ONE * view.x / DESIGN_WIDTH
+	# drop the field so the foot of the wall sits on the bottom edge: the gate shows through the
+	# translucent tray and everything above it is open ground for turrets
+	var foot := view.y * 0.5 + _wall_base * _world.scale.y
+	_lift = clampf(foot + GATE_CLEARANCE_PX * _world.scale.y - view.y, 0.0, view.y * 0.25)
+	_world.position = _base_position()
+
+
+## The screen point the world layer is anchored to, before any tremor.
+func _base_position() -> Vector2:
+	return get_viewport_rect().size * 0.5 - Vector2(0.0, _lift)
+
+
+## Tells the field how much of the bottom of the screen the controls cover.
+func set_bottom_inset(px_value: float) -> void:
+	if is_equal_approx(px_value, _bottom_inset):
+		return
+	_bottom_inset = px_value
+	_fit_to_screen()
 
 
 ## Ground position in metres to a point in the world layer, optionally lifted off the ground.
@@ -449,6 +477,107 @@ func show_deployment(deployment: Array) -> void:
 	for i in deployment.size():
 		_add_gun_node(i, deployment[i])
 	_set_hotspot_intensity(0.35)
+	show_routes(deployment)
+
+
+## Dashed lines from every fissure to the gate along the path the monsters will take with this
+## layout. Brutes' paths are amber, everyone else red. Nothing written on the field.
+func show_routes(deployment: Array) -> void:
+	if is_instance_valid(_routes):
+		_routes.queue_free()
+	_routes = Node2D.new()
+	_world.add_child(_routes)
+	_world.move_child(_routes, _entities.get_index())
+	var probe := BattleSim.new()
+	probe.setup(level, deployment)
+	for h in level.hotspots:
+		var heavy := false
+		for g in h.groups:
+			heavy = heavy or g.type == "brute"
+		var line := DashedPath.new()
+		var pts := PackedVector2Array()
+		for p in probe.route_from(level.hotspot_pos(h)):
+			pts.append(to_world(p))
+		var breach := level.hotspots.find(h) == _breach_route
+		if breach:  # the route that broke the gate last time: solid and strong
+			line.setup(_smooth(pts), Color("#f85936"), 9.0, false, true)
+		else:
+			line.setup(_smooth(pts), Color("#ffcb5e") if heavy else Color("#f2775a"), 7.0 if heavy else 5.0, heavy)
+		_routes.add_child(line)
+
+
+## After a defeat: dashed outlines where turrets stood last time (only those since moved), and
+## the route that broke the gate drawn solid.
+func show_last_plan(last: Array, now: Array, breach_hotspot: int) -> void:
+	if is_instance_valid(_last_plan):
+		_last_plan.queue_free()
+	_breach_route = breach_hotspot
+	_last_plan = Node2D.new()
+	_world.add_child(_last_plan)
+	_world.move_child(_last_plan, _entities.get_index())
+	var cells := {}
+	for d in now:
+		cells[d.cell] = true
+	for d in last:
+		if cells.has(d.cell):
+			continue
+		var mark := GhostTile.new()
+		mark.rect = _cell_rect(d.cell)
+		_last_plan.add_child(mark)
+	show_routes(now)
+
+
+func hide_routes() -> void:
+	if is_instance_valid(_routes):
+		_routes.queue_free()
+	_routes = null
+
+
+## Rounds a cell-to-cell path into a curve (Chaikin), so it reads as a walk, not a grid.
+func _smooth(pts: PackedVector2Array) -> PackedVector2Array:
+	var cur := pts
+	for _k in 3:
+		if cur.size() < 3:
+			break
+		var nxt := PackedVector2Array([cur[0]])
+		for i in cur.size() - 1:
+			nxt.append(cur[i].lerp(cur[i + 1], 0.25))
+			nxt.append(cur[i].lerp(cur[i + 1], 0.75))
+		nxt.append(cur[cur.size() - 1])
+		cur = nxt
+	return cur
+
+
+## The largest distance at which this wave's monsters notice a turret and leave their path.
+func _lure_radius() -> float:
+	var r := 0.0
+	for h in level.hotspots:
+		for g in h.groups:
+			r = maxf(r, float(Defs.MONSTERS[g.type].detect))
+	return r
+
+
+## Range, full-damage, lure and blind rings for a turret type, as one node.
+func _rings_for(type: String) -> Node2D:
+	var n := Node2D.new()
+	var gun: Dictionary = Defs.GUNS[type]
+	if float(gun.damage) > 0.0:
+		var range_ring := RangeRing.new()
+		range_ring.setup(float(gun.range) * PX_PER_M, DEPTH, Color("#4fd6e0"))
+		range_ring.name = "Range"
+		n.add_child(range_ring)
+		if float(gun.falloff_floor) < 1.0:  # full damage only up close
+			var core := RangeRing.new()
+			core.setup(float(gun.falloff_start) * PX_PER_M, DEPTH, Color("#4fd6e0"), "disc")
+			n.add_child(core)
+	var lure := RangeRing.new()
+	lure.setup(_lure_radius() * PX_PER_M, DEPTH, Color("#f2775a"), "dashed")
+	n.add_child(lure)
+	if float(gun.min_range) > 0.0:
+		var blind := RangeRing.new()
+		blind.setup(float(gun.min_range) * PX_PER_M, DEPTH, Color("#f2775a"), "hatched")
+		n.add_child(blind)
+	return n
 
 
 func _clear_dynamic() -> void:
@@ -485,6 +614,17 @@ func _add_gun_node(id: int, d: Dictionary) -> UnitView:
 		var bags := SandbagRing.new()
 		view.add_child(bags)
 		view.move_child(bags, 0)
+	var order: String = d.get("order", "")
+	if order != "":  # a small badge with the one monster type this turret will fire at
+		var badge := Sprite2D.new()
+		var tex: Texture2D = load(STAND_IN_ART % Defs.MONSTERS[Defs.ORDERS[order].target].model)
+		badge.texture = tex
+		badge.scale = Vector2.ONE * (54.0 / tex.get_width())
+		badge.position = Vector2(-58.0, -120.0)
+		var plate := OrderPlate.new()
+		plate.position = badge.position
+		view.add_child(plate)
+		view.add_child(badge)
 	view.add_bar(1.6, TURRET_BAR_HEIGHT_M, Color("#5ee08a"))
 	_entities.add_child(view)
 	_gun_nodes[id] = view
@@ -499,15 +639,10 @@ func set_held(type: String) -> void:
 	if type == "":
 		return
 	_ghost = Node2D.new()
+	var rings := _rings_for(type)
+	_ghost.add_child(rings)
+	_ghost_ring = rings.get_node_or_null("Range")
 	_ghost.add_child(_make_gun_view(type))
-	_ghost_ring = RangeRing.new()
-	_ghost_ring.setup(float(Defs.GUNS[type].range) * PX_PER_M, DEPTH, Color("#4fd6e0"))
-	_ghost.add_child(_ghost_ring)
-	var min_range: float = Defs.GUNS[type].min_range
-	if min_range > 0.0:  # the blind zone around the turret
-		var blind := RangeRing.new()
-		blind.setup(min_range * PX_PER_M, DEPTH, Color("#ff6b63"))
-		_ghost.add_child(blind)
 	_ghost.visible = false
 	_ghost.z_index = 5
 	_world.add_child(_ghost)
@@ -518,7 +653,8 @@ func update_ghost(cell: Vector2i, valid: bool) -> void:
 		return
 	_ghost.visible = level.view_rect.has_point(cell)
 	_ghost.position = to_world(level.cell_center(cell))
-	_ghost_ring.set_color(Color("#4fd6e0") if valid else Color("#ff6b63"))
+	if _ghost_ring:
+		_ghost_ring.set_color(Color("#4fd6e0") if valid else Color("#ff6b63"))
 
 
 ## Pulsing amber tiles on the field: an area, or a single tile for the most direct hint.
@@ -540,6 +676,9 @@ func show_focus(cell: Vector2i) -> void:
 		return
 	clear_focus()
 	_focus_cell = cell
+	for d in _gun_nodes.values():
+		if (d as UnitView).ground == level.cell_center(cell):
+			pass
 	_focus_mark = CellOverlay.new()
 	_focus_mark.add_cell(_cell_rect(cell), Color(1.0, 0.72, 0.22, 0.45), Color(1.0, 0.82, 0.4, 1.0))
 	_world.add_child(_focus_mark)
@@ -547,6 +686,21 @@ func show_focus(cell: Vector2i) -> void:
 	_focus_tween = create_tween().set_loops()
 	_focus_tween.tween_property(_focus_mark, "modulate:a", 0.5, 0.5)
 	_focus_tween.tween_property(_focus_mark, "modulate:a", 1.0, 0.5)
+
+
+## Rings around the selected placed turret.
+func show_focus_rings(cell: Vector2i, type: String) -> void:
+	clear_focus_rings()
+	_focus_rings = _rings_for(type)
+	_focus_rings.position = to_world(level.cell_center(cell))
+	_world.add_child(_focus_rings)
+	_world.move_child(_focus_rings, _entities.get_index())
+
+
+func clear_focus_rings() -> void:
+	if is_instance_valid(_focus_rings):
+		_focus_rings.queue_free()
+	_focus_rings = null
 
 
 func clear_focus() -> void:
@@ -575,7 +729,7 @@ func gun_screen_pos(id: int, height: float) -> Vector2:
 
 ## The foot of the wall, in the middle, on the UI canvas. Ignores the screen tremor.
 func wall_foot_screen_pos() -> Vector2:
-	return get_viewport_rect().size * 0.5 + Vector2(0.0, _wall_base) * _world.scale
+	return _base_position() + Vector2(0.0, _wall_base) * _world.scale
 
 
 func screen_to_cell(screen_pos: Vector2) -> Vector2i:
@@ -632,6 +786,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func begin_battle(s: BattleSim) -> void:
 	sim = s
 	set_held("")
+	hide_routes()
+	clear_focus_rings()
 
 
 func _view_dt() -> float:
@@ -892,7 +1048,7 @@ func _process(delta: float) -> void:
 		_tremor = 0.0
 		_fit_to_screen()
 		return
-	_world.position = get_viewport_rect().size * 0.5 + Vector2(randf_range(-1, 1), randf_range(-1, 1)) * _tremor
+	_world.position = _base_position() + Vector2(randf_range(-1, 1), randf_range(-1, 1)) * _tremor
 
 
 ## After the breach: surviving monsters run through the gate.
@@ -932,11 +1088,13 @@ class RangeRing extends Node2D:
 	var _radius := 0.0
 	var _depth := 1.0
 	var _color := Color.WHITE
+	var _style := "ring"   # ring | disc (filled, no edge) | dashed (lure) | hatched (blind zone)
 
-	func setup(radius_px: float, depth: float, color: Color) -> void:
+	func setup(radius_px: float, depth: float, color: Color, style := "ring") -> void:
 		_radius = radius_px
 		_depth = depth
 		_color = color
+		_style = style
 
 	func set_color(color: Color) -> void:
 		_color = color
@@ -944,8 +1102,75 @@ class RangeRing extends Node2D:
 
 	func _draw() -> void:
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, _depth))
-		draw_circle(Vector2.ZERO, _radius, Color(_color, 0.1))
-		draw_arc(Vector2.ZERO, _radius, 0.0, TAU, 96, Color(_color, 0.95), 3.0, true)
+		match _style:
+			"disc":
+				draw_circle(Vector2.ZERO, _radius, Color(_color, 0.2))
+			"dashed":
+				draw_circle(Vector2.ZERO, _radius, Color(_color, 0.06))
+				var dashes := 40
+				for k in dashes:
+					var a0 := TAU * float(k) / float(dashes)
+					draw_arc(Vector2.ZERO, _radius, a0, a0 + TAU / float(dashes) * 0.55, 6, Color(_color, 0.95), 3.5, true)
+			"hatched":
+				draw_circle(Vector2.ZERO, _radius, Color(_color, 0.12))
+				var step := 14.0
+				var x := -_radius
+				while x < _radius:
+					var h := sqrt(maxf(_radius * _radius - x * x, 0.0))
+					var x2 := minf(x + h * 2.0, _radius)
+					var off := x2 - x
+					draw_line(Vector2(x, h), Vector2(x + off, h - off), Color(_color, 0.55), 2.5, true)
+					x += step
+				draw_arc(Vector2.ZERO, _radius, 0.0, TAU, 64, Color(_color, 0.9), 2.5, true)
+			_:
+				draw_circle(Vector2.ZERO, _radius, Color(_color, 0.1))
+				draw_arc(Vector2.ZERO, _radius, 0.0, TAU, 96, Color(_color, 0.95), 3.0, true)
+
+
+## A dashed route line in world pixels; heavy units' routes use round dots.
+class DashedPath extends Node2D:
+	var _pts := PackedVector2Array()
+	var _color := Color.WHITE
+	var _width := 5.0
+	var _dotted := false
+
+	var _solid := false
+
+	func setup(pts: PackedVector2Array, color: Color, width: float, dotted: bool, solid := false) -> void:
+		_pts = pts
+		_color = color
+		_width = width
+		_dotted = dotted
+		_solid = solid
+
+	func _draw() -> void:
+		if _solid:
+			draw_polyline(_pts, Color(_color, 0.95), _width, true)
+			return
+		var on := 22.0 if not _dotted else 4.0
+		var off := 14.0 if not _dotted else 16.0
+		var carry := 0.0
+		var drawing := true
+		for i in _pts.size() - 1:
+			var a := _pts[i]
+			var b := _pts[i + 1]
+			var seg := a.distance_to(b)
+			var t := 0.0
+			while t < seg:
+				var left := (on if drawing else off) - carry
+				var step := minf(left, seg - t)
+				if drawing:
+					var p0 := a.lerp(b, t / seg)
+					var p1 := a.lerp(b, (t + step) / seg)
+					if _dotted:
+						draw_circle(p0, _width * 0.6, Color(_color, 0.95))
+					else:
+						draw_line(p0, p1, Color(_color, 0.9), _width, true)
+				t += step
+				carry += step
+				if carry >= (on if drawing else off) - 0.001:
+					carry = 0.0
+					drawing = not drawing
 
 
 ## Cracked, rust-red tiles with a hazard-striped outer border, so it never reads as plain dirt.
@@ -1006,3 +1231,26 @@ class SandbagRing extends Node2D:
 			draw_set_transform(at, angle + PI * 0.5, Vector2(1.0, 0.8))
 			draw_rect(BAG, Color("#c2a46a"))
 			draw_rect(BAG, Color("#7d6638"), false, 2.0)
+
+
+## Cyan plate behind a turret's order badge.
+class OrderPlate extends Node2D:
+	func _draw() -> void:
+		draw_rect(Rect2(-32, -22, 64, 44), Color("#7af1eb"))
+		draw_rect(Rect2(-32, -22, 64, 44), Color("#14171a"), false, 3.0)
+
+
+## Dashed outline of a tile a turret stood on in the last battle.
+class GhostTile extends Node2D:
+	var rect := Rect2()
+
+	func _draw() -> void:
+		draw_rect(rect.grow(-4.0), Color(0.95, 0.89, 0.8, 0.12))
+		var pts := [rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y), rect.position]
+		for i in 4:
+			var a: Vector2 = pts[i]
+			var b: Vector2 = pts[i + 1]
+			var n := 6
+			for k in n:
+				if k % 2 == 0:
+					draw_line(a.lerp(b, float(k) / n), a.lerp(b, float(k + 1) / n), Color(0.95, 0.89, 0.8, 0.9), 3.0)

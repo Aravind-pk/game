@@ -2,7 +2,7 @@ class_name HeaderPlate
 extends Control
 ## Dark slanted title plate over the left side of the painted header strip.
 
-const COVER := 0.66  # share of the width the plate covers before the slant
+const COVER := 0.56  # share of the width the plate covers before the slant
 
 
 func _init() -> void:

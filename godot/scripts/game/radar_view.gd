@@ -12,12 +12,28 @@ static var _camo_by_seed := {}
 var level: LevelData
 var deployment: Array = []
 var compact := false
+var show_routes := true
+var _routes: Array = []         # [{points, heavy}] in cells, from the sim's own flow field
 
 
 func set_level(lv: LevelData, dep: Array = []) -> void:
 	level = lv
 	deployment = dep
+	_routes = RadarView.routes_of(lv, dep)
 	queue_redraw()
+
+
+## Each hotspot's path to the gate with this layout, in metres, plus whether brutes walk it.
+static func routes_of(lv: LevelData, dep: Array) -> Array:
+	var probe := BattleSim.new()
+	probe.setup(lv, dep)
+	var out := []
+	for h in lv.hotspots:
+		var heavy := false
+		for g in h.groups:
+			heavy = heavy or g.type == "brute"
+		out.append({"points": probe.route_from(lv.hotspot_pos(h)), "heavy": heavy})
+	return out
 
 
 func _notification(what: int) -> void:
@@ -60,11 +76,36 @@ func _draw() -> void:
 	if not compact:
 		_label_centered("CAMERA AREA", view.get_center() + Vector2(0, -UiKit.px(8)), UiKit.px(14), UiKit.INK)
 
+	if show_routes:
+		for r in _routes:
+			var pts := PackedVector2Array()
+			for p in r.points:
+				pts.append(p / Defs.CELL * k)
+			var col := Color("#ffcb5e") if r.heavy else UiKit.THREAT
+			_dashed(pts, col, UiKit.px(1.6 if r.heavy else 1.2), r.heavy)
 	for d in deployment:
 		draw_circle(cell.call(Vector2(d.cell) + Vector2(0.5, 0.5)), UiKit.px(2.4), UiKit.FRIENDLY)
 	for h in level.hotspots:
 		_draw_hotspot(h, cell.call(h.cell + Vector2(0.5, 0.5)))
 	draw_rect(Rect2(Vector2.ZERO, size), UiKit.LINE, false, 2.0)
+
+
+func _dashed(pts: PackedVector2Array, col: Color, w: float, dotted: bool) -> void:
+	var on := UiKit.px(1.6 if dotted else 5.0)
+	var off := UiKit.px(3.4)
+	var acc := 0.0
+	for i in pts.size() - 1:
+		var a := pts[i]
+		var b := pts[i + 1]
+		var seg := a.distance_to(b)
+		var t := 0.0
+		while t < seg:
+			var phase := fmod(acc + t, on + off)
+			var step := minf((on - phase) if phase < on else (on + off - phase), seg - t)
+			if phase < on:
+				draw_line(a.lerp(b, t / seg), a.lerp(b, (t + step) / seg), col, w, true)
+			t += maxf(step, 0.5)
+		acc += seg
 
 
 func _draw_gate(cell: Callable) -> void:

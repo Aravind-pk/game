@@ -8,6 +8,8 @@ const f = Math.fround;
 
 export const SIM_DT = 1.0 / 30.0;
 export const CELL = 2.0;
+/** A turret order limits which monster type it fires at (matches ORDERS in defs.gd). */
+export const ORDER_TARGET = { heavy: 'brute', fast: 'stalker' };
 const EMERGE_WARN = 1.6;
 const EMERGE_TIME = 0.9;
 const RETARGET_INTERVAL = 0.25;
@@ -123,7 +125,7 @@ export function simulate(map, deployment) {
       id, type: d.type, cell: d.cell, px: (d.cell[0] + 0.5) * CELL, py: (d.cell[1] + 0.5) * CELL,
       hp: s.hp, damage: s.damage, fireRate: s.fire_rate, range: s.range, splash: s.splash, minRange: s.min_range, falloffStart: s.falloff_start, falloffFloor: s.falloff_floor,
       blast: s.blast, blastRadius: s.blast_radius, fixed: !!d.fixed,
-      projSpeed: s.projectile_speed, radius: s.radius, ammo: d.ammo, maxAmmo: d.ammo, cooldown: 0,
+      projSpeed: s.projectile_speed, radius: s.radius, ammo: d.ammo, maxAmmo: d.ammo, cooldown: 0, only: ORDER_TARGET[d.order ?? ''] ?? '',
       alive: true, dealt: new Float64Array(map.hotspots.length), diedAt: -1,
     };
   });
@@ -280,7 +282,7 @@ export function simulate(map, deployment) {
       monsters.push({
         id: monsters.length, x, y, hp: st.hp, speed: st.speed, damage: st.damage, attackRate: st.attack_rate,
         detect: st.detect, attackRange: st.attack_range, radius: st.radius, state: 1, stateT: EMERGE_TIME,
-        target: -1, cooldown: 0.5, retarget: 0, hotspot: s.hotspot,
+        target: -1, cooldown: 0.5, retarget: 0, hotspot: s.hotspot, type: s.type,
       });
       alive++;
     }
@@ -394,6 +396,7 @@ export function simulate(map, deployment) {
       let bestD = INF;
       for (const m of monsters) {
         if (m.state !== 2 || m.hp <= 0) continue;
+        if (g.only && m.type !== g.only) continue;
         const d = dist(g.px, g.py, m.x, m.y) - m.radius;
         if (d <= g.range && d >= g.minRange && d < bestD) {
           bestD = d;

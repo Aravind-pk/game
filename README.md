@@ -11,9 +11,26 @@ anywhere on the battlefield, then watch a deterministic, fully automatic battle 
 Open `godot/` in **Godot 4.5** and press Play (main scene: `scenes/main.tscn`).
 The game is portrait 1080×1920 and uses the Compatibility renderer.
 
-**Flow:** Briefing (enemy list, gate HP, spawn radar) → Plan & Deploy (pick a turret card, tap the
-field; tap a placed turret to pick it up, drag to move) → **DEFEND** (fully automatic, 1×/2× speed)
-→ Result. **Retry** keeps your deployment so you can adjust it.
+**Flow:** every wave runs **Briefing → Recon → Deploy → Defend**.
+
+- **Briefing**: gate HP and how many hits it takes, each monster with the turrets that counter it,
+  your turrets, and the wave's order budget.
+- **Recon** (its own step): the spawn map with each group's route to the gate, and a timeline of
+  when each group surfaces and roughly when it reaches the gate.
+- **Deploy**: the field shows visuals only. Dashed red routes (amber dots for brutes) update as
+  turrets bend them. Holding or selecting a turret shows its range (cyan ring), full-damage zone
+  (cyan disc), lure ring (dashed red: monsters inside leave their route to attack it) and blind
+  zone (hatched). Wave 01 names these once with three coach cards; later waves don't.
+- **Orders**: a Cannon can be set to *Heavy only* and a Sniper to *Fast only*, from a small budget
+  per wave (1 from wave 04, or `orders` in the level file). MG Turrets take no orders.
+- **Defend**: 1×/2×/4× and Skip, with a three-line ticker of key moments. When every turret is
+  empty and monsters remain, the battle stops with *Defense Depleted*.
+- **Result**: victory gives up to three stars (held, untouched, 20% ammo left), saved per level.
+  A defeat opens a report: the cause, key moments and each turret's ammo used. **Retry** keeps
+  your layout, outlines turrets you've moved and draws the route that broke the gate in solid red.
+
+The counters and pause live in the header. The gate plate sits on the gate, and the tray is
+translucent over the wall, so the whole field above it is open ground.
 
 ## Graphics
 

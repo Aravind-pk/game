@@ -26,7 +26,9 @@ for (const file of readdirSync(levelsDir).filter((n) => /^level_\d+\.json$/.test
       let c;
       do c = map.deployable[Math.floor(rnd() * map.deployable.length)]; while (used.has(c));
       used.add(c);
-      return { type: g.type, level: g.level, ammo: g.ammo, cell: c };
+      // every other case gives each Cannon and Sniper its order, so orders stay in step too
+      const order = i % 2 === 1 ? ({ cannon: 'heavy', sniper: 'fast' })[g.type] : undefined;
+      return order ? { type: g.type, level: g.level, ammo: g.ammo, cell: c, order } : { type: g.type, level: g.level, ammo: g.ammo, cell: c };
     }));
     const r = simulate(map, dep);
     cases.push({

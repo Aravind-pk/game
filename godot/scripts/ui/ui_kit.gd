@@ -9,6 +9,7 @@ const S := 2.7
 const BG := Color("#14171a")
 const PANEL := Color("#1d2124")
 const PANEL_SOLID := Color(0.114, 0.129, 0.141, 0.97)
+const PANEL_GLASS := Color(0.114, 0.129, 0.141, 0.72)  # tray pieces over the gate: the wall shows through
 const PANEL_RAISED := Color("#2a2f33")
 const STRUCTURE := Color("#3a4044")
 const LINE := Color("#cfc7b4")
@@ -227,7 +228,7 @@ static func action(label: String, cb: Callable, variant := "primary", icon_name 
 
 
 ## Small card on the levels screen: its number, its name, and a tick once cleared.
-static func level_card(number: int, title_text: String, cleared: bool, current: bool, cb: Callable) -> Button:
+static func level_card(number: int, title_text: String, cleared: bool, current: bool, cb: Callable, stars := 0) -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(0, px(82))
@@ -248,7 +249,13 @@ static func level_card(number: int, title_text: String, cleared: bool, current: 
 	var name_label := text(title_text, "small", INK_MUTED, HORIZONTAL_ALIGNMENT_CENTER)
 	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(name_label)
-	if cleared:
+	if stars > 0:
+		var sr := hbox(1)
+		sr.alignment = BoxContainer.ALIGNMENT_CENTER
+		for k in 3:
+			sr.add_child(glyph("star" if k < stars else "star_empty", 10, AMBER if k < stars else LINE_DIM))
+		v.add_child(sr)
+	elif cleared:
 		var tick := glyph("check", 13, FRIENDLY)
 		tick.position = Vector2(px(4), px(4))
 		tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -501,7 +508,7 @@ static func remove_button(cb: Callable, size_pt := 24.0) -> Button:
 
 static func set_card_state(b: Button, selected: bool, placed: bool, removable := false) -> void:
 	for st in ["normal", "hover", "pressed", "disabled"]:
-		b.add_theme_stylebox_override(st, box(PANEL, 6, AMBER if selected else LINE, 2.0 if selected else 1.0))
+		b.add_theme_stylebox_override(st, box(PANEL_GLASS, 6, AMBER if selected else LINE, 2.0 if selected else 1.0))
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	var dim := placed and not selected
 	for n in ["Art", "Name"]:
@@ -511,18 +518,50 @@ static func set_card_state(b: Button, selected: bool, placed: bool, removable :=
 
 
 # ---------------------------------------------------------------- briefing rows
-static func enemy_row(title: String, desc: String, art: Texture2D) -> PanelContainer:
-	var p := inset(6, 2)
-	var h := hbox(12)
+static func enemy_row(title: String, desc: String, art: Texture2D, counters: Array = []) -> PanelContainer:
+	var p := inset(6, 3)
+	var h := hbox(10)
 	p.add_child(h)
-	h.add_child(image(art, 76, 36))
-	var v := vbox(-2)
+	h.add_child(image(art, 64, 40))
+	var v := vbox(0)
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_child(text(title, "label_lg"))
-	v.add_child(text(desc, "caption", INK_MUTED))
+	var d := text(desc, "caption", INK_MUTED)
+	d.clip_text = true
+	v.add_child(d)
+	if not counters.is_empty():
+		var c := hbox(5)
+		c.add_child(text("Counter", "small", INK_MUTED))
+		for n in counters:
+			var chip := PanelContainer.new()
+			var sb := box(Color(0, 0, 0, 0.35), 3, Color(0, 0, 0, 0), 0)
+			sb.content_margin_left = px(5)
+			sb.content_margin_right = px(5)
+			chip.add_theme_stylebox_override("panel", sb)
+			chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			chip.add_child(text(n, "small", FRIENDLY))
+			c.add_child(chip)
+		v.add_child(c)
 	h.add_child(v)
 	return p
+
+
+## The four steps of a wave across the top of the briefing and recon sheets.
+static func stepper(active: int) -> HBoxContainer:
+	var h := hbox(4)
+	var names := ["1 Briefing", "2 Recon", "3 Deploy", "4 Defend"]
+	for i in names.size():
+		var col := vbox(3)
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var bar := ColorRect.new()
+		bar.color = AMBER if i == active else (FRIENDLY if i < active else STRUCTURE)
+		bar.custom_minimum_size.y = px(3)
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		col.add_child(bar)
+		col.add_child(text(names[i], "small", AMBER if i == active else INK_MUTED))
+		h.add_child(col)
+	return h
 
 
 static func defense_card(title: String, ammo_text: String, art: Texture2D) -> PanelContainer:
@@ -547,3 +586,70 @@ static func stat_row(label_text: String, value: String) -> HBoxContainer:
 	h.add_child(spacer())
 	h.add_child(text(value, "label_lg"))
 	return h
+
+
+# ---------------------------------------------------------------- turret order
+## Full-width toggle for the selected turret's one order: target art, label, budget.
+static func order_button(cb: Callable) -> Button:
+	var b := _button_base(cb, PANEL_GLASS, LINE, 1.0)
+	b.custom_minimum_size.y = px(36)
+	var h := hbox(10)
+	_fill_rect(h)
+	h.offset_left = px(10)
+	h.offset_right = -px(12)
+	b.add_child(h)
+	var art := image(null, 40, 26)
+	art.name = "Art"
+	h.add_child(art)
+	var l := text("", "label_lg")
+	l.name = "Label"
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(l)
+	var c := text("", "small", AMBER)
+	c.name = "Cost"
+	h.add_child(c)
+	return b
+
+
+static func set_order_button(b: Button, label_text: String, target_model: String, on: bool, left: int, budget: int) -> void:
+	var col := FRIENDLY if on else LINE
+	for st in ["normal", "hover", "pressed", "disabled"]:
+		b.add_theme_stylebox_override(st, box(Color(0.06, 0.19, 0.18, 0.85) if on else PANEL_GLASS, 8, col, 2.0 if on else 1.0))
+	(b.find_child("Art", true, false) as TextureRect).texture = load("res://assets/ui/art/%s.png" % target_model)
+	var l := b.find_child("Label", true, false) as Label
+	l.text = label_text.to_upper()
+	l.add_theme_color_override("font_color", FRIENDLY if on else INK)
+	var c := b.find_child("Cost", true, false) as Label
+	c.text = "ON" if on else "ORDERS %d / %d" % [left, budget]
+	c.add_theme_color_override("font_color", FRIENDLY if on else (AMBER if left > 0 else INK_MUTED))
+
+
+# ---------------------------------------------------------------- battle controls
+static func speed_button(label_text: String, cb: Callable) -> Button:
+	var b := _button_base(cb, PANEL_GLASS, LINE, 1.0)
+	b.custom_minimum_size = Vector2(px(52), px(46))
+	var l := text(label_text, "plate", INK, HORIZONTAL_ALIGNMENT_CENTER)
+	l.name = "Label"
+	_fill_rect(l)
+	b.add_child(l)
+	return b
+
+
+static func set_speed_button(b: Button, on: bool) -> void:
+	for st in ["normal", "hover", "pressed", "disabled"]:
+		b.add_theme_stylebox_override(st, box(AMBER if on else PANEL_GLASS, 8, AMBER_STRONG if on else LINE, 1.0))
+	(b.get_node("Label") as Label).add_theme_color_override("font_color", ON_AMBER if on else INK)
+
+
+## One of the three victory stars with what it was for.
+static func star_tile(caption: String, earned: bool) -> PanelContainer:
+	var p := inset(4, 6, LINE_DIM)
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var v := vbox(2)
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	p.add_child(v)
+	var g := glyph("star" if earned else "star_empty", 28, AMBER if earned else LINE_DIM)
+	g.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	v.add_child(g)
+	v.add_child(text(caption, "small", INK if earned else INK_MUTED, HORIZONTAL_ALIGNMENT_CENTER))
+	return p
