@@ -15,8 +15,10 @@ const PROGRESS_FILE := "user://progress.json"
 const EDGE_PT := 12.0
 const HEADER_PT := 50.0
 const EMBLEM_PT := 62.0
-const GATE_PILL_HEIGHT_M := 5.0
 const AMMO_CHIP_HEIGHT_M := 4.6
+const FOCUS_X_HEIGHT_M := 4.6
+const CARRY_START_PX := 14.0
+const LEVEL_GRID_COLUMNS := 4
 
 ## On-screen wording for the keys used in level data.
 const GUN_UI := {
@@ -36,10 +38,13 @@ var battlefield: Battlefield
 var level_paths: Array = []
 var level_index := 0
 var unlocked := 0
+var _cleared := {}            # level index -> true, for every level won
+var _level_titles: Array[String] = []
 var level: LevelData
 var guns: Array = []          # one entry per available turret: {type, level, ammo}
 var deployment: Array = []    # [{type, level, ammo, cell, gun}]
 var held := -1                # index into guns currently held for placement
+var focused := -1             # index into guns of the placed turret selected for moving or removing
 var phase := Phase.BRIEFING
 var sim: BattleSim
 var speed := 1.0
@@ -65,6 +70,12 @@ var _gate_val: Label
 var _tray: Control
 var _cards_box: HBoxContainer
 var _cards: Array = []
+var _remove_x: Button
+var _carry_gun := -1          # turret being dragged, or -1
+var _carry_home := Vector2i(-1, -1)  # where it stood before the drag, if it was placed
+var _carry_press := -1        # card pressed but not yet moved far enough to count as a drag
+var _carry_press_pos := Vector2.ZERO
+var _suppress_card_tap := false
 var _combat_bar: Control
 var _speed_label: Label
 var _hint_label: Label
@@ -98,7 +109,7 @@ func _ready() -> void:
 	battlefield = Battlefield.new()
 	add_child(battlefield)
 	battlefield.cell_tapped.connect(_on_cell_tapped)
-	battlefield.cell_dragged.connect(_on_cell_dragged)
+	battlefield.drag_started.connect(_on_drag_started)
 	battlefield.hover_changed.connect(_on_hover)
 	_build_ui()
 	var start := unlocked
@@ -122,6 +133,7 @@ func start_level(i: int) -> void:
 	for g in level.fixed:  # holdouts are part of the layout from the start; gun -1 means not movable
 		deployment.append({"type": g.type, "level": g.level, "ammo": g.ammo, "cell": g.cell, "gun": -1})
 	held = -1
+	focused = -1
 	sim = null
 	_hints_used = 0
 	_intel_shown = 0
@@ -158,6 +170,7 @@ func defend() -> void:
 		_toast_msg("Deploy at least one turret.", UiKit.THREAT)
 		return
 	held = -1
+	focused = -1
 	battlefield.set_held("")
 	_clear_hint_mark()
 	deployment = BattleSim.canonical_order(deployment)
@@ -226,6 +239,7 @@ func _process(delta: float) -> void:
 		if _end_timer <= 0.0:
 			if sim.state == BattleSim.State.VICTORY:
 				unlocked = maxi(unlocked, mini(level_index + 1, level_paths.size() - 1))
+				_cleared[level_index] = true
 				_save_progress()
 			_set_phase(Phase.RESULT)
 
@@ -255,17 +269,25 @@ func _dep_of_gun(gi: int) -> int:
 
 
 func select_card(gi: int) -> void:
-	if phase != Phase.DEPLOYMENT:
+	if phase != Phase.DEPLOYMENT or _suppress_card_tap:
 		return
-	if held == gi:
+	if _dep_of_gun(gi) >= 0:  # a placed turret is selected, so it can be found, moved or removed
 		held = -1
+		focused = -1 if focused == gi else gi
 	else:
-		var di := _dep_of_gun(gi)
-		if di >= 0:  # tapping a placed card picks that turret back up
-			deployment.remove_at(di)
-			battlefield.show_deployment(deployment)
-		held = gi
+		focused = -1
+		held = -1 if held == gi else gi
 	battlefield.set_held(guns[held].type if held >= 0 else "")
+	_refresh()
+
+
+func remove_gun(gi: int) -> void:
+	var di := _dep_of_gun(gi)
+	if di < 0:
+		return
+	deployment.remove_at(di)
+	focused = -1
+	battlefield.show_deployment(deployment)
 	_refresh()
 
 
@@ -295,35 +317,99 @@ func _on_cell_tapped(c: Vector2i) -> void:
 		else:
 			_toast_msg("Invalid tile", UiKit.THREAT)
 	else:
-		var di := _dep_at(c)
+		var di: int = battlefield.pressed_gun if battlefield.pressed_gun >= 0 else _dep_at(c)
 		if di >= 0 and deployment[di].gun < 0:
 			_toast_msg("This holdout is dug in.")
 		elif di >= 0:
-			var d: Dictionary = deployment[di]
-			deployment.remove_at(di)
-			held = d.gun
-			battlefield.show_deployment(deployment)
-			battlefield.set_held(d.type)
-			battlefield.update_ghost(c, true)
-			_toast_msg("Tap a new tile. Tap its card to put it back.")
+			focused = -1 if focused == deployment[di].gun else deployment[di].gun
+		else:
+			focused = -1
 	_refresh()
 
 
-func _on_cell_dragged(from: Vector2i, to: Vector2i) -> void:
-	if phase != Phase.DEPLOYMENT:
+func _on_drag_started(cell: Vector2i) -> void:
+	if phase != Phase.DEPLOYMENT or held >= 0:
 		return
-	if held >= 0:
-		_on_cell_tapped(to)
-		return
-	var di := _dep_at(from)
+	var di: int = battlefield.pressed_gun if battlefield.pressed_gun >= 0 else _dep_at(cell)
 	if di < 0 or deployment[di].gun < 0:
 		return
-	if _valid_cell(to):
-		deployment[di].cell = to
+	battlefield.cancel_press()
+	_begin_carry(deployment[di].gun)
+
+
+# ------------------------------------------------------------------ dragging turrets
+
+## Lifts a turret, from its card or from the field, and shows it following the pointer.
+func _begin_carry(gi: int) -> void:
+	_carry_home = Vector2i(-1, -1)
+	var di := _dep_of_gun(gi)
+	if di >= 0:
+		_carry_home = deployment[di].cell
+		deployment.remove_at(di)
 		battlefield.show_deployment(deployment)
-	else:
-		_toast_msg("Invalid tile", UiKit.THREAT)
+	_carry_gun = gi
+	held = gi
+	focused = -1
+	battlefield.set_held(guns[gi].type)
 	_refresh()
+
+
+## Drops the carried turret: on a free tile it goes there, on the tray it is put away,
+## anywhere else it returns to where it was.
+func _drop_carry(c: Vector2i, over_tray: bool) -> void:
+	var gi := _carry_gun
+	var home := _carry_home
+	_carry_gun = -1
+	_carry_home = Vector2i(-1, -1)
+	held = -1
+	battlefield.set_held("")
+	if not over_tray:
+		if not place(gi, c):
+			if home.x >= 0:
+				place(gi, home)
+			_toast_msg("Invalid tile", UiKit.THREAT)
+	battlefield.show_deployment(deployment)
+	_refresh()
+
+
+func _card_at(pos: Vector2) -> int:
+	for gi in _cards.size():
+		var card: Button = _cards[gi]
+		if not card.get_global_rect().has_point(pos):
+			continue
+		var remove := card.find_child("Remove", true, false) as Control
+		return -1 if remove.visible and remove.get_global_rect().has_point(pos) else gi
+	return -1
+
+
+## Returns true when the event belonged to a turret drag.
+func _handle_carry(event: InputEvent) -> bool:
+	if phase != Phase.DEPLOYMENT:
+		return false
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_carry_press = _card_at(event.position) if _carry_gun < 0 and _tray.visible else -1
+			_carry_press_pos = event.position
+			return false
+		_carry_press = -1
+		if _carry_gun < 0:
+			return false
+		_drop_carry(battlefield.screen_to_cell(event.position), _tray.get_global_rect().has_point(event.position))
+		_suppress_card_tap = true
+		set_deferred("_suppress_card_tap", false)
+		get_viewport().set_input_as_handled()
+		return true
+	if event is InputEventMouseMotion:
+		if _carry_press >= 0 and event.position.distance_to(_carry_press_pos) > CARRY_START_PX:
+			var gi := _carry_press
+			_carry_press = -1
+			_begin_carry(gi)
+		if _carry_gun >= 0:
+			var c := battlefield.screen_to_cell(event.position)
+			battlefield.update_ghost(c, _valid_cell(c))
+			get_viewport().set_input_as_handled()
+			return true
+	return false
 
 
 func _on_hover(c: Vector2i) -> void:
@@ -334,6 +420,7 @@ func _on_hover(c: Vector2i) -> void:
 func clear_deployment() -> void:
 	deployment = deployment.filter(func(d): return d.gun < 0)
 	held = -1
+	focused = -1
 	battlefield.show_deployment(deployment)
 	battlefield.set_held("")
 	_refresh()
@@ -455,7 +542,7 @@ func _build_ui() -> void:
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED  # a drag on a card lifts the turret
 	scroll.custom_minimum_size.y = UiKit.px(58)
 	_tray.add_child(scroll)
 	_cards_box = UiKit.hbox(5)
@@ -492,6 +579,9 @@ func _build_ui() -> void:
 	_gate_bar = gb[1]
 	_gate_val = gb[2]
 	root.add_child(_gate_box)
+	_remove_x = UiKit.remove_button(func(): remove_gun(focused), 36)
+	_remove_x.visible = false
+	root.add_child(_remove_x)
 	get_viewport().size_changed.connect(_layout_gate_pill)
 
 	# ---- overlays + toast
@@ -523,14 +613,14 @@ func _set_panel_fill(p: PanelContainer) -> void:
 
 
 func _layout_gate_pill() -> void:
-	# centred on the gate's upper edge, but never under the bottom controls
+	# centred just below the gate, but never under the bottom controls
 	if battlefield == null or battlefield.level == null or level == null:
 		return
 	var s := _gate_box.get_combined_minimum_size()
-	var p := battlefield.gate_screen_pos(GATE_PILL_HEIGHT_M)
+	var p := battlefield.wall_foot_screen_pos()
 	var limit := _gate_box.get_parent_control().size.y - _bottom_ui_height() - s.y - UiKit.px(8)
 	_gate_box.size = s
-	_gate_box.position = Vector2(p.x - s.x * 0.5, minf(p.y - s.y * 0.5, limit))
+	_gate_box.position = Vector2(p.x - s.x * 0.5, minf(p.y + UiKit.px(4), limit))
 
 
 func _bottom_ui_height() -> float:
@@ -584,7 +674,7 @@ func _rebuild_cards() -> void:
 		var g: Dictionary = guns[gi]
 		var label: String = GUN_UI[g.type].short if g.ammo <= 0 else "%s · %d" % [GUN_UI[g.type].short, g.ammo]
 		var c := UiKit.turret_card(label, _gun_art(g.type),
-			select_card.bind(gi))
+			select_card.bind(gi), remove_gun.bind(gi))
 		_cards_box.add_child(c)
 		_cards.append(c)
 
@@ -594,14 +684,32 @@ func _refresh() -> void:
 		return
 	_wave_sub.text = "WAVE %s · %s" % [level.id, level.title.trim_prefix("The ").to_upper()]
 	for gi in _cards.size():
-		UiKit.set_card_state(_cards[gi], held == gi, _dep_of_gun(gi) >= 0)
+		UiKit.set_card_state(_cards[gi], held == gi or focused == gi, _dep_of_gun(gi) >= 0, focused == gi)
+	_update_focus()
 	_sync_hint()
 	if _hint_text != "":
 		_hint_label.text = _hint_text
 	else:
-		_hint_label.text = "Tap an open tile to place it." if held >= 0 else "Select a turret. Tap an open tile."
+		if focused >= 0:
+			_hint_label.text = "Drag it to move it, or tap the X to remove it."
+		elif held >= 0:
+			_hint_label.text = "Tap an open tile to place it."
+		else:
+			_hint_label.text = "Tap a turret, then a tile. Or drag it onto the field."
 	_refresh_hud()
 	_layout_gate_pill.call_deferred()
+
+
+## Marks the selected turret's tile and floats its X above it.
+func _update_focus() -> void:
+	var di := _dep_of_gun(focused) if focused >= 0 else -1
+	var showing := di >= 0 and phase == Phase.DEPLOYMENT
+	_remove_x.visible = showing
+	if showing:
+		battlefield.show_focus(deployment[di].cell)
+		_remove_x.position = battlefield.gun_screen_pos(di, FOCUS_X_HEIGHT_M) - _remove_x.size * 0.5
+	else:
+		battlefield.clear_focus()
 
 
 func _refresh_hud() -> void:
@@ -811,6 +919,38 @@ func _range_rules() -> String:
 	return " ".join(parts)
 
 
+## Every level as a small card. Any of them can be played, whatever the player has cleared.
+func _show_levels(back: Callable) -> void:
+	var s := _open_sheet()
+	var p: Array = UiKit.panel(12, 8)
+	s.add_child(p[0])
+	var v: VBoxContainer = p[1]
+	UiKit.titled(v, "Select Level", "%d of %d cleared" % [_cleared.size(), level_paths.size()])
+	var grid := GridContainer.new()
+	grid.columns = LEVEL_GRID_COLUMNS
+	grid.add_theme_constant_override("h_separation", UiKit.px(5))
+	grid.add_theme_constant_override("v_separation", UiKit.px(5))
+	v.add_child(grid)
+	var titles := _titles_of_levels()
+	for i in level_paths.size():
+		grid.add_child(UiKit.level_card(i + 1, titles[i], _cleared.has(i), i == level_index, _play_level.bind(i)))
+	s.add_child(UiKit.action("Back", back, "secondary", ""))
+
+
+func _titles_of_levels() -> Array[String]:
+	if _level_titles.is_empty():
+		for path in level_paths:
+			var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
+			_level_titles.append(str(data.title))
+	return _level_titles
+
+
+func _play_level(i: int) -> void:
+	paused = false
+	battlefield.sim = null
+	start_level(i)
+
+
 func _show_radar() -> void:
 	var s := _open_sheet()
 	var p: Array = UiKit.panel(15, 10)
@@ -887,6 +1027,7 @@ func _show_pause() -> void:
 	v.add_child(UiKit.image(load("res://assets/ui/art/pause_gate.jpg"), 0, 70, true))
 	v.add_child(UiKit.action("Resume Battle", toggle_pause, "primary", "play_solid", "left"))
 	v.add_child(UiKit.action("Adjust Deployment", retry, "secondary", ""))
+	v.add_child(UiKit.action("All Levels", _show_levels.bind(_show_pause), "secondary", ""))
 	v.add_child(UiKit.text("Restarts this wave with your placement saved.", "caption", UiKit.INK,
 		HORIZONTAL_ALIGNMENT_CENTER))
 
@@ -945,6 +1086,7 @@ func _show_result() -> void:
 	if won:
 		v.add_child(UiKit.action("Next Wave", next_level))
 		v.add_child(UiKit.action("Replay Wave", retry, "secondary", ""))
+		v.add_child(UiKit.action("All Levels", _show_levels.bind(_show_result), "secondary", ""))
 	else:
 		v.add_child(UiKit.action("Adjust Deployment", retry, "primary", ""))
 		var tip := "Stuck? Tap Hint while planning." if not level.solutions.is_empty() else "Return to planning with your turrets in place."
@@ -955,6 +1097,8 @@ func _show_result() -> void:
 ## Drag anywhere on an open sheet to scroll it, with mouse or touch. Godot's ScrollContainer
 ## only drag-scrolls on touchscreens and not when the drag starts on a panel inside it.
 func _input(event: InputEvent) -> void:
+	if _handle_carry(event):
+		return
 	if _sheet_scroll == null or not is_instance_valid(_sheet_scroll):
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -981,12 +1125,14 @@ func _load_progress() -> void:
 	var d = JSON.parse_string(FileAccess.get_file_as_string(PROGRESS_FILE))
 	if d is Dictionary:
 		unlocked = int(d.get("unlocked", 0))
+		for i in d.get("cleared", []):
+			_cleared[int(i)] = true
 
 
 func _save_progress() -> void:
 	var f := FileAccess.open(PROGRESS_FILE, FileAccess.WRITE)
 	if f:
-		f.store_string(JSON.stringify({"unlocked": unlocked}))
+		f.store_string(JSON.stringify({"unlocked": unlocked, "cleared": _cleared.keys()}))
 
 
 # ================================================================== automation (screenshots / CI)
@@ -1014,6 +1160,9 @@ func _apply_automation() -> void:
 		"radar":
 			begin_deployment()
 			_show_radar()
+		"levels":
+			begin_deployment()
+			_show_levels(_close_overlay)
 		"combat", "result", "pause":
 			begin_deployment()
 			defend()
@@ -1023,6 +1172,8 @@ func _apply_automation() -> void:
 		request_hint()
 	if p == "pause":
 		get_tree().create_timer(float(_args.get("shot_time", "3")) - 0.5).timeout.connect(toggle_pause)
+	if _args.has("focus") and _placed_count() > 0:
+		select_card(deployment[deployment.size() - 1].gun)
 	if _args.has("shot"):
 		get_tree().create_timer(float(_args.get("shot_time", "1.5"))).timeout.connect(_take_shot)
 

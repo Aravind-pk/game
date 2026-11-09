@@ -98,6 +98,7 @@ a per-file size limit and adds a small fetch shim that reassembles them. It writ
 godot --headless --path godot --import                                               # once, registers classes
 godot --headless --path godot --script res://tests/sim_check.gd -- level=07 trials=3
 godot --headless --path godot --script res://tests/monster_sprite_check.gd
+godot --headless --path godot --script res://tests/placement_check.gd
 ```
 
 `sim_check.gd` replays every stored solution and every hint-zone tile in the real simulation and

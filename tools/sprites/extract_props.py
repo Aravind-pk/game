@@ -24,6 +24,7 @@ MIN_SIZE = 32
 BODY_OPEN = 7          # removes grass and pebbles when finding the main body
 MIN_DEPTH_PX = 8.0     # a footprint is never thinner than this, front to back
 BROAD_DEPTH = 0.2      # half the depth of a boulder or cabinet, as a share of its width
+MAX_BASE_RISE = 0.42   # the base's edge never climbs above this share of the prop's height
 POINTS = 12            # points along the lower edge
 
 # What each row of each sheet holds, then exceptions as (row, column).
@@ -118,14 +119,15 @@ def tall_foot(art):
     solid = art[..., 3] > 200
     ys, xs = np.nonzero(solid)
     bottom = ys.max()
-    centre = (xs[ys > bottom - 40].min() + xs[ys > bottom - 40].max()) // 2
-    h = bottom - ys.min()
-    w = max(26, int((xs.max() - xs.min()) * 0.3))
-    half = w // 2
-    depth = max(MIN_DEPTH_PX, w * 0.3)
+    band = (ys > bottom - max(16, int((bottom - ys.min()) * 0.1)))
+    # The middle of the band, so grass out to one side cannot pull the foot off centre.
+    left, right = np.percentile(xs[band], [15, 85])
+    centre = (left + right) / 2.0
+    w = float(np.clip(right - left, 26, (xs.max() - xs.min()) * 0.42))
+    depth = max(MIN_DEPTH_PX, w * 0.32)
     middle = float(bottom - depth)
     angles = np.linspace(0, 2 * np.pi, POINTS, endpoint=False)
-    return np.stack([centre + np.cos(angles) * half, middle + np.sin(angles) * depth], 1)
+    return np.stack([centre + np.cos(angles) * w / 2.0, middle + np.sin(angles) * depth], 1)
 
 
 def footprint(art, broad):
@@ -141,6 +143,10 @@ def footprint(art, broad):
         if rows.size:
             lower.append((float(c), float(rows.max())))
     lower = np.array(lower)
+    # An overhang is not base: a leaning slab's raised tip must not pull the footprint up.
+    ys_all = np.nonzero(body)[0]
+    floor = ys_all.max() - (ys_all.max() - ys_all.min()) * MAX_BASE_RISE
+    lower[:, 1] = np.maximum(lower[:, 1], floor)
     # Smooth out notches between feet, which are not gaps in the base.
     for _ in range(2):
         lower[1:-1, 1] = np.maximum(lower[1:-1, 1], (lower[:-2, 1] + lower[2:, 1]) / 2)

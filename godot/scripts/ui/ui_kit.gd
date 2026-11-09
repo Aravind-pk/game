@@ -226,6 +226,36 @@ static func action(label: String, cb: Callable, variant := "primary", icon_name 
 	return b
 
 
+## Small card on the levels screen: its number, its name, and a tick once cleared.
+static func level_card(number: int, title_text: String, cleared: bool, current: bool, cb: Callable) -> Button:
+	var b := Button.new()
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(0, px(82))
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.clip_contents = true
+	b.pressed.connect(cb)
+	for st in ["normal", "hover", "pressed", "disabled"]:
+		b.add_theme_stylebox_override(st, box(PANEL_RAISED if current else PANEL, 6, AMBER if current else LINE_DIM, 2.0 if current else 1.0))
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	var v := vbox(0)
+	_fill_rect(v)
+	v.offset_left = px(3)
+	v.offset_right = -px(3)
+	v.offset_top = px(5)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(v)
+	v.add_child(text(str(number), "plate", AMBER if current else INK, HORIZONTAL_ALIGNMENT_CENTER))
+	var name_label := text(title_text, "small", INK_MUTED, HORIZONTAL_ALIGNMENT_CENTER)
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(name_label)
+	if cleared:
+		var tick := glyph("check", 13, FRIENDLY)
+		tick.position = Vector2(px(4), px(4))
+		tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(tick)
+	return b
+
+
 ## Small square tool tile: icon over a caption (RADAR / BRIEFING / CLEAR).
 static func tool_tile(label: String, cb: Callable, icon_name: String) -> Button:
 	var b := _button_base(cb, PANEL, LINE, 1.0)
@@ -418,7 +448,7 @@ static func set_ammo_chip(p: PanelContainer, ammo: int, max_ammo: int) -> void:
 
 
 # ---------------------------------------------------------------- deployment tray card
-static func turret_card(label_text: String, art: Texture2D, cb: Callable) -> Button:
+static func turret_card(label_text: String, art: Texture2D, cb: Callable, remove_cb: Callable) -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(px(58), px(58))
@@ -441,11 +471,35 @@ static func turret_card(label_text: String, art: Texture2D, cb: Callable) -> But
 	check.visible = false
 	check.position = Vector2(px(4), px(4))
 	b.add_child(check)
+	var remove := remove_button(remove_cb)
+	remove.name = "Remove"
+	remove.visible = false
+	remove.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	remove.position = Vector2(-px(26), px(2))
+	b.add_child(remove)
 	set_card_state(b, false, false)
 	return b
 
 
-static func set_card_state(b: Button, selected: bool, placed: bool) -> void:
+## The small X that takes a placed turret back off the field.
+static func remove_button(cb: Callable, size_pt := 24.0) -> Button:
+	var b := Button.new()
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2.ONE * px(size_pt)
+	b.size = b.custom_minimum_size
+	for st in ["normal", "hover", "pressed"]:
+		b.add_theme_stylebox_override(st, box(PANEL_SOLID, size_pt * 0.5, THREAT, 2.0))
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	b.pressed.connect(cb)
+	var x := glyph("close", size_pt * 0.5, THREAT)
+	x.set_anchors_preset(Control.PRESET_CENTER)
+	x.position = -Vector2.ONE * px(size_pt * 0.5) * 0.5
+	x.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(x)
+	return b
+
+
+static func set_card_state(b: Button, selected: bool, placed: bool, removable := false) -> void:
 	for st in ["normal", "hover", "pressed", "disabled"]:
 		b.add_theme_stylebox_override(st, box(PANEL, 6, AMBER if selected else LINE, 2.0 if selected else 1.0))
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
@@ -453,6 +507,7 @@ static func set_card_state(b: Button, selected: bool, placed: bool) -> void:
 	for n in ["Art", "Name"]:
 		(b.find_child(n, true, false) as CanvasItem).modulate.a = 0.55 if dim else 1.0
 	(b.find_child("Flag", true, false) as Control).visible = dim
+	(b.find_child("Remove", true, false) as Control).visible = removable
 
 
 # ---------------------------------------------------------------- briefing rows

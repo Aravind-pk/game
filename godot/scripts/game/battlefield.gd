@@ -5,7 +5,7 @@ extends Node2D
 ## Reads BattleSim state and never changes it, so battles stay deterministic.
 
 signal cell_tapped(cell: Vector2i)
-signal cell_dragged(from: Vector2i, to: Vector2i)
+signal drag_started(cell: Vector2i)
 signal hover_changed(cell: Vector2i)
 
 const PX_PER_M := UnitView.PX_PER_M
@@ -25,7 +25,7 @@ const FIRST_SPARK_FRAME := 4
 const SPARKS_PER_HIT := 6
 const DOOR_ABOVE_BASE_PX := 125.0
 const PROPS_PATH := "res://assets/sprites/props/props"
-const MONSTER_CLEARANCE_M := 0.45     # how far a monster's centre stays from a prop's footprint
+const MONSTER_CLEARANCE_M := 0.6      # how far a monster's centre stays from a prop's footprint
 const PROP_SCALE_MIN := 0.55
 const PROP_SCALE_MAX := 1.15
 const PROP_CHOICES := 4               # picks among this many of the best-fitting props
@@ -41,6 +41,8 @@ const STAND_IN_WIDTH_M := {"stalker": 2.4, "brute": 3.8, "mule": 3.2, "needle": 
 const MONSTER_BAR_HEIGHT_M := {"burrower": 2.7, "stalker": 2.7, "brute": 4.2}
 const TURRET_BAR_HEIGHT_M := 3.6
 const DEPLOY_DRAG_PX := 14.0
+const GUN_TOUCH_HALF := Vector2(78.0, 100.0)  # the touch area around a turret, sized for a fingertip
+const GUN_TOUCH_RISE_PX := 48.0              # its centre, above the turret's ground point
 const CRATER_WIDTH_M := 6.5
 const DECOY_TINT := Color(0.52, 0.57, 0.7)   # decoys wear dark steel so they never pass for a live turret
 const GATE_HIT_TREMOR_PX := 7.0
@@ -51,6 +53,7 @@ const TREMOR_MIN_PX := 0.15
 var level: LevelData
 var sim: BattleSim
 var input_enabled := false
+var pressed_gun := -1             # deployment index of the turret under the current press, or -1
 var sim_speed := 1.0  # battle speed multiplier (animations follow it)
 
 var _world: Node2D                # everything; scaled to fit the screen, moved for camera shake
@@ -68,6 +71,9 @@ var _footprints: Array[Dictionary] = []   # ground polygons (metres) the monster
 var _grid: CellOverlay
 var _hint: CellOverlay
 var _hint_tween: Tween
+var _focus_mark: CellOverlay
+var _focus_tween: Tween
+var _focus_cell := Vector2i(-1, -1)
 var _ghost: Node2D
 var _ghost_ring: RangeRing
 var _gun_nodes := {}              # deployment index / sim gun id -> UnitView
@@ -95,6 +101,9 @@ func build(lv: LevelData) -> void:
 	_hotspot_glows.clear()
 	_ghost = null
 	_hint = null
+	_focus_mark = null
+	_focus_tween = null
+	_focus_cell = Vector2i(-1, -1)
 	_breaching = false
 	_gate_frame = 0
 	_footprints.clear()
@@ -264,7 +273,8 @@ func _build_scatter() -> void:
 		if _near_footprint(at):
 			continue
 		var entry: Dictionary = _props.decor[rng.randi_range(0, _props.decor.size() - 1)]
-		_entities.add_child(_prop_sprite(entry, at, rng.randf_range(0.75, 1.05), rng.randf() < 0.5))
+		# Monsters walk over these, so they always draw underneath.
+		_ground_root.add_child(_prop_sprite(entry, at, rng.randf_range(0.75, 1.05), rng.randf() < 0.5))
 
 
 func _near_footprint(at: Vector2) -> bool:
@@ -524,6 +534,31 @@ func show_hint(cells: Array, exact: bool) -> void:
 	_hint_tween.tween_property(_hint, "modulate:a", 1.0, 0.8)
 
 
+## Pulses the tile of the turret the player has selected.
+func show_focus(cell: Vector2i) -> void:
+	if _focus_cell == cell and is_instance_valid(_focus_mark):
+		return
+	clear_focus()
+	_focus_cell = cell
+	_focus_mark = CellOverlay.new()
+	_focus_mark.add_cell(_cell_rect(cell), Color(1.0, 0.72, 0.22, 0.45), Color(1.0, 0.82, 0.4, 1.0))
+	_world.add_child(_focus_mark)
+	_world.move_child(_focus_mark, _entities.get_index())
+	_focus_tween = create_tween().set_loops()
+	_focus_tween.tween_property(_focus_mark, "modulate:a", 0.5, 0.5)
+	_focus_tween.tween_property(_focus_mark, "modulate:a", 1.0, 0.5)
+
+
+func clear_focus() -> void:
+	if _focus_tween:
+		_focus_tween.kill()
+		_focus_tween = null
+	if is_instance_valid(_focus_mark):
+		_focus_mark.queue_free()
+	_focus_mark = null
+	_focus_cell = Vector2i(-1, -1)
+
+
 func clear_hint() -> void:
 	if _hint_tween:
 		_hint_tween.kill()
@@ -538,14 +573,36 @@ func gun_screen_pos(id: int, height: float) -> Vector2:
 	return _world.get_transform() * to_world((_gun_nodes[id] as UnitView).ground, height)
 
 
-func gate_screen_pos(height: float) -> Vector2:
-	return _world.get_transform() * to_world(gate_ground(), height)
+## The foot of the wall, in the middle, on the UI canvas. Ignores the screen tremor.
+func wall_foot_screen_pos() -> Vector2:
+	return get_viewport_rect().size * 0.5 + Vector2(0.0, _wall_base) * _world.scale
 
 
 func screen_to_cell(screen_pos: Vector2) -> Vector2i:
 	var local := _world.get_transform().affine_inverse() * screen_pos
 	var p := Vector2(local.x / PX_PER_M + _focus.x, local.y / (PX_PER_M * DEPTH) + _focus.y)
 	return Vector2i(floori(p.x / Defs.CELL), floori(p.y / Defs.CELL))
+
+
+## Hands the current press over to a drag, so its release is not also read as a tap.
+func cancel_press() -> void:
+	_press_cell = Vector2i(-1, -1)
+	pressed_gun = -1
+	_dragging = false
+
+
+## The deployed turret whose touch area contains this screen point, nearest first, or -1.
+func gun_at(screen_pos: Vector2) -> int:
+	var local := _world.get_transform().affine_inverse() * screen_pos
+	var best := -1
+	var best_distance := 1.0
+	for id in _gun_nodes:
+		var offset: Vector2 = local - (_gun_nodes[id] as UnitView).position + Vector2(0.0, GUN_TOUCH_RISE_PX)
+		var distance := (offset / GUN_TOUCH_HALF).length()
+		if distance < best_distance:
+			best_distance = distance
+			best = id
+	return best
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -556,19 +613,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.pressed:
 			_press_cell = cell
 			_press_pos = event.position
+			pressed_gun = gun_at(event.position)
 			_dragging = false
-		else:
-			if _dragging and cell != _press_cell:
-				cell_dragged.emit(_press_cell, cell)
-			else:
-				cell_tapped.emit(cell)
-			_dragging = false
-			_press_cell = Vector2i(-1, -1)
+		elif _press_cell.x >= 0:
+			cell_tapped.emit(cell)
+			cancel_press()
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion:
 		var cell := screen_to_cell(event.position)
-		if _press_cell.x >= 0 and event.position.distance_to(_press_pos) > DEPLOY_DRAG_PX:
+		if _press_cell.x >= 0 and not _dragging and event.position.distance_to(_press_pos) > DEPLOY_DRAG_PX:
 			_dragging = true
+			drag_started.emit(_press_cell)
 		hover_changed.emit(cell)
 
 
