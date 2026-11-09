@@ -23,14 +23,14 @@
     {
      "type": "burrower",
      "level": 1,
-     "count": 12,
-     "interval": 0.75
+     "count": 22,
+     "interval": 0.54
     },
     {
      "type": "brute",
      "level": 3,
-     "count": 2,
-     "interval": 3.73
+     "count": 4,
+     "interval": 2.7
     }
    ]
   },
@@ -42,8 +42,8 @@
     {
      "type": "burrower",
      "level": 1,
-     "count": 7,
-     "interval": 0.84
+     "count": 13,
+     "interval": 0.61
     }
    ]
   },
@@ -55,8 +55,8 @@
     {
      "type": "stalker",
      "level": 2,
-     "count": 7,
-     "interval": 1.12
+     "count": 13,
+     "interval": 0.81
     }
    ]
   }
@@ -65,180 +65,145 @@
   {
    "type": "mg",
    "level": 1,
-   "ammo": 119,
+   "ammo": 246,
    "count": 2
   },
   {
    "type": "cannon",
    "level": 1,
-   "ammo": 4,
+   "ammo": 6,
    "count": 1
   }
  ],
  "design": {
-  "pressure": 1.15,
-  "ammo_slack": 0.05,
-  "random_win_pct": 0.63,
-  "random_samples": 40007,
+  "pressure": 2.2,
+  "ammo_slack": 0.18,
+  "random_win_pct": 1.07,
+  "random_samples": 12000,
   "target_win_pct": 0.5
  },
  "intel": [
-  "Ammo is tight: a winning plan spends about 91% of it, so every turret must stay busy.",
-  "Point a Cannon at the Northeast fissure: it works best far forward, right.",
-  "An MG Turret earns its ammo mid-field, centre.",
-  "An MG Turret earns its ammo mid-field, right."
+  "Ammo is tight: a winning plan spends about 83% of it, so every turret must stay busy.",
+  "Point a Cannon at the Northwest fissure: it works best mid-field, left.",
+  "Point an MG Turret at the Northeast fissure: it works best close to the gate, centre."
  ],
  "solutions": [
   {
    "gate_left": 80,
-   "ammo_left": 21,
+   "ammo_left": 85,
    "guns": [
     {
      "type": "cannon",
-     "cell": [16, 17],
+     "cell": [4, 23],
      "zone": [
-      [14, 14],
-      [15, 14],
-      [13, 15],
-      [16, 15],
-      [15, 16],
-      [16, 16],
-      [13, 17],
-      [14, 17],
-      [15, 17],
-      [16, 17],
-      [14, 18],
-      [15, 18],
-      [16, 18],
-      [14, 19],
-      [15, 19],
-      [16, 19],
-      [16, 20]
-     ]
-    },
-    {
-     "type": "mg",
-     "cell": [11, 21],
-     "zone": [
-      [10, 20],
-      [10, 21],
-      [11, 21],
-      [10, 22],
-      [10, 23]
-     ]
-    },
-    {
-     "type": "mg",
-     "cell": [12, 22],
-     "zone": [
-      [13, 20],
-      [13, 21],
-      [14, 21],
-      [12, 22],
-      [13, 22],
-      [12, 23]
-     ]
-    }
-   ]
-  },
-  {
-   "gate_left": 80,
-   "ammo_left": 4,
-   "guns": [
-    {
-     "type": "cannon",
-     "cell": [16, 18],
-     "zone": [
-      [16, 15],
-      [14, 16],
-      [15, 16],
-      [13, 17],
-      [14, 17],
-      [15, 17],
-      [16, 17],
-      [14, 18],
-      [16, 18],
-      [14, 19],
-      [15, 19],
-      [14, 20],
-      [15, 21],
-      [16, 21]
-     ]
-    },
-    {
-     "type": "mg",
-     "cell": [10, 26],
-     "zone": [
-      [8, 25],
-      [9, 25],
-      [10, 25],
-      [11, 25],
-      [10, 26]
-     ]
-    },
-    {
-     "type": "mg",
-     "cell": [12, 26],
-     "zone": [
-      [9, 25],
-      [10, 25],
-      [9, 26],
-      [11, 26],
-      [12, 26],
-      [10, 27],
-      [11, 27]
-     ]
-    }
-   ]
-  },
-  {
-   "gate_left": 80,
-   "ammo_left": 26,
-   "guns": [
-    {
-     "type": "mg",
-     "cell": [10, 18],
-     "zone": [
-      [13, 15],
-      [11, 16],
-      [12, 16],
-      [10, 17],
-      [11, 17],
-      [10, 18],
-      [11, 18],
-      [9, 19],
-      [10, 19],
-      [10, 20]
-     ]
-    },
-    {
-     "type": "cannon",
-     "cell": [5, 19],
-     "zone": [
-      [3, 16],
-      [4, 16],
-      [5, 16],
-      [3, 17],
-      [4, 17],
-      [4, 18],
-      [4, 19],
-      [5, 19],
-      [6, 19],
+      [3, 20],
+      [4, 20],
       [5, 20],
       [6, 20],
+      [3, 21],
+      [4, 21],
+      [5, 21],
       [6, 21],
-      [7, 22]
+      [7, 21],
+      [3, 22],
+      [4, 22],
+      [5, 22],
+      [6, 22],
+      [3, 23],
+      [4, 23],
+      [5, 23],
+      [6, 23],
+      [3, 24],
+      [4, 24],
+      [5, 24],
+      [6, 24],
+      [3, 25],
+      [4, 25],
+      [5, 25],
+      [6, 25],
+      [3, 26],
+      [4, 26],
+      [5, 26],
+      [6, 26],
+      [7, 26]
      ]
     },
     {
      "type": "mg",
-     "cell": [9, 29],
+     "cell": [9, 27],
      "zone": [
+      [9, 25],
+      [8, 26],
+      [9, 26],
+      [9, 27],
+      [10, 27],
       [9, 28],
+      [11, 28],
+      [12, 28],
       [9, 29],
-      [9, 30],
-      [9, 31],
-      [9, 32]
+      [10, 29],
+      [11, 29],
+      [12, 29],
+      [11, 30]
+     ]
+    },
+    {
+     "type": "mg",
+     "cell": [10, 28],
+     "zone": [
+      [10, 28],
+      [11, 28],
+      [12, 28],
+      [13, 28],
+      [10, 29],
+      [11, 29],
+      [12, 29],
+      [11, 30]
+     ]
+    }
+   ]
+  },
+  {
+   "gate_left": 80,
+   "ammo_left": 84,
+   "guns": [
+    {
+     "type": "mg",
+     "cell": [8, 18],
+     "zone": [
+      [8, 15],
+      [8, 16],
+      [8, 17],
+      [8, 18],
+      [8, 19],
+      [8, 20],
+      [9, 20],
+      [8, 21],
+      [9, 21]
+     ]
+    },
+    {
+     "type": "mg",
+     "cell": [13, 23],
+     "zone": [
+      [13, 23],
+      [14, 23],
+      [13, 24],
+      [13, 25]
+     ]
+    },
+    {
+     "type": "cannon",
+     "cell": [9, 25],
+     "zone": [
+      [10, 22],
+      [9, 23],
+      [9, 24],
+      [11, 24],
+      [9, 25],
+      [10, 25],
+      [10, 26],
+      [11, 26]
      ]
     }
    ]
