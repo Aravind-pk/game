@@ -1,0 +1,34 @@
+{
+  "tool": "built-in image_gen.imagegen",
+  "model": "not exposed",
+  "references": [
+    "heads.png",
+    "pedestal.png"
+  ],
+  "sources": {
+    "destroy_raw.png": {
+      "size": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "87435a94396e25545b94bdec3d846ef5b50c9ed50d095cf21be36c0a4c458c77"
+    },
+    "destroy_heads_raw.png": {
+      "size": [
+        1774,
+        887
+      ],
+      "mode": "RGBA",
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "403322475a322571563c4e80a4d5b65e816588d4d38ac65e519d0e5a7d1de73a"
+    }
+  }
+}

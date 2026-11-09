@@ -1,0 +1,12 @@
+# Built-in image generation prompts
+
+Generated with the built-in image tool; model identifier was not exposed. No external billed API was used.
+
+## kestrel_prompt
+
+KESTREL v3 machine-gun turret destruction, rotating HEAD ONLY. Reference1 is exact approved head identity/style, especially its EAST side view in row2 column1: pale grey/cream compact box armour, single narrow dark machine-gun barrel, small cyan horizontal side strip and small amber stencil. Reference2 pedestal only establishes mounting, DO NOT paint any pedestal or base. Fixed orthographic camera35 degrees down. Exactly8 frames4columns2rows read left-to-right then down. All heads face EAST RIGHT. Frame1 intact identical compact head;2 small hit crack and cyan strip starts failing, tiny sparks;3 fire from cracked top and charred grey armour;4 head tilts down, barrel droops as bearing breaks;5 grey head crumples and drops onto its bearing;6 collapsed charred grey plates with narrow barrel lying sideways;7 same wreck with fading smoke;8 inert grey/black head wreck resting on bearing, no flames or smoke. Keep same head scale/proportions/palette all frames, no orange armour, no gold body, no changing into a cannon. Bearing attachment at same ground-projected centre every cell, generous room for rising flame and falling head. Wreck rests on top of the existing pedestal, not on a new floor. Source head about240px wide, displayed head about40px. Real transparent alpha background, clean empty margins, no text, grid, floor, cast shadows, neighbouring fragments or base parts.
+
+## kestrel_cleanup_prompt
+
+Edit this 8-frame sprite sheet. REMOVE every pedestal, octagonal foundation, upright support column and circular mounting ring under each weapon head. Retain ONLY the compact grey weapon head, narrow gun barrel, flames/smoke and the collapsed head wreck. Preserve the exact head shapes, damaged poses, scale, colour, camera and 4columns2rows layout from the input. The first three cells must be floating grey machine-gun HEADS only with NO cylindrical post attached. Last five are tilted or crumpled grey HEADS only, no column or base under them. Fill all erased regions with alpha ZERO. All eight complete head silhouettes need generous empty margins. Do not add new objects, floor, text, grid, shadows or backdrop haze. Keep the slim cyan strip on the early head frames, grey/charcoal wreck on the last one. Frame8 has no smoke or flame.
+
