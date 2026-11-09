@@ -59,6 +59,7 @@ var _first_brute_t := -1.0
 var _seen_hotspots := {}
 var _breach_hotspot := -1     # hotspot of the first monster to hit the gate
 var _depleted_shown := false
+var _breach_shown := false   # the gate is falling: the bottom controls are cleared away so it can be seen
 var _last_dep: Array = []     # the layout of the last battle, ghosted on retry
 var _last_cause := ""         # one-line reason the last battle was lost
 var _last_breach := -1
@@ -280,6 +281,7 @@ func defend() -> void:
 	_seen_hotspots.clear()
 	_breach_hotspot = -1
 	_depleted_shown = false
+	_breach_shown = false
 	_last_dep = deployment.duplicate(true)
 	_end_tutorial()
 	_set_phase(Phase.COMBAT)
@@ -349,9 +351,18 @@ func _process(delta: float) -> void:
 			if sim.state == BattleSim.State.DEFEAT:
 				_end_timer = 3.6  # let the gate fall and the breach play out
 				battlefield.play_breach()
+				_clear_stage_for_breach()
 		_end_timer -= delta
 		if _end_timer <= 0.0:
 			_finish_battle()
+
+
+## The gate sits under the combat bar, the ticker and its own HP plate. When it falls they get
+## out of the way, so the breach is the only thing on that part of the screen.
+func _clear_stage_for_breach() -> void:
+	_breach_shown = true
+	_clear_chips()
+	_sync_chrome(false)
 
 
 ## Everything that happens once a battle is over, whether watched or skipped.
@@ -1063,7 +1074,7 @@ func _clear_chips() -> void:
 
 
 func _refresh_chips() -> void:
-	if phase != Phase.COMBAT:
+	if phase != Phase.COMBAT or _breach_shown:
 		return
 	for g in sim.guns:
 		if not _ammo_chips.has(g.id):
@@ -1095,8 +1106,8 @@ func _close_overlay() -> void:
 ## Field controls for the current phase; full-screen sheets hide them.
 func _sync_chrome(sheet_open: bool) -> void:
 	_tray.visible = phase == Phase.DEPLOYMENT and not sheet_open
-	_combat_bar.visible = phase == Phase.COMBAT and not sheet_open
-	_gate_box.visible = phase != Phase.BRIEFING and not sheet_open
+	_combat_bar.visible = phase == Phase.COMBAT and not sheet_open and not _breach_shown
+	_gate_box.visible = phase != Phase.BRIEFING and not sheet_open and not (_breach_shown and phase == Phase.COMBAT)
 	_counters.visible = phase in [Phase.DEPLOYMENT, Phase.COMBAT] and not sheet_open
 
 
