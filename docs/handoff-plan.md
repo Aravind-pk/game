@@ -7,13 +7,19 @@ once; each workstream is then self-contained.
 
 - **Repo:** `Aravind-pk/game`, cloned at `/home/aravind/code/northgate`. The game is not on `main`.
   Work from branch `ccr-fb8db459-dfc415`.
-- **Uncommitted on that branch:** four bug fixes in `godot/scripts/game/main.gd`,
-  `godot/scripts/ui/ui_kit.gd` and `README.md` (star tiles lit per condition, campaign ends at
-  level 50, level grid locks waves past the first uncleared one, stale README paths removed).
-  Tests pass. Commit these first.
-- **Sprite work:** branch `sprites/pending-kits` in the worktree `.worktrees/sprites`, produced by
-  Codex, uncommitted. Its own report is `.worktrees/sprites/docs/sprite-kits-report.md`. Treat that
-  report as a claim: check each kit in the game before merging (section 5, W0).
+- **Committed on that branch (2026-11-10):** four bug fixes (star tiles lit per condition, campaign
+  ends at level 50, level grid locks waves past the first uncleared one, stale README paths removed)
+  and animated sprite kits for the Mule, Needle, Faultbreaker and Rift Runner, merged from
+  `sprites/pending-kits`. Every unit now has a kit. Tests pass. Nothing is pushed.
+- **Sprite work in progress:** Codex is working in the worktree `.worktrees/sprites` (branch
+  `sprites/pending-kits`) on two things: a new destruction sequence for the Kestrel MG turret (its
+  atlas still shows the old orange design when it dies) and a dedicated gate breach animation with
+  monotonic damage stages. Its report is `docs/sprite-kits-report.md` on that branch. Treat the
+  report as a claim: check in the game before merging (section 5, W0). Review pages and recordings
+  are git-ignored and exist only in that worktree.
+- **Known art compromises in the merged kits:** monsters turn by stepping between eight held views;
+  the Faultbreaker has a low swipe instead of an overhead slam and its death was never seen in a
+  recorded battle; the Rift Runner is only 24-35 px wide head-on.
 - **Tools on this machine:** `godot` 4.5.1 (`~/.local/bin/godot`), Node 24, Python with Pillow and
   NumPy at `~/.local/opt/northgate-venv/bin/python`. No ffmpeg.
 - **Running the game from the command line** writes the real save file
@@ -88,12 +94,14 @@ Each has a goal, where to work, what done looks like, and how to check it.
 
 ### W0. Land what exists
 
-- Commit the four fixes on `ccr-fb8db459-dfc415`.
-- Review the sprite branch in the game, kit by kit: record combat
-  (`godot --path godot --resolution 540x960 --write-movie /abs/dir/f.png --fixed-fps 10 --quit-after 420 -- level=04 phase=combat`),
-  look at the frames, and merge only kits that keep ground contact, size and facing. A kit that fails
-  is unregistered from `MONSTER_KITS` / `TURRET_KITS` in `battlefield.gd`, not deleted.
-- Regenerate card portraits (`tools/sprites/make_portraits.py`) if kits changed.
+- Done: fixes committed, four sprite kits merged.
+- Remaining: review Codex's Kestrel destruction and gate breach in the game before merging them.
+  Record a lost battle (`level=05 phase=combat` loses at about 0:34 with the automatic layout; the
+  recorder is `tools/sprites/record_combat.gd`), step through the frames, and merge only what keeps
+  registration: the pedestal must not move when an MG turret dies, the gate must never look less
+  damaged than a moment before, and the gate HP plate must stay put.
+- Regenerate card portraits (`tools/sprites/make_portraits.py`) if a kit's look changed.
+- Push the branch when the owner asks; nothing has been pushed.
 
 ### W1. Sound and haptics **[view]**
 
