@@ -34,11 +34,11 @@ const SCATTER_GROUND := 7
 const SCATTER_CLEARANCE_PX := 34.0
 const SCATTER_TOP_PX := -800.0
 
-const MONSTER_KITS := {"burrower": "burrower"}   # monster types with a full sprite kit
-const TURRET_KITS := {"kestrel": "kestrel"}      # turret models with a full sprite kit
+const MONSTER_KITS := {"burrower": "burrower", "brute": "faultbreaker", "stalker": "rift_runner"}   # monster types with a full sprite kit
+const TURRET_KITS := {"kestrel": "kestrel", "mule": "mule", "needle": "needle"}      # turret models with a full sprite kit
 const STAND_IN_ART := "res://assets/ui/art/%s.png"
 const STAND_IN_WIDTH_M := {"stalker": 2.4, "brute": 3.8, "mule": 3.2, "needle": 2.8}
-const MONSTER_BAR_HEIGHT_M := {"burrower": 2.7, "stalker": 2.7, "brute": 4.2}
+const MONSTER_BAR_HEIGHT_M := {"burrower": 2.7, "stalker": 3.0, "brute": 4.2}
 const TURRET_BAR_HEIGHT_M := 3.6
 const DEPLOY_DRAG_PX := 14.0
 const GUN_TOUCH_HALF := Vector2(78.0, 100.0)  # the touch area around a turret, sized for a fingertip

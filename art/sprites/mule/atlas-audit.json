@@ -1,0 +1,454 @@
+{
+  "image": {
+    "width": 1024,
+    "height": 1280,
+    "transparentPixels": 1068773,
+    "nonOpaquePixels": 1305943
+  },
+  "alphaThreshold": 128,
+  "frames": [
+    {
+      "id": "aim/0",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 125,
+      "alphaBounds": {
+        "left": 77,
+        "top": 54,
+        "right": 177,
+        "bottom": 200
+      },
+      "opaquePixels": 9151,
+      "touchesEdges": []
+    },
+    {
+      "id": "aim/1",
+      "rect": {
+        "x": 256,
+        "y": 0,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 125,
+      "alphaBounds": {
+        "left": 71,
+        "top": 53,
+        "right": 181,
+        "bottom": 194
+      },
+      "opaquePixels": 9682,
+      "touchesEdges": []
+    },
+    {
+      "id": "aim/2",
+      "rect": {
+        "x": 512,
+        "y": 0,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 125,
+      "alphaBounds": {
+        "left": 66,
+        "top": 56,
+        "right": 204,
+        "bottom": 186
+      },
+      "opaquePixels": 9982,
+      "touchesEdges": []
+    },
+    {
+      "id": "aim/3",
+      "rect": {
+        "x": 768,
+        "y": 0,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 125,
+      "alphaBounds": {
+        "left": 62,
+        "top": 68,
+        "right": 226,
+        "bottom": 176
+      },
+      "opaquePixels": 10124,
+      "touchesEdges": []
+    },
+    {
+      "id": "aim/4",
+      "rect": {
+        "x": 0,
+        "y": 256,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 125,
+      "alphaBounds": {
+        "left": 67,
+        "top": 57,
+        "right": 232,
+        "bottom": 150
+      },
+      "opaquePixels": 9803,
+      "touchesEdges": []
+    },
+    {
+      "id": "aim/5",
+      "rect": {
+        "x": 256,
+        "y": 256,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 125,
+      "alphaBounds": {
+        "left": 70,
+        "top": 59,
+        "right": 227,
+        "bottom": 154
+      },
+      "opaquePixels": 9257,
+      "touchesEdges": []
+    },
+    {
+      "id": "aim/6",
+      "rect": {
+        "x": 512,
+        "y": 256,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 125,
+      "alphaBounds": {
+        "left": 69,
+        "top": 45,
+        "right": 216,
+        "bottom": 158
+      },
+      "opaquePixels": 9250,
+      "touchesEdges": []
+    },
+    {
+      "id": "aim/7",
+      "rect": {
+        "x": 768,
+        "y": 256,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 125,
+      "alphaBounds": {
+        "left": 77,
+        "top": 32,
+        "right": 176,
+        "bottom": 156
+      },
+      "opaquePixels": 8614,
+      "touchesEdges": []
+    },
+    {
+      "id": "aim/8",
+      "rect": {
+        "x": 0,
+        "y": 512,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 125,
+      "alphaBounds": {
+        "left": 39,
+        "top": 45,
+        "right": 186,
+        "bottom": 158
+      },
+      "opaquePixels": 9250,
+      "touchesEdges": []
+    },
+    {
+      "id": "aim/9",
+      "rect": {
+        "x": 256,
+        "y": 512,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 125,
+      "alphaBounds": {
+        "left": 28,
+        "top": 59,
+        "right": 185,
+        "bottom": 154
+      },
+      "opaquePixels": 9257,
+      "touchesEdges": []
+    },
+    {
+      "id": "aim/10",
+      "rect": {
+        "x": 512,
+        "y": 512,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 125,
+      "alphaBounds": {
+        "left": 23,
+        "top": 57,
+        "right": 188,
+        "bottom": 150
+      },
+      "opaquePixels": 9803,
+      "touchesEdges": []
+    },
+    {
+      "id": "aim/11",
+      "rect": {
+        "x": 768,
+        "y": 512,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 125,
+      "alphaBounds": {
+        "left": 29,
+        "top": 68,
+        "right": 193,
+        "bottom": 176
+      },
+      "opaquePixels": 10124,
+      "touchesEdges": []
+    },
+    {
+      "id": "aim/12",
+      "rect": {
+        "x": 0,
+        "y": 768,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 125,
+      "alphaBounds": {
+        "left": 51,
+        "top": 56,
+        "right": 189,
+        "bottom": 186
+      },
+      "opaquePixels": 9982,
+      "touchesEdges": []
+    },
+    {
+      "id": "aim/13",
+      "rect": {
+        "x": 256,
+        "y": 768,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 125,
+      "alphaBounds": {
+        "left": 74,
+        "top": 53,
+        "right": 184,
+        "bottom": 194
+      },
+      "opaquePixels": 9682,
+      "touchesEdges": []
+    },
+    {
+      "id": "base/0",
+      "rect": {
+        "x": 512,
+        "y": 768,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 125,
+      "alphaBounds": {
+        "left": 45,
+        "top": 139,
+        "right": 212,
+        "bottom": 228
+      },
+      "opaquePixels": 9750,
+      "touchesEdges": []
+    },
+    {
+      "id": "destroy/0",
+      "rect": {
+        "x": 768,
+        "y": 768,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 170,
+      "alphaBounds": {
+        "left": 44,
+        "top": 72,
+        "right": 240,
+        "bottom": 227
+      },
+      "opaquePixels": 18220,
+      "touchesEdges": []
+    },
+    {
+      "id": "destroy/1",
+      "rect": {
+        "x": 0,
+        "y": 1024,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 170,
+      "alphaBounds": {
+        "left": 47,
+        "top": 77,
+        "right": 243,
+        "bottom": 228
+      },
+      "opaquePixels": 17688,
+      "touchesEdges": []
+    },
+    {
+      "id": "destroy/2",
+      "rect": {
+        "x": 256,
+        "y": 1024,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 170,
+      "alphaBounds": {
+        "left": 44,
+        "top": 51,
+        "right": 230,
+        "bottom": 227
+      },
+      "opaquePixels": 17876,
+      "touchesEdges": []
+    },
+    {
+      "id": "destroy/3",
+      "rect": {
+        "x": 512,
+        "y": 1024,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 170,
+      "alphaBounds": {
+        "left": 47,
+        "top": 108,
+        "right": 233,
+        "bottom": 226
+      },
+      "opaquePixels": 14296,
+      "touchesEdges": []
+    },
+    {
+      "id": "destroy/4",
+      "rect": {
+        "x": 768,
+        "y": 1024,
+        "w": 256,
+        "h": 256
+      },
+      "anchor": {
+        "x": 128,
+        "y": 214
+      },
+      "durationMs": 170,
+      "alphaBounds": {
+        "left": 49,
+        "top": 120,
+        "right": 232,
+        "bottom": 227
+      },
+      "opaquePixels": 12871,
+      "touchesEdges": []
+    }
+  ],
+  "duplicates": [],
+  "alphaBottomSpan": 78,
+  "warnings": []
+}

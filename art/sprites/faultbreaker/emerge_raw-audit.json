@@ -1,0 +1,242 @@
+{
+  "image": {
+    "width": 1448,
+    "height": 1086,
+    "transparentPixels": 1023999,
+    "nonOpaquePixels": 1572019
+  },
+  "alphaThreshold": 128,
+  "frames": [
+    {
+      "id": "0",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 362,
+        "h": 362
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 131,
+        "top": 273,
+        "right": 233,
+        "bottom": 303
+      },
+      "opaquePixels": 469,
+      "touchesEdges": []
+    },
+    {
+      "id": "1",
+      "rect": {
+        "x": 362,
+        "y": 0,
+        "w": 362,
+        "h": 362
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 94,
+        "top": 261,
+        "right": 268,
+        "bottom": 312
+      },
+      "opaquePixels": 1435,
+      "touchesEdges": []
+    },
+    {
+      "id": "2",
+      "rect": {
+        "x": 724,
+        "y": 0,
+        "w": 362,
+        "h": 362
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 65,
+        "top": 256,
+        "right": 301,
+        "bottom": 314
+      },
+      "opaquePixels": 6004,
+      "touchesEdges": []
+    },
+    {
+      "id": "3",
+      "rect": {
+        "x": 1086,
+        "y": 0,
+        "w": 362,
+        "h": 362
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 47,
+        "top": 226,
+        "right": 316,
+        "bottom": 322
+      },
+      "opaquePixels": 14663,
+      "touchesEdges": []
+    },
+    {
+      "id": "4",
+      "rect": {
+        "x": 0,
+        "y": 362,
+        "w": 362,
+        "h": 362
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 34,
+        "top": 133,
+        "right": 330,
+        "bottom": 302
+      },
+      "opaquePixels": 29031,
+      "touchesEdges": []
+    },
+    {
+      "id": "5",
+      "rect": {
+        "x": 362,
+        "y": 362,
+        "w": 362,
+        "h": 362
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 22,
+        "top": 102,
+        "right": 341,
+        "bottom": 306
+      },
+      "opaquePixels": 40268,
+      "touchesEdges": []
+    },
+    {
+      "id": "6",
+      "rect": {
+        "x": 724,
+        "y": 362,
+        "w": 362,
+        "h": 362
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 13,
+        "top": 77,
+        "right": 347,
+        "bottom": 314
+      },
+      "opaquePixels": 50879,
+      "touchesEdges": []
+    },
+    {
+      "id": "7",
+      "rect": {
+        "x": 1086,
+        "y": 362,
+        "w": 362,
+        "h": 362
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 10,
+        "top": 51,
+        "right": 350,
+        "bottom": 319
+      },
+      "opaquePixels": 59787,
+      "touchesEdges": []
+    },
+    {
+      "id": "8",
+      "rect": {
+        "x": 0,
+        "y": 724,
+        "w": 362,
+        "h": 362
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 13,
+        "top": 42,
+        "right": 350,
+        "bottom": 323
+      },
+      "opaquePixels": 61638,
+      "touchesEdges": []
+    },
+    {
+      "id": "9",
+      "rect": {
+        "x": 362,
+        "y": 724,
+        "w": 362,
+        "h": 362
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 13,
+        "top": 43,
+        "right": 349,
+        "bottom": 316
+      },
+      "opaquePixels": 61807,
+      "touchesEdges": []
+    },
+    {
+      "id": "10",
+      "rect": {
+        "x": 724,
+        "y": 724,
+        "w": 362,
+        "h": 362
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 12,
+        "top": 43,
+        "right": 350,
+        "bottom": 316
+      },
+      "opaquePixels": 61700,
+      "touchesEdges": []
+    },
+    {
+      "id": "11",
+      "rect": {
+        "x": 1086,
+        "y": 724,
+        "w": 362,
+        "h": 362
+      },
+      "anchor": null,
+      "durationMs": null,
+      "alphaBounds": {
+        "left": 12,
+        "top": 43,
+        "right": 350,
+        "bottom": 316
+      },
+      "opaquePixels": 62149,
+      "touchesEdges": []
+    }
+  ],
+  "duplicates": [],
+  "alphaBottomSpan": 21,
+  "warnings": []
+}

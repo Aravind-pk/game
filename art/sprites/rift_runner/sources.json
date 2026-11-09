@@ -1,0 +1,58 @@
+{
+  "walk_S_raw.png": {
+    "sha256": "b3df783d5ae6c2855bb9f1fed35ce8d59b0d3afaca515c88bd13bb5d8141edec",
+    "size": [
+      1774,
+      887
+    ],
+    "mode": "RGBA"
+  },
+  "walk_SW_raw.png": {
+    "sha256": "1d6c9e163ccb8b2ab3ce4c430cedfeb1ad19ca9a6ef76c90072e99489c4b2c13",
+    "size": [
+      1774,
+      887
+    ],
+    "mode": "RGBA"
+  },
+  "walk_E_NE_raw.png": {
+    "sha256": "8851aab6a382eaa5212efd1577b677ac00c64112dbd11374a729bb809d91780a",
+    "size": [
+      1261,
+      1247
+    ],
+    "mode": "RGBA"
+  },
+  "walk_N_raw.png": {
+    "sha256": "f0f307511a3f2657829193cade75845720be20e128a2db92259cb55c4945fadf",
+    "size": [
+      1772,
+      888
+    ],
+    "mode": "RGBA"
+  },
+  "death_raw.png": {
+    "sha256": "cc7e19f38f7198d5d816f516c45fa241ac15596a05fbac24e3f55f70189ddbe3",
+    "size": [
+      1402,
+      1122
+    ],
+    "mode": "RGBA"
+  },
+  "emerge_raw.png": {
+    "sha256": "96d03688955477e76602aa2fb49b41927193f2f6002e14868100bc0333e6566e",
+    "size": [
+      1448,
+      1086
+    ],
+    "mode": "RGBA"
+  },
+  "attack_raw.png": {
+    "sha256": "57d9d76a3f824ccb80f8891389e27464f5e57f205f2e4ed29035e3d5c9c637a2",
+    "size": [
+      1774,
+      887
+    ],
+    "mode": "RGBA"
+  }
+}

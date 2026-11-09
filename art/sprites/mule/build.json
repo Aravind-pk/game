@@ -1,0 +1,369 @@
+{
+  "category": "turrets",
+  "display_width": 70,
+  "cell": [
+    256,
+    256
+  ],
+  "anchor": [
+    128,
+    214
+  ],
+  "sources": {
+    "heads_raw.png": {
+      "grid": [
+        4,
+        2
+      ],
+      "alpha_floor": 56
+    },
+    "base_destroy_raw.png": {
+      "grid": [
+        3,
+        2
+      ],
+      "alpha_floor": 64
+    }
+  },
+  "animations": {
+    "aim": {
+      "poses": [
+        {
+          "source": "heads_raw.png",
+          "index": 0,
+          "pivot": [
+            222,
+            288
+          ],
+          "scale": 0.4,
+          "anchor": [
+            128,
+            151
+          ],
+          "flip": false
+        },
+        {
+          "source": "heads_raw.png",
+          "index": 1,
+          "pivot": [
+            205,
+            290
+          ],
+          "scale": 0.4,
+          "anchor": [
+            128,
+            151
+          ],
+          "flip": false
+        },
+        {
+          "source": "heads_raw.png",
+          "index": 2,
+          "pivot": [
+            201,
+            291
+          ],
+          "scale": 0.4,
+          "anchor": [
+            128,
+            151
+          ],
+          "flip": false
+        },
+        {
+          "source": "heads_raw.png",
+          "index": 3,
+          "pivot": [
+            190,
+            275
+          ],
+          "scale": 0.4,
+          "anchor": [
+            128,
+            151
+          ],
+          "flip": false
+        },
+        {
+          "source": "heads_raw.png",
+          "index": 4,
+          "pivot": [
+            172,
+            317
+          ],
+          "scale": 0.4,
+          "anchor": [
+            128,
+            151
+          ],
+          "flip": false
+        },
+        {
+          "source": "heads_raw.png",
+          "index": 5,
+          "pivot": [
+            169,
+            323
+          ],
+          "scale": 0.4,
+          "anchor": [
+            128,
+            151
+          ],
+          "flip": false
+        },
+        {
+          "source": "heads_raw.png",
+          "index": 6,
+          "pivot": [
+            176,
+            329
+          ],
+          "scale": 0.4,
+          "anchor": [
+            128,
+            151
+          ],
+          "flip": false
+        },
+        {
+          "source": "heads_raw.png",
+          "index": 7,
+          "pivot": [
+            220,
+            329
+          ],
+          "scale": 0.4,
+          "anchor": [
+            128,
+            151
+          ],
+          "flip": false
+        },
+        {
+          "source": "heads_raw.png",
+          "index": 6,
+          "pivot": [
+            176,
+            329
+          ],
+          "scale": 0.4,
+          "anchor": [
+            128,
+            151
+          ],
+          "flip": true
+        },
+        {
+          "source": "heads_raw.png",
+          "index": 5,
+          "pivot": [
+            169,
+            323
+          ],
+          "scale": 0.4,
+          "anchor": [
+            128,
+            151
+          ],
+          "flip": true
+        },
+        {
+          "source": "heads_raw.png",
+          "index": 4,
+          "pivot": [
+            172,
+            317
+          ],
+          "scale": 0.4,
+          "anchor": [
+            128,
+            151
+          ],
+          "flip": true
+        },
+        {
+          "source": "heads_raw.png",
+          "index": 3,
+          "pivot": [
+            190,
+            275
+          ],
+          "scale": 0.4,
+          "anchor": [
+            128,
+            151
+          ],
+          "flip": true
+        },
+        {
+          "source": "heads_raw.png",
+          "index": 2,
+          "pivot": [
+            201,
+            291
+          ],
+          "scale": 0.4,
+          "anchor": [
+            128,
+            151
+          ],
+          "flip": true
+        },
+        {
+          "source": "heads_raw.png",
+          "index": 1,
+          "pivot": [
+            205,
+            290
+          ],
+          "scale": 0.4,
+          "anchor": [
+            128,
+            151
+          ],
+          "flip": true
+        }
+      ],
+      "angles": [
+        90,
+        65,
+        43,
+        18,
+        0,
+        -19,
+        -43,
+        -90,
+        223,
+        199,
+        180,
+        162,
+        137,
+        115
+      ],
+      "muzzles": [
+        [
+          -0.8,
+          -25.4
+        ],
+        [
+          32.800000000000004,
+          -28.199999999999996
+        ],
+        [
+          54.0,
+          -36.599999999999994
+        ],
+        [
+          92.80000000000001,
+          -49.0
+        ],
+        [
+          101.2,
+          -99.4
+        ],
+        [
+          99.2,
+          -122.6
+        ],
+        [
+          66.0,
+          -166.60000000000002
+        ],
+        [
+          0.0,
+          -175.4
+        ],
+        [
+          -66.0,
+          -166.60000000000002
+        ],
+        [
+          -99.2,
+          -122.6
+        ],
+        [
+          -101.2,
+          -99.4
+        ],
+        [
+          -92.80000000000001,
+          -49.0
+        ],
+        [
+          -54.0,
+          -36.599999999999994
+        ],
+        [
+          -32.800000000000004,
+          -28.199999999999996
+        ]
+      ],
+      "recoil_px": 1.5
+    },
+    "base": {
+      "poses": [
+        {
+          "source": "base_destroy_raw.png",
+          "index": 0,
+          "pivot": [
+            241,
+            432
+          ],
+          "scale": 0.414
+        }
+      ]
+    },
+    "destroy": {
+      "poses": [
+        {
+          "source": "base_destroy_raw.png",
+          "index": 1,
+          "pivot": [
+            206,
+            432
+          ],
+          "scale": 0.414
+        },
+        {
+          "source": "base_destroy_raw.png",
+          "index": 2,
+          "pivot": [
+            206,
+            432
+          ],
+          "scale": 0.414
+        },
+        {
+          "source": "base_destroy_raw.png",
+          "index": 3,
+          "pivot": [
+            241,
+            432
+          ],
+          "scale": 0.414
+        },
+        {
+          "source": "base_destroy_raw.png",
+          "index": 4,
+          "pivot": [
+            206,
+            432
+          ],
+          "scale": 0.414
+        },
+        {
+          "source": "base_destroy_raw.png",
+          "index": 5,
+          "pivot": [
+            206,
+            432
+          ],
+          "scale": 0.414
+        }
+      ],
+      "duration_ms": 170,
+      "frame_ms": 170
+    }
+  }
+}
