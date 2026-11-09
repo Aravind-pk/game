@@ -45,7 +45,8 @@ ground position, and effects. It reads the simulation and never changes it.
 - **Props** are placed from the level data on a bare field. Each solid prop carries a footprint polygon: the patch of
   ground it stands on, generated from its silhouette. The simulation blocks the level's cells; the
   footprint keeps monsters off the prop's real base. Run with `-- footprints` to see them.
-- **The wall** has 12 frames chosen by gate HP: cracks, then sparks, then the collapse below 12%, ending in the breach.
+- **The wall** has five monotonic HP damage stages and a separate fourteen-frame breach at 10 fps.
+  The side walls stay static while the doors and lintel fall outward, dust settles, and monsters enter the opening.
 - **Units without a kit** (`stand_in_unit.gd`) use a single piece of artwork until they get one.
   Every unit currently has a kit. The Mule, Needle, Faultbreaker and Rift Runner kits are built by
   `tools/sprites/build_pending_kits.py <kit>` from `art/sprites/<kit>/build.json`; see
@@ -59,8 +60,10 @@ Run these from the repo root. Each needs Python with Pillow and NumPy.
 |---|---|---|
 | Monster kit | `art/sprites/<kit>/` six 256px sheets | `python tools/sprites/extract_kit.py <kit>` |
 | Turret kit | `art/sprites/<kit>/sheet.png` | `PYTHONPATH=tools/sprites python tools/sprites/extract_turret.py <kit>` |
+| Kestrel v3 destruction | `art/sprites/kestrel_v3/` approved atlas and destruction heads | `python tools/sprites/build_kestrel_destroy.py` |
 | Props and their ground footprints | `art/sprites/props/*_sheet.png` | `python tools/sprites/extract_props.py` |
-| Field, apron, 12 wall damage frames | `art/backgrounds/`, `art/sprites/apron.png`, `art/sprites/wall/` | `python tools/sprites/fit_background.py` |
+| Field and apron, plus wall rebuild | `art/backgrounds/`, `art/sprites/apron.png`, `art/sprites/wall/` | `python tools/sprites/fit_background.py` |
+| Wall HP stages, static sides and breach | `art/sprites/wall/` approved paintings, door backs and dust | `python tools/sprites/build_wall.py` |
 | Card portraits | the atlases above | `python tools/sprites/make_portraits.py` |
 
 Generated sheets often mislabel their rows, so check `art/previews/<kit>_contact.png` after

@@ -1,3 +1,67 @@
+# Kestrel destruction and gate breach — 2026-11-10
+
+Both jobs are wired into the game. Both requested Godot tests pass with zero failures. No commits were made. Changes stayed within the current file allowlist; `main.gd`, simulation, levels and the monster attack line were not edited.
+
+## Kestrel G1
+
+Delivered eight destruction frames at 140 ms per frame, replacing the orange/yellow legacy design. The approved grey pedestal is a separate, persistent layer. The first destruction sample uses the turret's actual current aim frame and its existing anchor; subsequent samples burn, tip and crumple the grey head onto that pedestal, ending in a held wreck. The sixteen-view aim behavior is unchanged.
+
+The baker starts from `art/sprites/kestrel_v3/kestrel-atlas-v3.png` and its JSON. Every approved aim rectangle and the base rectangle were compared pixel-for-pixel after packing, and both animation dictionaries were compared for equality. All seventeen rectangles and both dictionaries are identical. Evidence: [preservation results](../art/sprites/kestrel_v3/preservation.json), plus the independent checks in `monster_sprite_check.gd` through the actual sprite renderer. The test also checks entry aim, offsets and fixed base visibility through all eight destruction samples. The old neighbouring-cell slivers are absent from the new destruction cells.
+
+Method: built-in image generation, then deterministic extraction and layered assembly. The first generated candidate included an unwanted pedestal and was rejected as a direct animation source. A second built-in edit removed the pedestals; only the head/effects were extracted. The first painted head sample was replaced by the exact approved aim image. Sources remain `destroy_raw.png` and `destroy_heads_raw.png`. Exact prompts and constraints are in [prompts.md](../art/sprites/kestrel_v3/prompts.md); references were approved `heads.png` and `pedestal.png`, then the first generated sheet for cleanup. The tool did not expose a model identifier. No external billed API was used.
+
+Visual inspection covered all eight composite poses at game size and enlarged, source alpha and the actual MG death transition. [Native field contact](../art/sprites/kestrel_v3/evidence/native-contact.png), [review player](../art/sprites/kestrel_v3/field-review.html), [real combat contact](../art/sprites/kestrel_v3/evidence/mg-transition.png), [short capture player](../art/sprites/kestrel_v3/evidence/mg-destruction/review.html). A legal level-05 MG deployment at cell `(15,17)` was used because the normal automatic deployment leaves both MGs alive. The helper selects the normal “Watch to End” button after defences deplete; the modal appears briefly in the recording. Frames 205–232 cover the intact head, impact, collapse and settled grey wreck on the same pedestal. Enemies partially occlude it, as they do in play.
+
+Fallback: after the exact current-aim entry, collapse uses one authored east-facing sequence, mirrored for west. It is not sixteen separately authored destruction headings. Only one real death placement was recorded; all sixteen entry views remain covered by unchanged aim data and renderer preservation checks. The installed sequence was accepted at game size, with that directional limitation.
+
+## Gate
+
+Delivered five monotonic HP stages and a separate fourteen-frame breach at 10 fps. HP stages reuse original wall indices `0,1,2,4,5`; the regressing second-sheet damage frames no longer drive HP. A single immutable side-wall texture remains outside the central gate. Original `wall_00.png` is byte-identical, and legacy wall_01..11 files were left unchanged for provenance.
+
+The breach starts at the exact last damage stage. The existing painted door fronts fall forward about their ground hinge line, exposing newly generated damaged steel backs. The lintel/light bar splits, drops and settles; cracked pillars remain standing. Generated dust rolls forward and clears; aligned original rubble accumulates at the threshold. The final opening and fallen panels hold. All layers share one 392.6 px anchor, including 80 px transparent top padding that compensates the original 312.6 px baseline. The original rail offset, wall position, gate HP plate and attack line stay fixed. Side walls cannot shimmer because they are drawn once, outside the animated gate texture.
+
+Method: a segmented 2D rig with complete generated hidden door backs, projected forward using a 35-degree camera model, and authored dust effects. No whole-wall regeneration was used. Sources: original two wall sheets, `approved_wall_00.png`, `door_backs_raw.png`, `dust_raw.png`; [exact prompts](../art/sprites/wall/prompts.md), using `gate_reference.png` for material/color only. Built-in image generation only, model identifier unavailable. Geometry, source hashes and stages are in [build.json](../art/sprites/wall/build.json). The bake is deterministic.
+
+The renderer uses a separate fixed 100 ms clock rather than stepping only through HP frames not previously shown. A floating-point boundary tolerance prevents skipped samples at a 10 fps capture cadence. Four existing explosion accents are timed at frames 1/3/5/7; the heavy impact, debris and stronger shake occur at frame 8. Existing monster movement begins after 0.9 s. The last artwork frame is reached at 1.3 s and holds, comfortably inside the existing 3.6 s report delay. No `main.gd` timer change is needed.
+
+All five HP stages and all fourteen breach samples were checked in real level-05 captures. Standard auto-deployment loses at 34.50 s; the short recording covers frames 340–384. The weak run covers 195–261 and shows HP 80 → 53 → 35 → 17 → 8 → 0, then the same full breach. Both traces contain every breach index 0–13 and one invariant gate position. Tests compare the timeline starting from intact and severe damage, check 50 ms and 100 ms stepping, and verify fixed wall, attack-line and HP-plate positions. A runner visibly enters the opening before the report; more distant brutes are still approaching when the timer ends.
+
+Evidence: [unobstructed breach contact](../art/sprites/wall/evidence/breach_contact.png), [damage contact](../art/sprites/wall/evidence/damage_contact.png), [breach review player](../art/sprites/wall/gate-review.html), [damage review player](../art/sprites/wall/damage-review.html), [real breach frames](../art/sprites/wall/evidence/game-breach-contact.png), [real HP damage frames](../art/sprites/wall/evidence/game-damage-contact.png), [normal capture player](../art/sprites/wall/evidence/breach/review.html), [weak capture player](../art/sprites/wall/evidence/weak/review.html). Before frames are retained under `art/sprites/wall/evidence/before/`. The game HUD partly covers falling door panels; the unobstructed contact shows their full progression. This is a layered illustrated collapse, not a simulated rigid-body destruction. No rejected whole-wall animation is installed.
+
+## Checks and limits
+
+- [monster_sprite_check log](../art/sprites/wall/evidence/monster-check.log): PASS, zero failures. [placement_check log](../art/sprites/wall/evidence/placement-check.log): PASS, zero failures. Godot import completed. `git diff --check` passes.
+- [Rebuild check](../art/sprites/wall/evidence/rebuild-check.json): output hashes identical across rebuild, intact PNG byte-identical, every shipping gate frame pixel-identical to its audited sheet rectangle.
+- Kestrel source sheets, final atlas and composited destruction, plus wall door backs, dust, damage, breach and field-composite sheets were measured using the skill's `auditPixels` implementation. Shipping destruction and gate layers have no blank-frame or edge-contact warnings at threshold 128. The one Kestrel atlas warning is the unchanged approved base touching its top edge. Field-composite edge/opacity warnings are expected because scenery fills those cells. Reports/manifests are in each `evidence/` folder.
+- **Inspection-tool gap:** the literal `inspect-sheet.mjs` CLI was run, but fresh Chrome invocations stalled at PNG `Image.decode()`; retries with alternate launch flags also stalled. Opening the final review page timed out. Earlier Kestrel raw-source CLI reports are retained. For the final audits, `tools/sprites/inspect_decoded.mjs` independently decodes PNGs with Pillow and invokes the skill's unmodified exported `auditPixels` function and review template. The reports are valid pixel measurements, but are not claimed as successful final Chrome CLI runs. The custom field players use the same decoded RGBA to avoid that decoder path. They provide native/enlarged, stepping, normal/0.4× and held-last-frame controls, but final browser playback and density checks could not be completed.
+- Visual acceptance here is this agent's inspection of every source/packed pose, game-size contacts, and sequential real combat PNGs. There was no independent reviewer. Continuous normal/slow browser playback remains unchecked; no mobile/web export, device-density matrix, performance benchmark or all-level sweep was performed. Other MG death headings were not recorded. These limits do not substitute a technical pass for aesthetic approval.
+
+Rebuild commands (Python needs Pillow and NumPy):
+
+```sh
+~/.local/opt/northgate-venv/bin/python tools/sprites/build_kestrel_destroy.py
+~/.local/opt/northgate-venv/bin/python tools/sprites/build_wall.py
+godot --headless --path godot --import
+godot --headless --path godot --script res://tests/monster_sprite_check.gd
+godot --headless --path godot --script res://tests/placement_check.gd
+```
+
+Short recording examples (use absolute output paths):
+
+```sh
+godot --path godot --script "$PWD/tools/sprites/record_combat.gd" --fixed-fps 10 --quit-after 385 -- level=05 phase=combat capture_watch capture=/abs/breach capture_from=34 capture_to=38.4
+godot --path godot --script "$PWD/tools/sprites/record_combat.gd" --fixed-fps 10 --quit-after 263 -- level=05 phase=combat weak capture_watch capture=/abs/weak capture_from=19.5 capture_to=26.1
+godot --path godot --script "$PWD/tools/sprites/record_combat.gd" --fixed-fps 10 --quit-after 240 -- level=05 phase=deploy capture_mg=15,17 capture_watch capture=/abs/mg capture_from=20.5 capture_to=23.2
+```
+
+Review pages and evidence folders are ignored as requested. Captures save only the short windows above; source PNG sequences were not expanded into whole battles.
+
+---
+
+# Previous merged four-kit work (historical report)
+
+The following describes the already merged work, not additional checks repeated in this task.
+
 # Animated sprite kits report
 
 Mule, Needle, Faultbreaker and Rift Runner are registered in the game. All four use the existing PNG atlas and `image` / `anims` / `frames` JSON format. Both requested Godot checks pass with the new registrations. Final 540 × 960 combat recordings for levels 4 and 5 were checked after the extraction corrections.

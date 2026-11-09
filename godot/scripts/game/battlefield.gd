@@ -18,10 +18,9 @@ const APRON := "res://assets/backgrounds/apron.png"
 const APRON_SCALE := 0.95
 const WALL_DIR := "res://assets/sprites/wall/"
 const RAIL_ABOVE_GATE_LINE := 51.5    # the wall's top rail, in pixels above the line monsters attack from
-# Gate HP share at or below which each wall frame after the first takes over: cracks and dust,
-# then sparks, then the collapse once the gate is nearly gone. The last frame is the breach.
-const GATE_FRAME_AT_HP: Array[float] = [0.75, 0.65, 0.55, 0.45, 0.35, 0.25, 0.18, 0.12, 0.08, 0.04]
-const FIRST_SPARK_FRAME := 4
+# HP stages stop at the failing gate. The breach has a separate fixed-rate sequence.
+const GATE_FRAME_AT_HP: Array[float] = [0.75, 0.50, 0.25, 0.10]
+const FIRST_SPARK_FRAME := 2
 const SPARKS_PER_HIT := 6
 const DOOR_ABOVE_BASE_PX := 125.0
 const PROPS_PATH := "res://assets/sprites/props/props"
@@ -68,6 +67,8 @@ var _wall_base := 0.0             # the foot of the wall, from the screen centre
 var _wall_data := {}
 var _wall_frames: Array[Texture2D] = []
 var _gate_frame := 0
+var _breach_frames: Array[Texture2D] = []
+var _breach_frame := -1
 var _props := {}                  # kind -> list of prop entries from props.json
 var _props_texture: Texture2D
 var _footprints: Array[Dictionary] = []   # ground polygons (metres) the monsters must walk around
@@ -355,13 +356,15 @@ func _show_footprints_if_asked() -> void:
 		_world.add_child(outline)
 
 
-## The wall and gate are one picture per damage stage, standing on the paved apron.
+## Static side walls and a registered gate layer stand on the paved apron.
 func _build_wall() -> void:
 	if _wall_frames.is_empty():
 		var file := FileAccess.open(WALL_DIR + "wall.json", FileAccess.READ)
 		_wall_data = JSON.parse_string(file.get_as_text())
-		for i in int(_wall_data.frames):
-			_wall_frames.append(load(WALL_DIR + "wall_%02d.png" % i))
+		for path in _wall_data.damage_frames:
+			_wall_frames.append(load(WALL_DIR + path))
+		for path in _wall_data.breach_frames:
+			_breach_frames.append(load(WALL_DIR + path))
 	_wall_base = _wall_rail_y() + float(_wall_data.rail_above_base)
 	var apron := Sprite2D.new()
 	apron.texture = load(APRON)
@@ -370,6 +373,11 @@ func _build_wall() -> void:
 	apron.offset = Vector2(-apron.texture.get_width() * 0.5, 0)
 	apron.position = Vector2(0, _wall_base - 34.0)
 	_world.add_child(apron)
+	var sides := Sprite2D.new()
+	sides.texture = load(WALL_DIR + _wall_data.side_texture)
+	sides.centered = false
+	sides.position = Vector2(-DESIGN_WIDTH * 0.5, _wall_base - float(_wall_data.base_y))
+	_world.add_child(sides)
 	_gate = Sprite2D.new()
 	_gate.centered = false
 	_world.add_child(_gate)
@@ -380,10 +388,15 @@ func _wall_rail_y() -> float:
 	return to_world(gate_ground()).y - RAIL_ABOVE_GATE_LINE
 
 
-func _set_gate_frame(frame: int) -> void:
-	_gate_frame = frame
-	_gate.texture = _wall_frames[frame]
-	_gate.position = Vector2(-DESIGN_WIDTH * 0.5, _wall_base - float(_wall_data.base_y[frame]))
+func _set_gate_frame(frame: int, breach := false) -> void:
+	if breach:
+		_breach_frame = clampi(frame, 0, _breach_frames.size() - 1)
+		_gate.texture = _breach_frames[_breach_frame]
+	else:
+		_gate_frame = clampi(frame, 0, _wall_frames.size() - 1)
+		_breach_frame = -1
+		_gate.texture = _wall_frames[_gate_frame]
+	_gate.position = Vector2(-DESIGN_WIDTH * 0.5, _wall_base - float(_wall_data.base_y))
 
 
 func _door_ground() -> Vector2:
@@ -1015,22 +1028,8 @@ func play_breach() -> void:
 		return
 	_breaching = true
 	_breach_t = 0.0
+	_set_gate_frame(0, true)
 	var door := _door_ground()
-	var tween := create_tween()
-	for k in 4:
-		var off := Vector2((k - 1.5) * 1.8, -0.5 + (k % 2) * 0.4)
-		tween.tween_callback(func():
-			_fx_explosion(door + off, 2.2)
-			_shake_screen(10.0))
-		tween.tween_interval(0.16)
-	for frame in range(_gate_frame + 1, _wall_frames.size()):
-		tween.tween_callback(_set_gate_frame.bind(frame))
-		tween.tween_interval(0.14)
-	tween.tween_callback(func():
-		_fx_explosion(door, 3.4)
-		_shake_screen(22.0)
-		for i in 14:
-			_fx_debris(door + Vector2(randf_range(-3.0, 3.0), -0.4)))
 	for i in 3:
 		_puff(to_world(door + Vector2((i - 1) * 2.5, -1.0), 1.0), 1.2, Color(0.55, 0.5, 0.45, 0.55), 2.2, 3.8)
 
@@ -1068,8 +1067,26 @@ func _process(delta: float) -> void:
 func animate_breach(delta: float) -> void:
 	if not _breaching or sim == null:
 		return
+	var previous_time := _breach_t
 	_breach_t += delta
-	if _breach_t < 0.9:
+	var frame_seconds := float(_wall_data.breach_frame_ms) / 1000.0
+	var frame := mini(int((_breach_t + 0.000001) / frame_seconds), _breach_frames.size() - 1)
+	if frame != _breach_frame:
+		_set_gate_frame(frame, true)
+	var door := _door_ground()
+	for index in _wall_data.burst_frames.size():
+		var cue := float(_wall_data.burst_frames[index]) * frame_seconds
+		if previous_time + 0.000001 < cue and _breach_t + 0.000001 >= cue:
+			var off := Vector2((index - 1.5) * 1.8, -0.5 + (index % 2) * 0.4)
+			_fx_explosion(door + off, 2.2)
+			_shake_screen(10.0)
+	var impact := float(_wall_data.impact_frame) * frame_seconds
+	if previous_time + 0.000001 < impact and _breach_t + 0.000001 >= impact:
+		_fx_explosion(door, 3.4)
+		_shake_screen(22.0)
+		for index in 14:
+			_fx_debris(door + Vector2(randf_range(-3.0, 3.0), -0.4))
+	if _breach_t < float(_wall_data.charge_after):
 		return
 	var g := gate_ground()
 	for m in sim.monsters:

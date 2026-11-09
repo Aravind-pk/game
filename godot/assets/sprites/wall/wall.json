@@ -1,1 +1,39 @@
-{"frames": 12, "base_y": [312.6, 312.6, 312.6, 312.6, 312.6, 312.6, 306.0, 306.0, 306.0, 306.0, 306.0, 306.0], "rail_above_base": 284.4}
+{
+  "frames": 5,
+  "damage_frames": [
+    "damage_00.png",
+    "damage_01.png",
+    "damage_02.png",
+    "damage_03.png",
+    "damage_04.png"
+  ],
+  "side_texture": "sides.png",
+  "base_y": 392.6,
+  "top_padding": 80,
+  "rail_above_base": 284.4,
+  "breach_frames": [
+    "breach_00.png",
+    "breach_01.png",
+    "breach_02.png",
+    "breach_03.png",
+    "breach_04.png",
+    "breach_05.png",
+    "breach_06.png",
+    "breach_07.png",
+    "breach_08.png",
+    "breach_09.png",
+    "breach_10.png",
+    "breach_11.png",
+    "breach_12.png",
+    "breach_13.png"
+  ],
+  "breach_frame_ms": 100,
+  "charge_after": 0.9,
+  "burst_frames": [
+    1,
+    3,
+    5,
+    7
+  ],
+  "impact_frame": 8
+}

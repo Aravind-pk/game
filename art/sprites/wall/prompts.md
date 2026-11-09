@@ -1,0 +1,12 @@
+# Built-in image generation prompts
+
+Generated with the built-in image tool; model identifier was not exposed. No external billed API was used.
+
+## gate_dust_prompt
+
+Paint a six-frame DUST EFFECT sprite sheet for this sun-baked fortress gate's collapse. Reference is colour/paint style only. DUST AND SMALL LOOSE STONE PARTICLES ONLY, no gate, doors, pillars, walls, buildings, floor or scenery. Three columns two rows, six separate spacious cells, read left-right top-bottom. Camera35 degrees down, explosion rolls outward toward viewer across dry ground. Frame1 two small tan-brown puffs from a low central impact. Frame2 dust curls spread outward low. Frame3 broad billowing rolling cloud at peak, warm muted brown-grey, small dark rubble particles. Frame4 spreads wider and thinner with separate rolling curls. Frame5 faint drifting broken wisps settling. Frame6 nearly dissipated light wisps, no solid objects. Soft translucent painted edges fade cleanly to TRUE EMPTY TRANSPARENT alpha; no black/grey matte, no red/yellow coloured noise, no checkerboard or labels. Dust footprint stays centred in each cell with generous margins. Useful cloud width about450pixels per cell, displayed300px across a540px game screen. No flames or glowing magic.
+
+## gate_back_prompt
+
+Two isolated INSIDE/BACK faces of the fortress's heavy double steel gate, for a layered 2D destruction rig. Reference only supplies material palette and painted game style. Show the normally hidden rear surfaces, not the outside cyan lintel or pillars. Left and right door panels side by side, separated by generous transparent gap. Each panel is a complete rectangular heavy dark grey/brown steel slab, slightly taller than wide, with thick riveted border, bent interior cross braces and inset steel plates. Severely stressed: cracked braces, torn hinge mounts, charred scrape marks, a few fractured edges, but each panel stays one readable slab. No readable text. Rear surfaces have no cyan light strip and no yellow hazard stripe. Frontal orthographic surface texture suitable for projection onto falling door planes, consistent top-left painted lighting. Real empty transparent alpha outside the two complete panels, generous margins, no wall/pillars/gateframe/floor/shadow/smoke/fire/grid. Each panel about400px wide in source, displayed75px wide during fall. Preserve the reference's worn charcoal industrial steel and painted realism.
+
