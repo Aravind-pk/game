@@ -25,14 +25,25 @@ for name,cols,rows,groups,reference in specs:
  scale=target/(boxes[reference][2]-boxes[reference][0])
  manifest[name]={'sha256':hashlib.sha256((SRC/name).read_bytes()).hexdigest(),'grid':[cols,rows],'shared_scale':scale}
  for key,start,count in groups:
+  family_scale = (175/(boxes[start][2]-boxes[start][0])) if key == "death_E" else scale
   subset=boxes[start:start+count];baseline=float(np.median([b[3] for b in subset]))
   if key.startswith('death'):baseline=boxes[start][3]
   if key=='emerge':baseline=boxes[-1][3]
   center=float(np.median([(b[0]+b[2])/2 for b in subset]))
   frames=[]
   for i in range(start,start+count):
-   cell=cells[i]; resized=cell.resize((round(cell.width*scale),round(cell.height*scale)),Image.Resampling.LANCZOS)
-   tile=Image.new('RGBA',(256,224));px=round(128-center*scale);py=round(190-baseline*scale);tile.alpha_composite(resized,(px,py))
+   cell=cells[i]
+   frame_baseline=boxes[i][3] if key.startswith('death') else baseline
+   frame_center=center
+   if key.startswith('walk'):
+    row_start=(i//cols)*cols
+    frame_baseline=float(np.median([b[3] for b in boxes[row_start:row_start+cols]]))
+    # Register the upper shell, excluding moving foreclaws and hind feet.
+    aa=np.array(cell)[:,:,3]; top=boxes[i][1];band=aa[top:top+max(1,round((boxes[i][3]-top)*.3))]
+    yy,xx=np.where(band>160)
+    if len(xx): frame_center=float(np.mean(xx))
+   resized=cell.resize((round(cell.width*family_scale),round(cell.height*family_scale)),Image.Resampling.LANCZOS)
+   tile=Image.new('RGBA',(256,224));px=round(128-frame_center*family_scale);py=round(190-frame_baseline*family_scale);tile.alpha_composite(resized,(px,py))
    bb=tile.getbbox();assert bb and bb[0]>0 and bb[1]>0 and bb[2]<256 and bb[3]<224,(key,i,bb)
    frames.append(dict(x=0,y=0,w=256,h=224,ax=128,ay=190,sh=120 if key!='emerge' or i>=start+8 else 0));tiles.append((key,len(frames)-1,tile))
   anims[key]={'frames':frames}
