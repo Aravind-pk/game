@@ -49,7 +49,9 @@ const GATE_HIT_TREMOR_PX := 7.0
 const TURRET_HIT_TREMOR_PX := 3.5
 const TREMOR_DECAY := 0.002       # share of the tremor left after one second
 const TREMOR_MIN_PX := 0.15
-const GATE_CLEARANCE_PX := -150.0   # where the foot of the wall sits against the bottom edge (negative: just past it)
+const GATE_CLEARANCE_PX := -150.0
+const SKY_END_ROW := 370.0         # last row of the painting's sky band
+const HEADER_COVER_PX := 130.0     # how much of the top the header plate hides, in design pixels   # where the foot of the wall sits against the bottom edge (negative: just past it)
 
 var level: LevelData
 var sim: BattleSim
@@ -159,6 +161,9 @@ func _fit_to_screen() -> void:
 	# translucent tray and everything above it is open ground for turrets
 	var foot := view.y * 0.5 + _wall_base * _world.scale.y
 	_lift = clampf(foot + GATE_CLEARANCE_PX * _world.scale.y - view.y, 0.0, view.y * 0.25)
+	# tall phones see more of the painting: lift it until its sky band sits under the header
+	var sky_end := (SKY_END_ROW - float(load(BACKGROUND).get_height()) * 0.5) * _world.scale.y
+	_lift = maxf(_lift, view.y * 0.5 + sky_end - HEADER_COVER_PX * _world.scale.y)
 	_world.position = _base_position()
 
 

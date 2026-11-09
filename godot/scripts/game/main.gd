@@ -116,6 +116,7 @@ var _hint_solution := -1      # once a hint points at a solution, later hints fo
 
 
 func _ready() -> void:
+	RenderingServer.set_default_clear_color(UiKit.BG)  # tall phones see past the painting's bottom edge
 	for a in OS.get_cmdline_user_args():
 		var kv := a.split("=")
 		_args[kv[0]] = kv[1] if kv.size() > 1 else "1"
@@ -1120,6 +1121,9 @@ func _open_sheet() -> VBoxContainer:
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.mouse_filter = Control.MOUSE_FILTER_PASS
 	scroll.add_child(v)
+	# a sheet scrolls down, never sideways: content is held to the screen width and long lines wrap
+	v.custom_minimum_size.x = get_viewport().get_visible_rect().size.x - UiKit.px(EDGE_PT * 2)
+	scroll.resized.connect(func(): v.custom_minimum_size.x = scroll.size.x)
 	return v
 
 
@@ -1432,7 +1436,9 @@ func _show_report() -> void:
 	cv.add_child(line)
 	var tip := _report_tip()
 	if tip != "":
-		cv.add_child(UiKit.text(tip, "small", UiKit.FRIENDLY))
+		var tip_label := UiKit.text(tip, "small", UiKit.FRIENDLY)
+		tip_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		cv.add_child(tip_label)
 	v.add_child(cause)
 
 	v.add_child(UiKit.section("Key Moments", UiKit.THREAT, "label_lg"))
@@ -1441,7 +1447,10 @@ func _show_report() -> void:
 		var r := UiKit.hbox(8)
 		r.add_child(UiKit.text(_clock(m.t), "small", UiKit.INK_MUTED))
 		var col: Color = {"brute": UiKit.AMBER, "lost": UiKit.THREAT, "empty": UiKit.AMBER}.get(m.kind, UiKit.INK)
-		r.add_child(UiKit.text(m.text, "small", col))
+		var moment := UiKit.text(m.text, "small", col)
+		moment.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		moment.clip_text = true
+		r.add_child(moment)
 		v.add_child(r)
 
 	v.add_child(UiKit.section("Turrets", UiKit.AMBER, "label_lg"))
@@ -1493,11 +1502,11 @@ func _report_tip() -> String:
 		return "Try · Cannon order: Heavy only"
 	for type in ["cannon", "sniper"]:
 		if _last_cause.begins_with(GUN_UI[type].name) and "destroyed" in _last_cause:
-			return "Try · it can't fire inside the hatched ring: keep it back from the route"
+			return "Try · move it back: it can't fire inside the hatched ring"
 	if "destroyed" in _last_cause:
-		return "Try · keep turrets outside the red lure rings, or behind another turret"
+		return "Try · keep it out of the red lure rings"
 	if "ran dry" in _last_cause:
-		return "Try · a turret that fired too early: move it back, closer to the gate"
+		return "Try · move a turret back toward the gate"
 	return ""
 
 
@@ -1581,7 +1590,7 @@ func _apply_automation() -> void:
 		unlocked = level_paths.size() - 1
 	var p := str(_args.get("phase", ""))
 	if _args.has("weak"):  # one turret in a corner: lets monsters reach the gate (screenshots)
-		place(0, level.view_rect.position + Vector2i(0, 1))
+		place(0, level.view_rect.position + Vector2i(1, 1))
 	elif _args.has("auto_deploy") or p in ["combat", "result", "pause", "deploy_full"]:
 		_auto_deploy()
 	match p:
