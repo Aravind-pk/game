@@ -22,8 +22,8 @@ The game is portrait 1080×1920 and uses the Compatibility renderer.
   (cyan disc), lure ring (dashed red: monsters inside leave their route to attack it) and blind
   zone (hatched). Wave 01 names these once with three coach cards; waves 02–04 each get one card for the
   thing they introduce (blind zone, sniper, orders); later waves have no coach text.
-- **Orders**: a Sniper can be set to *Heavy only*, from a small budget per wave (1 from wave 04,
-  or `orders` in the level file). Other turrets take no orders.
+- **Orders**: a Cannon can be set to *Heavy only*, from a small budget per wave (1 from wave 04 on
+  waves with brutes, or `orders` in the level file). Other turrets take no orders.
 - **Defend**: 1×/2×/4× and Skip, with a three-line ticker of key moments. When every turret is
   empty and monsters remain, the battle stops with *Defense Depleted*.
 - **Result**: victory gives up to three stars (held, untouched, 20% ammo left), saved per level.
@@ -86,30 +86,38 @@ extracting. To use a new kit in the game, add it to `MONSTER_KITS` or `TURRET_KI
 
 ### Combat numbers and roles
 
-Each turret has one job, and each monster has a turret that answers it:
+The turrets are modelled on real weapons, and the stats follow from what those weapons are good
+and bad at:
 
-| Turret | Per shot | Rate | DPS | Range | HP | Job |
-|---|---:|---:|---:|---|---:|---|
-| MG Turret | 7 (55% beyond 4 m) | 6/s | 42 close, 23 far | 8 m | 120 | Shreds swarms and runners up close |
-| Cannon | 42, 2.6 m splash | 0.55/s | 23 per target | 11 m, blind inside 4 m | 170 | One-shots burrower groups; slow on a brute (8 shells) |
-| Sniper | 110 | 0.35/s | 38 | 20 m, blind inside 7 m | 90 | One-shots runners, 3 rounds per brute |
+| Turret | Real counterpart | Per shot | Rate | Range | HP | Good at | Bad at |
+|---|---|---:|---:|---|---:|---|---|
+| MG Turret | Heavy machine gun | 7 (50% beyond 4 m) | 6/s | 9 m | 120 | Swarms and runners up close | Armour: its rounds barely scratch a brute |
+| Cannon | Mortar / howitzer, HE shells | 110, 2.6 m blast (half at the edge) | 0.35/s | 12 m, blind inside 4 m | 200 | Groups, and brutes (3 shells) | Anything close: the shell needs room to arc. Slow reload, few shells |
+| Sniper | Anti-materiel rifle | 75, armour-piercing | 0.45/s | 20 m, blind inside 3 m | 90 | One-shots runners at any range | Volume: few rounds, 5 per brute |
 
-| Monster | HP | Speed | Hit | Rate | DPS | Notices turrets |
+| Monster | HP | Armour | Speed | Hit | Rate | Notices turrets |
 |---|---:|---:|---:|---:|---:|---|
-| Burrower | 32 | 2.3 m/s | 7 | 1/s | 7 | 6 m |
-| Runner | 48 | 4.4 m/s | 9 | 1.2/s | 11 | 7 m (inside an MG's range) |
-| Brute | 300 | 1.25 m/s | 18 | 0.5/s | 9 | 5 m |
+| Burrower | 32 | 0 | 2.3 m/s | 7 | 1/s | 6 m |
+| Runner | 48 | 0 | 4.4 m/s | 9 | 1.2/s | 7 m |
+| Brute | 300 | 8 | 1.25 m/s | 18 | 0.5/s | 5 m |
 
-Why these numbers: a brute used to hit for 32, so the 60 HP gate fell in two hits and a sniper in three,
-which made one leaking brute an instant loss. It now takes four hits on the gate and seven on an MG,
-so a near-miss shows up as gate damage instead of a breach. The sniper was the only turret that can
-stop a brute efficiently, but its 70 damage over-killed burrowers and needed five shots per brute;
-at 110 it needs three, and the **Heavy only** order (Sniper only) is what saves those rounds. The MG's
-long-range damage fell to 35%, which made placement one tile too far a silent failure; it now keeps
-55%. Runners noticed turrets from 9 m, outside the MG's 8 m reach, so they always got the first hit.
+**Armour** takes a flat amount off every hit, and at least a tenth of a hit always gets through. A
+brute's 8 armour turns a 7-damage MG round into 0.7, so an MG needs over 400 rounds for one brute,
+while a cannon shell (110 → 102) needs 3 and a sniper round (75 → 67) needs 5. That is why the
+Cannon's **Heavy only** order matters: shells spent on burrowers are shells missing when the brutes
+arrive.
 
-Levels are re-tuned by the forge against these numbers with 18–35% spare ammunition (it was 5–25%),
-and no turret can go on the row against the wall, where the gate plate sits.
+What changed and why:
+- A brute hit for 32, so two hits broke the 60 HP gate and one leak was an instant loss. It now
+  hits for 18 at 0.5/s: four hits on the gate, seven on an MG.
+- The cannon fired 42-damage shells: 8 per brute with 5 in the tray, so saving them for brutes
+  could not work. HE shells now do 110, with the blast weaker toward its edge, and reload slower.
+- The sniper's 7 m blind zone had no real-world reason (a rifle can fire close; it only traverses
+  slowly), so it is now 3 m.
+- MG damage fell to 35% at range, so one tile too far failed silently. It keeps 50%, and its reach
+  is 9 m, ahead of the 7 m at which runners notice turrets.
+- The forge leaves 18–35% spare ammunition (it was 5–25%), and no turret can go on the row behind
+  the gate plate or the half-visible outer columns.
 
 ### Mechanics
 

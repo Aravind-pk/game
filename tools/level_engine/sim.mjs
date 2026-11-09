@@ -10,6 +10,10 @@ export const SIM_DT = 1.0 / 30.0;
 export const CELL = 2.0;
 /** A turret order limits which monster type it fires at (matches ORDERS in defs.gd). */
 export const ORDER_TARGET = { heavy: 'brute' };
+/** Armour takes a flat amount off every hit, but at least a tenth of the hit always gets through. */
+export const hitAfterArmor = (raw, armor) => Math.max(raw - armor, raw * 0.1);
+/** A shell's blast is full strength at the impact and half at the edge of its splash. */
+export const splashFactor = (d, splash) => 1 - 0.5 * Math.min(Math.max(d / Math.max(splash, 0.001), 0), 1);
 const EMERGE_WARN = 1.6;
 const EMERGE_TIME = 0.9;
 const RETARGET_INTERVAL = 0.25;
@@ -18,17 +22,17 @@ const INF = 1 << 30;
 const NEIGHBOURS = [[0, 1], [-1, 1], [1, 1], [-1, 0], [1, 0], [-1, -1], [1, -1], [0, -1]];
 
 export const GUNS = {
-  mg: { hp: 120, damage: 7, fire_rate: 6, range: 8, splash: 0, projectile_speed: 0, radius: 0.8, min_range: 0, falloff_start: 4, falloff_floor: 0.55, blast: 0, blast_radius: 0 },
-  cannon: { hp: 170, damage: 42, fire_rate: 0.55, range: 11, splash: 2.6, projectile_speed: 16, radius: 1.0, min_range: 4, falloff_start: 11, falloff_floor: 1, blast: 0, blast_radius: 0 },
+  mg: { hp: 120, damage: 7, fire_rate: 6, range: 9, splash: 0, projectile_speed: 0, radius: 0.8, min_range: 0, falloff_start: 4, falloff_floor: 0.5, blast: 0, blast_radius: 0 },
+  cannon: { hp: 200, damage: 110, fire_rate: 0.35, range: 12, splash: 2.6, projectile_speed: 16, radius: 1.0, min_range: 4, falloff_start: 11, falloff_floor: 1, blast: 0, blast_radius: 0 },
   decoy: { hp: 220, damage: 0, fire_rate: 1, range: 6, splash: 0, projectile_speed: 0, radius: 0.9, min_range: 0, falloff_start: 6, falloff_floor: 1, blast: 0, blast_radius: 0 },
   rigged: { hp: 90, damage: 0, fire_rate: 1, range: 6, splash: 0, projectile_speed: 0, radius: 0.9, min_range: 0, falloff_start: 6, falloff_floor: 1, blast: 110, blast_radius: 4.5 },
-  sniper: { hp: 90, damage: 110, fire_rate: 0.35, range: 20, splash: 0, projectile_speed: 0, radius: 0.7, min_range: 7, falloff_start: 20, falloff_floor: 1, blast: 0, blast_radius: 0 },
+  sniper: { hp: 90, damage: 75, fire_rate: 0.45, range: 20, splash: 0, projectile_speed: 0, radius: 0.7, min_range: 3, falloff_start: 20, falloff_floor: 1, blast: 0, blast_radius: 0 },
 };
 
 export const MONSTERS = {
-  burrower: { base_level: 1, hp: 32, speed: 2.3, damage: 7, attack_rate: 1.0, detect: 6, attack_range: 1.0, radius: 0.55 },
-  stalker: { base_level: 2, hp: 48, speed: 4.4, damage: 9, attack_rate: 1.2, detect: 7, attack_range: 1.0, radius: 0.55 },
-  brute: { base_level: 3, hp: 300, speed: 1.25, damage: 18, attack_rate: 0.5, detect: 5, attack_range: 1.6, radius: 1.15 },
+  burrower: { base_level: 1, armor: 0, hp: 32, speed: 2.3, damage: 7, attack_rate: 1.0, detect: 6, attack_range: 1.0, radius: 0.55 },
+  stalker: { base_level: 2, armor: 0, hp: 48, speed: 4.4, damage: 9, attack_rate: 1.2, detect: 7, attack_range: 1.0, radius: 0.55 },
+  brute: { base_level: 3, armor: 8, hp: 300, speed: 1.25, damage: 18, attack_rate: 0.5, detect: 5, attack_range: 1.6, radius: 1.15 },
 };
 
 export function gunStats(type, level) {
@@ -282,7 +286,7 @@ export function simulate(map, deployment) {
       }
       monsters.push({
         id: monsters.length, x, y, hp: st.hp, speed: st.speed, damage: st.damage, attackRate: st.attack_rate,
-        detect: st.detect, attackRange: st.attack_range, radius: st.radius, state: 1, stateT: EMERGE_TIME,
+        detect: st.detect, attackRange: st.attack_range, radius: st.radius, armor: st.armor, state: 1, stateT: EMERGE_TIME,
         target: -1, cooldown: 0.5, retarget: 0, hotspot: s.hotspot, type: s.type,
       });
       alive++;
@@ -330,8 +334,9 @@ export function simulate(map, deployment) {
             if (g.blast > 0) {
               for (const o of monsters) {
                 if (o.state === 2 && o.hp > 0 && dist(f(g.px), f(g.py), o.x, o.y) <= g.blastRadius + o.radius) {
-                  o.hp -= g.blast;
-                  g.dealt[o.hotspot] += g.blast;
+                  const hit = hitAfterArmor(g.blast, o.armor);
+                  o.hp -= hit;
+                  g.dealt[o.hotspot] += hit;
                 }
               }
             }
@@ -414,7 +419,7 @@ export function simulate(map, deployment) {
       } else {
         const d = dist(g.px, g.py, m.x, m.y) - m.radius;
         const fade = Math.min(Math.max((d - g.falloffStart) / Math.max(g.range - g.falloffStart, 0.001), 0), 1);
-        const dmg = g.damage * (1 - fade * (1 - g.falloffFloor));
+        const dmg = hitAfterArmor(g.damage * (1 - fade * (1 - g.falloffFloor)), m.armor);
         m.hp -= dmg;
         g.dealt[m.hotspot] += dmg;
       }
@@ -429,9 +434,11 @@ export function simulate(map, deployment) {
         continue;
       }
       for (const m of monsters) {
-        if (m.state === 2 && m.hp > 0 && dist(m.x, m.y, s.x, s.y) <= s.splash + m.radius) {
-          m.hp -= s.damage;
-          s.gun.dealt[m.hotspot] += s.damage;
+        const ds = dist(m.x, m.y, s.x, s.y);
+        if (m.state === 2 && m.hp > 0 && ds <= s.splash + m.radius) {
+          const hit = hitAfterArmor(s.damage * splashFactor(ds - m.radius, s.splash), m.armor);
+          m.hp -= hit;
+          s.gun.dealt[m.hotspot] += hit;
         }
       }
       shells.splice(i, 1);

@@ -32,7 +32,7 @@ const GUN_UI := {
 const MONSTER_UI := {
 	"burrower": {"one": "Burrower", "many": "Burrowers", "desc": "Swarm. Attacks turrets near its route.", "counter": ["mg", "cannon"]},
 	"stalker": {"one": "Runner", "many": "Runners", "desc": "Fast. Slips past slow turrets.", "counter": ["mg", "sniper"]},
-	"brute": {"one": "Brute", "many": "Brutes", "desc": "Slow, 300 HP. Flattens turrets and the gate.", "counter": ["sniper", "cannon"]},
+	"brute": {"one": "Brute", "many": "Brutes", "desc": "Armoured, 300 HP. MG rounds barely scratch it.", "counter": ["cannon", "sniper"]},
 }
 
 var battlefield: Battlefield
@@ -201,8 +201,8 @@ const TUTORIALS := {
 		["Lure", "Monsters inside the dashed red ring leave their route and attack the turret."],
 	],
 	"02": [["Blind zone", "The Cannon splashes groups but can't fire inside its hatched ring. Keep it behind the line."]],
-	"03": [["Sniper", "One shot kills a runner. It reaches far but is blind up close, and has few rounds."]],
-	"04": [["Orders", "Brutes take 3 Sniper rounds. Select the Sniper and set Heavy only to save its rounds for them."]],
+	"03": [["Sniper", "One shot kills a runner. It reaches across the field but carries few rounds."]],
+	"04": [["Orders", "Brutes shrug off MG fire. Select the Cannon and set Heavy only to save its shells for them."]],
 }
 
 
@@ -1489,8 +1489,8 @@ func _key_moments(n: int) -> Array:
 
 ## A next step to try, only when the game can point at one.
 func _report_tip() -> String:
-	if _last_cause.begins_with("The Sniper") and level.order_budget() > 0:
-		return "Try · Sniper order: Heavy only"
+	if _last_cause.begins_with("The Cannon") and level.order_budget() > 0:
+		return "Try · Cannon order: Heavy only"
 	for type in ["cannon", "sniper"]:
 		if _last_cause.begins_with(GUN_UI[type].name) and "destroyed" in _last_cause:
 			return "Try · it can't fire inside the hatched ring: keep it back from the route"

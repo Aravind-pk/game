@@ -157,7 +157,7 @@ func _spawn_monster(s: Dictionary) -> void:
 		"id": monsters.size(), "type": s.type, "level": s.level, "pos": pos, "prev_pos": pos,
 		"hp": st.hp, "max_hp": st.hp, "speed": st.speed, "damage": st.damage,
 		"attack_rate": st.attack_rate, "detect": st.detect, "attack_range": st.attack_range,
-		"radius": st.radius, "state": "emerging", "state_t": Defs.EMERGE_TIME, "target": -1,
+		"radius": st.radius, "armor": st.armor, "state": "emerging", "state_t": Defs.EMERGE_TIME, "target": -1,
 		"cooldown": 0.5, "retarget": 0.0, "facing": Vector2(0, 1), "hotspot": s.hotspot,
 		"attacking": false,
 	}
@@ -229,7 +229,7 @@ func _detonate(g: Dictionary) -> void:
 		return
 	for m in monsters:
 		if m.state == "active" and m.hp > 0.0 and g.pos.distance_to(m.pos) <= g.blast_radius + m.radius:
-			m.hp -= g.blast
+			m.hp -= Defs.hit_after_armor(g.blast, m.armor)
 	events.append({"type": "explode", "pos": g.pos, "radius": g.blast_radius, "gun": g.id})
 
 
@@ -336,7 +336,7 @@ func _update_guns() -> void:
 				"gun": g.id})
 			events.append({"type": "fire", "gun": g.id, "to": m.pos, "shell": true})
 		else:
-			m.hp -= _direct_damage(g, m)
+			m.hp -= Defs.hit_after_armor(_direct_damage(g, m), m.armor)
 			events.append({"type": "fire", "gun": g.id, "to": m.pos, "monster": m.id})
 
 
@@ -371,8 +371,9 @@ func _update_shells() -> void:
 			i += 1
 			continue
 		for m in monsters:
-			if m.state == "active" and m.hp > 0.0 and m.pos.distance_to(s.to) <= s.splash + m.radius:
-				m.hp -= s.damage
+			var ds: float = m.pos.distance_to(s.to)
+			if m.state == "active" and m.hp > 0.0 and ds <= s.splash + m.radius:
+				m.hp -= Defs.hit_after_armor(s.damage * Defs.splash_factor(ds - m.radius, s.splash), m.armor)
 		events.append({"type": "explode", "pos": s.to, "radius": s.splash, "gun": s.gun})
 		shells.remove_at(i)
 
