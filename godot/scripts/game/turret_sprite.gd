@@ -170,8 +170,12 @@ func _nearest_aim(angle: float) -> int:
 
 
 func _show(anim: String, index: int, flip: bool) -> void:
-	_base_sprite.visible = anim == "aim"
+	var layered_wreck := anim == "destroy" and bool(_anims.destroy.get("layered_base", false))
+	_base_sprite.visible = anim == "aim" or layered_wreck
 	var f: Dictionary = _anims[anim].frames[index]
+	if layered_wreck and index == 0 and bool(_anims.destroy.get("entry_aim", false)):
+		f = _anims.aim.frames[_aim]
+		flip = false
 	var w := float(f.w)
 	_sprite.region_rect = Rect2(float(f.x), float(f.y), w, float(f.h))
 	_sprite.flip_h = flip
