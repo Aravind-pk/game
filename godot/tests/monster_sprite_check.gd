@@ -33,20 +33,31 @@ func _check_turret() -> void:
 	var turret := TurretSprite.new()
 	root.add_child(turret)
 	turret.setup("kestrel", null, null)
-	_expect(turret._anims.aim.frames.size() == 14, "turret has 14 aim frames")
-	_expect(turret.MUZZLE_PX.size() == 14 and turret.AIM_DEGREES.size() == 14, "every aim frame has a muzzle and an angle")
+	_expect(turret._anims.aim.frames.size() == 16, "turret has 16 aim frames")
+	_expect(turret.MUZZLE_PX.size() == 16 and turret.AIM_DEGREES.size() == 16, "every aim frame has a muzzle and an angle")
 	_expect(turret._anims.destroy.frames.size() == 12, "turret has 12 destruction frames")
 	var last := turret._aim
 	for i in 200:
 		turret.update_turret(true, PI * 0.5, DT)
-		var moved := mini(posmod(turret._aim - last, 14), posmod(last - turret._aim, 14))
+		var moved := mini(posmod(turret._aim - last, 16), posmod(last - turret._aim, 16))
 		_expect(moved <= 1, "barrel swung %d steps in one frame" % moved)
 		last = turret._aim
 	_expect(turret._aim == 0, "barrel reaches the south aim frame (got %d)" % turret._aim)
 	turret.fired()
 	turret.update_turret(true, PI * 0.5, DT)
 	_expect(turret._flash.visible, "firing shows a flash")
-	_expect(turret.muzzle_offset().is_equal_approx(Vector2(0, -44) * turret._art_scale()), "shots leave from the south muzzle")
+	_expect(turret.muzzle_offset().is_equal_approx(turret.MUZZLE_PX[0] * turret._art_scale() + turret._sprite.position), "shots leave from the south muzzle")
+	_expect(turret._base_sprite.position == Vector2.ZERO and turret._sprite.position.length() > 0.0, "only the head recoils")
+	turret._flash.visible = false
+	turret.fired()
+	_expect(turret._flash.visible, "flash appears on firing frame")
+	turret._aim_angle = deg_to_rad(170.0)
+	turret._pan_toward(deg_to_rad(-170.0), DT)
+	_expect(is_equal_approx(rad_to_deg(turret._aim_angle), 176.0), "aim takes short angular path across wrap")
+	turret._aim_angle = 0.0
+	turret._pan_toward(PI * 0.5, 0.25)
+	_expect(is_equal_approx(turret._aim_angle, PI * 0.5), "aim speed is independent of frame spacing")
+
 	turret.destroyed()
 	for i in 120:
 		turret.update_turret(false, 0.0, DT)
@@ -67,7 +78,7 @@ func _check_footprint_avoidance() -> void:
 
 
 func _check_wheel(sprite: MonsterSprite) -> void:
-	_expect(sprite._wheel.size() == 26, "turntable has 26 poses (got %d)" % sprite._wheel.size())
+	_expect(sprite._wheel.size() == 16, "turntable has 16 poses (got %d)" % sprite._wheel.size())
 	var largest := 0.0
 	for i in sprite._wheel.size():
 		var next: Dictionary = sprite._wheel[(i + 1) % sprite._wheel.size()]
@@ -123,3 +134,4 @@ func _expect(ok: bool, what: String) -> void:
 	if not ok:
 		_failures += 1
 		print("  failed: ", what)
+

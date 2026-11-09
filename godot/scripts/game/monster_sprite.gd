@@ -25,12 +25,13 @@ const SLICE := PI / 8.0
 const TURN_TRIGGER := SLICE * 0.8 # how far off its facing a monster may walk before turning
 
 # 16 facings. Each names the atlas row that shows it, and whether to mirror it.
-# The kit has no straight-north row, so N reuses the nearly straight NNE walk.
+# The new kit has a true north walk and a separate sixteen-pose turntable.
+# Eight authored walk facings; intermediate headings use the nearest walk.
 const DIRS := {
-	"E": ["walk_E", false], "ESE": ["walk_WSW", true], "SE": ["walk_SW", true], "SSE": ["walk_SSW", true],
-	"S": ["walk_S", false], "SSW": ["walk_SSW", false], "SW": ["walk_SW", false], "WSW": ["walk_WSW", false],
-	"W": ["walk_E", true], "WNW": ["walk_ENE", true], "NW": ["walk_NE", true], "NNW": ["walk_NNE", true],
-	"N": ["walk_NNE", false], "NNE": ["walk_NNE", false], "NE": ["walk_NE", false], "ENE": ["walk_ENE", false],
+	"E": ["walk_E", false], "ESE": ["walk_E", false], "SE": ["walk_SW", true], "SSE": ["walk_S", false],
+	"S": ["walk_S", false], "SSW": ["walk_S", false], "SW": ["walk_SW", false], "WSW": ["walk_E", true],
+	"W": ["walk_E", true], "WNW": ["walk_E", true], "NW": ["walk_NE", true], "NNW": ["walk_N", false],
+	"N": ["walk_N", false], "NNE": ["walk_N", false], "NE": ["walk_NE", false], "ENE": ["walk_E", false],
 }
 const DIR_ORDER: Array[String] = ["E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW", "N", "NNE", "NE", "ENE"]
 # Facings drawn in the same sheet match closely enough to swap directly mid-stride.
@@ -325,18 +326,9 @@ static func _total_ms(table: String) -> float:
 ## Lays the turn strips out around the circle by the angle each pose shows. Clockwise on
 ## screen from the camera: S to W, W to N, N to E, then S to W mirrored for E to S.
 static func _build_wheel(anims: Dictionary) -> Array:
-	var pivot: Array = anims.pivot.frames
-	var west_north: Array = anims.turn_wn.frames
-	var north_east: Array = anims.turn_ne.frames
 	var wheel: Array = []
-	var pivot_deg := func(i: int) -> float: return 90.0 + i * 68.0 / 7.0  # stops about 22 degrees short of W
-	for i in pivot.size():
-		wheel.append({"f": pivot[i], "flip": false, "a": deg_to_rad(pivot_deg.call(i))})
-	for i in west_north.size():
-		wheel.append({"f": west_north[i], "flip": false, "a": deg_to_rad(180.0 + i * 18.0)})
-	for i in north_east.size():
-		wheel.append({"f": north_east[i], "flip": false, "a": deg_to_rad(288.0 + i * 18.0)})
-	for i in range(1, pivot.size()):
-		wheel.append({"f": pivot[i], "flip": true, "a": deg_to_rad(180.0 - pivot_deg.call(i))})
+	var frames: Array = anims.turntable.frames
+	for i in frames.size():
+		wheel.append({"f": frames[i], "flip": false, "a": fposmod(PI / 2.0 + i * TAU / frames.size(), TAU)})
 	wheel.sort_custom(func(a, b): return a.a < b.a)
 	return wheel
