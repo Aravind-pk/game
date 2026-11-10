@@ -1,0 +1,33 @@
+{
+  "tool": "built-in image_gen.imagegen",
+  "model": "not exposed",
+  "references": [
+    "gate_reference.png"
+  ],
+  "sources": {
+    "door_backs_raw.png": {
+      "size": [
+        1923,
+        818
+      ],
+      "mode": "RGBA",
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "sha256": "45edf99fb57ce2318fd93476d025191a42a7d9f29e70a5ba649a48f5d5079821"
+    },
+    "dust_raw.png": {
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA",
+      "alpha_extrema": [
+        0,
+        254
+      ],
+      "sha256": "95fcec348e5098f72287c14a20a60fd247d59ad20fcd4ea20caa2ed81bee9c51"
+    }
+  }
+}

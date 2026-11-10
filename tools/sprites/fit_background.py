@@ -1,10 +1,10 @@
-"""Prepare the field, the paved apron and the 12 wall damage frames for Godot.
+"""Prepare the field, apron, static wall sides, HP stages and dedicated breach.
 
 Usage (from the repo root):  python tools/sprites/fit_background.py
 
 Reads   art/backgrounds/north_gate_field.png, art/sprites/apron.png, art/sprites/wall/frames_*.png
 Writes  godot/assets/backgrounds/north_gate_field.jpg and apron.png
-        godot/assets/sprites/wall/wall_00.png ... wall_11.png and wall.json
+        godot/assets/sprites/wall/ legacy cuts, sides, damage/breach frames and wall.json
 """
 import json
 from pathlib import Path
@@ -48,8 +48,9 @@ def wall_bases(sheet):
     return bases
 
 
-def cut_wall():
-    out = ROOT / "godot" / "assets" / "sprites" / "wall"
+def cut_wall(out=None):
+    if out is None:
+        out = ROOT / "godot" / "assets" / "sprites" / "wall"
     out.mkdir(parents=True, exist_ok=True)
     index = 0
     rail_above_base = 0.0
@@ -82,7 +83,8 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     fit_field(out)
     cut_apron(out)
-    cut_wall()
+    from build_wall import build_wall
+    build_wall()
 
 
 if __name__ == "__main__":

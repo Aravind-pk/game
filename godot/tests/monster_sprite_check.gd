@@ -23,12 +23,58 @@ func _init() -> void:
 	_check_attack(sprite)
 	sprite.die(1.0)
 	_expect(sprite._state == "dead", "death starts")
+	call_deferred("_finish_checks")
+
+
+func _finish_checks() -> void:
+	_check_wall()
 	print("FAIL" if _failures else "PASS", " monster_sprite_check, failures: ", _failures)
 	quit(1 if _failures else 0)
 
 
 func _monster(state: String) -> Dictionary:
 	return {"state": state, "state_t": 0.0, "attacking": false, "facing": Vector2(0, 1), "attack_rate": 1.0, "cooldown": 1.0}
+
+
+func _check_wall() -> void:
+	var timelines := []
+	for start_stage in [0, 4]:
+		var field := Battlefield.new()
+		root.add_child(field)
+		var level := LevelData.load_file("res://levels/level_05.json")
+		field.build(level)
+		field.sim = BattleSim.new()
+		field.sim.setup(level, [])
+		var foot := field.wall_foot_screen_pos()
+		var attack_line := field.gate_ground()
+		var position := field._gate.position
+		_expect(is_equal_approx(position.y + 80.0, field._wall_base - 312.6), "wall padding preserves its original physical registration")
+		for stage in 5:
+			field._set_gate_frame(stage)
+			_expect(field._gate.position == position, "damage stages share one registration")
+		field._set_gate_frame(start_stage)
+		field.play_breach()
+		_expect(field._wall_frames[4].get_image().get_data() == field._breach_frames[0].get_image().get_data(), "painted breach enters on the exact last HP stage")
+		var seen := {0: true}
+		var timeline := []
+		for step in 72:
+			field.animate_breach(0.05)
+			timeline.append(field._breach_frame)
+			seen[field._breach_frame] = true
+			_expect(field._gate.position == position, "breach registration stays fixed")
+			_expect(field.wall_foot_screen_pos() == foot, "gate HP plate anchor stays fixed")
+			_expect(field.gate_ground() == attack_line, "monster attack line stays fixed")
+		_expect(seen.size() == 15, "all fifteen painted breach frames are reached")
+		_expect(field._breach_frame == 14, "last painted wreck frame holds")
+		_expect(float(field._wall_data.breach_frame_ms) * 15.0 < 3600.0, "breach fits the defeat timer")
+		timelines.append(timeline)
+		field._breaching = false
+		field.play_breach()
+		for index in range(1, 15):
+			field.animate_breach(0.1)
+			_expect(field._breach_frame == index, "10 fps reaches breach frame %d without rounding skips" % index)
+		field.free()
+	_expect(timelines[0] == timelines[1], "breach clock is independent of prior damage stage")
 
 
 func _check_pending_turrets() -> void:
@@ -86,6 +132,15 @@ func _check_turret() -> void:
 	_expect(turret._anims.aim.frames.size() == 16, "turret has 16 aim frames")
 	_expect(turret.MUZZLE_PX.size() == 16 and turret.AIM_DEGREES.size() == 16, "every aim frame has a muzzle and an angle")
 	_expect(turret._anims.destroy.frames.size() == 8, "Kestrel has eight v3 destruction frames")
+	var baseline_path := ProjectSettings.globalize_path("res://../art/sprites/kestrel_v3/")
+	var baseline: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(baseline_path + "kestrel-atlas-v3.json"))
+	var current := Image.load_from_file(ProjectSettings.globalize_path("res://assets/sprites/turrets/kestrel.png"))
+	var previous := Image.load_from_file(baseline_path + "kestrel-atlas-v3.png")
+	for name in ["aim", "base"]:
+		_expect(turret._anims[name] == baseline.anims[name], "Kestrel %s JSON is preserved" % name)
+		for frame in baseline.anims[name].frames:
+			var rect := Rect2i(frame.x, frame.y, frame.w, frame.h)
+			_expect(current.get_region(rect).get_data() == previous.get_region(rect).get_data(), "Kestrel %s pixels are preserved" % name)
 	var last := turret._aim
 	for i in 200:
 		turret.update_turret(true, PI * 0.5, DT)
@@ -108,9 +163,19 @@ func _check_turret() -> void:
 	turret._pan_toward(PI * 0.5, 0.25)
 	_expect(is_equal_approx(turret._aim_angle, PI * 0.5), "aim speed is independent of frame spacing")
 
+	turret.update_turret(false, 0.0, 0.0)
+	var entry_rect := turret._sprite.region_rect
+	var entry_offset := turret._sprite.offset
+	var pedestal_rect := turret._base_sprite.region_rect
+	var pedestal_offset := turret._base_sprite.offset
 	turret.destroyed()
+	turret.update_turret(false, 0.0, 0.0)
+	_expect(turret._sprite.region_rect == entry_rect and turret._sprite.offset == entry_offset, "Kestrel destruction starts on the current aim image")
+	_expect(turret._base_sprite.visible, "Kestrel keeps its approved pedestal during destruction")
 	for i in 120:
 		turret.update_turret(false, 0.0, DT)
+		_expect(turret._base_sprite.visible and turret._base_sprite.position == Vector2.ZERO, "Kestrel pedestal stays planted")
+		_expect(turret._base_sprite.region_rect == pedestal_rect and turret._base_sprite.offset == pedestal_offset, "Kestrel pedestal art and anchor stay unchanged")
 	_expect(turret._destroy_ms > 1000.0, "destruction plays out")
 
 
