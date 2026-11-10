@@ -7,13 +7,19 @@ once; each workstream is then self-contained.
 
 - **Repo:** `Aravind-pk/game`, cloned at `/home/aravind/code/northgate`. The game is not on `main`.
   Work from branch `ccr-fb8db459-dfc415`.
-- **Uncommitted on that branch:** four bug fixes in `godot/scripts/game/main.gd`,
-  `godot/scripts/ui/ui_kit.gd` and `README.md` (star tiles lit per condition, campaign ends at
-  level 50, level grid locks waves past the first uncleared one, stale README paths removed).
-  Tests pass. Commit these first.
-- **Sprite work:** branch `sprites/pending-kits` in the worktree `.worktrees/sprites`, produced by
-  Codex, uncommitted. Its own report is `.worktrees/sprites/docs/sprite-kits-report.md`. Treat that
-  report as a claim: check each kit in the game before merging (section 5, W0).
+- **Committed on that branch (2026-11-10):** four bug fixes (star tiles lit per condition, campaign
+  ends at level 50, level grid locks waves past the first uncleared one, stale README paths removed)
+  and animated sprite kits for the Mule, Needle, Faultbreaker and Rift Runner, merged from
+  `sprites/pending-kits`. Every unit now has a kit. Tests pass. Nothing is pushed.
+- **Sprite work in progress:** Codex is working in the worktree `.worktrees/sprites` (branch
+  `sprites/pending-kits`) on two things: a new destruction sequence for the Kestrel MG turret (its
+  atlas still shows the old orange design when it dies) and a dedicated gate breach animation with
+  monotonic damage stages. Its report is `docs/sprite-kits-report.md` on that branch. Treat the
+  report as a claim: check in the game before merging (section 5, W0). Review pages and recordings
+  are git-ignored and exist only in that worktree.
+- **Known art compromises in the merged kits:** monsters turn by stepping between eight held views;
+  the Faultbreaker has a low swipe instead of an overhead slam and its death was never seen in a
+  recorded battle; the Rift Runner is only 24-35 px wide head-on.
 - **Tools on this machine:** `godot` 4.5.1 (`~/.local/bin/godot`), Node 24, Python with Pillow and
   NumPy at `~/.local/opt/northgate-venv/bin/python`. No ffmpeg.
 - **Running the game from the command line** writes the real save file
@@ -88,12 +94,14 @@ Each has a goal, where to work, what done looks like, and how to check it.
 
 ### W0. Land what exists
 
-- Commit the four fixes on `ccr-fb8db459-dfc415`.
-- Review the sprite branch in the game, kit by kit: record combat
-  (`godot --path godot --resolution 540x960 --write-movie /abs/dir/f.png --fixed-fps 10 --quit-after 420 -- level=04 phase=combat`),
-  look at the frames, and merge only kits that keep ground contact, size and facing. A kit that fails
-  is unregistered from `MONSTER_KITS` / `TURRET_KITS` in `battlefield.gd`, not deleted.
-- Regenerate card portraits (`tools/sprites/make_portraits.py`) if kits changed.
+- Done: fixes committed, four sprite kits merged.
+- Remaining: review Codex's Kestrel destruction and gate breach in the game before merging them.
+  Record a lost battle (`level=05 phase=combat` loses at about 0:34 with the automatic layout; the
+  recorder is `tools/sprites/record_combat.gd`), step through the frames, and merge only what keeps
+  registration: the pedestal must not move when an MG turret dies, the gate must never look less
+  damaged than a moment before, and the gate HP plate must stay put.
+- Regenerate card portraits (`tools/sprites/make_portraits.py`) if a kit's look changed.
+- Push the branch when the owner asks; nothing has been pushed.
 
 ### W1. Sound and haptics **[view]**
 
@@ -209,6 +217,62 @@ Each has a goal, where to work, what done looks like, and how to check it.
 - **Expensive, later:** one new monster per chapter. Each is a [sim] change (both sims, parity,
   re-tune of that chapter) plus a sprite kit. Do not start before W1-W6 are in and played.
 
+### W10. Combat visuals: smoothness and readability **[view]**
+
+From a frame-by-frame review of levels 3 and 5 recorded at 30 fps (2026-11-10) and
+`.scratch/analysis/atlas_metrics.py`. The strips looked at are in `.scratch/review/keep/`.
+All of this is view code; none of it touches the simulation. In rough order of value:
+
+1. **Effects land where the sprite is not.** `MonsterSprite` trails the simulation by `FOLLOW_TIME`
+   (0.28 s): about 0.6 m for a burrower, 1.2 m for a runner. Tracers and hit sparks are drawn at the
+   simulated position (`_fx_fire` uses `e.to`), so shots visibly land beside runners. Aim effects at
+   the monster's view position when the event names a monster, and make the trail a distance
+   (about 0.4 m) rather than a time.
+2. **Crowds are one grey blob.** Sprites are about 2.2x wider than the collision circle (burrower art
+   2.4 m against 1.1 m), and every monster of a type shows the same walk frame at the same moment
+   (`_walk_frame` starts at 0). Give each monster a phase offset from its id, 5% scale and
+   brightness variation, a view-only personal-space nudge, and try the art at 85% size.
+3. **One stride length for every monster.** `STRIDE_M = 1.25` makes the runner cycle 3.5 times a second
+   (28 animation frames a second, which strobes) and the Faultbreaker shuffle. Put `stride_m` in
+   each kit's JSON; start with runner 2.6, Faultbreaker 2.0.
+4. **The Burrower floats.** Its anchor is at its lowest claw, so the shadow, centred on the anchor,
+   sits half below the feet. The new kits anchor at the body centre and look grounded. Add a
+   per-kit shadow offset or re-anchor the Burrower.
+5. **Gunfire is nearly invisible.** MG tracers are 2.5 px wide and live 0.06 s; the muzzle flash is a
+   small dot. Make the tracer a moving streak, enlarge the flash, add ground dust at the impact and a
+   60 ms white flash on the monster hit (today monsters flash only when they die).
+6. **Turrets fire before they face the target.** The view pans at one turn a second while the
+   simulation fires at once, so tracers leave at an angle to the barrel. Snap to the target pose in
+   `fired()`.
+7. **Explosions and destruction are soft dots.** Shell blasts, turret deaths and emergence are two or
+   three blurred circles and square chips. Draw a proper explosion strip, a shock ring, flying
+   debris, a shell shadow and trail, and leave scorch marks, craters and corpses on the ground for
+   the rest of the battle. A destroyed turret also swaps to a different facing on its first
+   destruction frame.
+8. **The ammo chip is bigger than the turret.** "83" and "EMPTY" plates float over the kill zone and
+   hide it. Replace with a thin arc or pips at the base; show a number only when it is low.
+9. **Health bars cross the turret's face** (`TURRET_BAR_HEIGHT_M` is one constant; the Mule is
+   taller). Take bar height from each kit.
+10. **Attackers hide behind the turret they attack**, since they arrive from the north and sort
+    behind it. Shake and flash the turret itself on each hit, and drop the full-screen tremor on
+    turret hits (it fires on every bite and never rests while a turret is under attack).
+11. **Turns pop and views differ in size.** The new monster kits turn through 8 held views; the
+    runner snaps from a low, long side view to a taller front view that reads as a bigger animal.
+    Needs in-between art and one body scale across views, or a quick squash across the swap.
+12. **A north-aiming Mule shows no barrel**, and north is the rest direction. Rest it at an angle, or
+    redraw the rear views with the barrel raised.
+13. **Emergence happens off screen** on most levels, with up to 11 s of empty field first. Show an
+    edge marker for off-screen fissures, and see W5 (director speed).
+14. **Monsters walk over scattered rocks** and over turret wrecks. Keep scatter flat, and keep wrecks
+    low enough to step over or fade them.
+15. **Low contrast.** Monsters, especially runners, are grey-brown on brown. Add a rim light or a
+    one-pixel dark outline, and let the Burrower's orange seams show at game size.
+16. **No mipmaps.** Atlases are drawn at 0.33-0.84x with plain bilinear filtering, which shimmers in
+    motion on the 540 px web build. Turn mipmaps on in the atlas import settings.
+
+Done when: a 30 fps recording of level 5 shows shots ending on the monsters, no two neighbouring
+monsters in the same pose, and the area around a turret under attack stays readable.
+
 ### W9. Smaller items
 
 - Sniper targeting: prefer a target the shot will not overkill by more than half. [sim], affects 9
@@ -226,7 +290,7 @@ Each has a goal, where to work, what done looks like, and how to check it.
 3. W4 (discovery level) - needs W3's wording to match
 4. W1 and W5 (sound, payoff) - independent, can run in parallel with 2-3
 5. W6 (skip to the change)
-6. W7, then W8 cheap part, then W9
+6. W10 items 1-6 (small, high value), then W7, the W8 cheap part, the rest of W10, W9
 
 After step 4, stop and have a person who has never seen the game play waves 01-05 without help.
 The test for the whole plan: unprompted, they put the tough turret in front on wave 02 or 03, and
