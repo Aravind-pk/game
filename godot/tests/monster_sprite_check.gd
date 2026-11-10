@@ -54,6 +54,7 @@ func _check_wall() -> void:
 			_expect(field._gate.position == position, "damage stages share one registration")
 		field._set_gate_frame(start_stage)
 		field.play_breach()
+		_expect(field._wall_frames[4].get_image().get_data() == field._breach_frames[0].get_image().get_data(), "painted breach enters on the exact last HP stage")
 		var seen := {0: true}
 		var timeline := []
 		for step in 72:
@@ -63,13 +64,13 @@ func _check_wall() -> void:
 			_expect(field._gate.position == position, "breach registration stays fixed")
 			_expect(field.wall_foot_screen_pos() == foot, "gate HP plate anchor stays fixed")
 			_expect(field.gate_ground() == attack_line, "monster attack line stays fixed")
-		_expect(seen.size() == 14, "all fourteen breach frames are reached")
-		_expect(field._breach_frame == 13, "last breach frame holds")
-		_expect(float(field._wall_data.breach_frame_ms) * 14.0 < 3600.0, "breach fits the defeat timer")
+		_expect(seen.size() == 15, "all fifteen painted breach frames are reached")
+		_expect(field._breach_frame == 14, "last painted wreck frame holds")
+		_expect(float(field._wall_data.breach_frame_ms) * 15.0 < 3600.0, "breach fits the defeat timer")
 		timelines.append(timeline)
 		field._breaching = false
 		field.play_breach()
-		for index in range(1, 14):
+		for index in range(1, 15):
 			field.animate_breach(0.1)
 			_expect(field._breach_frame == index, "10 fps reaches breach frame %d without rounding skips" % index)
 		field.free()

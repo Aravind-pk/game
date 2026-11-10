@@ -1,8 +1,7 @@
-"""Bake monotonic HP stages and a registered, layered fourteen-frame gate breach.
+"""Bake monotonic HP stages and a registered, layered fifteen-frame gate breach.
 
-The approved painted doors/lintel supply the visible front surfaces. Generated
-damaged door backs supply the surfaces exposed as the panels fall toward camera.
-Side walls are sampled once. All motion is authored about fixed world landmarks.
+The collapse is an authored painted sequence, registered to fixed pillar feet.
+The approved five HP stages and static side walls remain unchanged.
 """
 import hashlib
 import json
@@ -11,10 +10,10 @@ import shutil
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image, ImageDraw
 
-from build_pending_kits import source_cells
 from fit_background import cut_wall
+from bake_authored_breach import bake, SCALE, PIVOT, ORDER
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "art/sprites/wall"
@@ -23,63 +22,6 @@ SIZE = (1080, 540)
 TOP = 80
 SECTION = (270, 810)
 STAGES = [0, 1, 2, 4, 5]
-ANGLES = [0, 3, 8, 16, 28, 43, 59, 75, 88, 90, 90, 90, 90, 90]
-DOORS = [([(388, 150), (536, 166), (536, 301), (384, 293)], -1),
-         ([(549, 166), (688, 150), (697, 293), (550, 301)], 1)]
-BEAM = [(375, 20), (480, 65), (540, 75), (630, 55), (710, 20),
-        (710, 135), (630, 164), (540, 178), (450, 164), (375, 135)]
-
-
-def masked(image, polygon):
-    mask = Image.new("L", image.size)
-    ImageDraw.Draw(mask).polygon(polygon, fill=255)
-    result = image.copy()
-    result.putalpha(ImageChops.multiply(result.getchannel("A"), mask))
-    return result
-
-
-def opacity(image, amount):
-    result = image.copy()
-    result.putalpha(result.getchannel("A").point(lambda value: round(value * amount)))
-    return result
-
-
-def project(image, source_quad, target_quad):
-    # Pillow maps destination pixels back into the immutable painted source.
-    equations, values = [], []
-    for (x, y), (u, v) in zip(target_quad, source_quad):
-        equations.extend([[x, y, 1, 0, 0, 0, -u * x, -u * y],
-                          [0, 0, 0, x, y, 1, -v * x, -v * y]])
-        values.extend([u, v])
-    coefficients = np.linalg.solve(np.array(equations), np.array(values))
-    return image.transform(SIZE, Image.Transform.PERSPECTIVE, coefficients,
-                           Image.Resampling.BICUBIC)
-
-
-def door_target(quad, angle, side):
-    radians = math.radians(angle)
-    result = []
-    for x, y in quad:
-        height = 302 - y
-        forward = height * (0.643 / 0.766) * math.sin(radians)
-        fall = -height * math.cos(radians) + forward
-        splay = side * 12 * angle / 90 * height / 152
-        result.append((x + splay, TOP + 302 + fall))
-    return result
-
-
-def beam_target(quad, index, progress):
-    center = np.mean(quad, axis=0)
-    target = [(445, 345), (540, 365), (630, 350)][index]
-    rotation = math.radians([-14, 6, 18][index] * progress)
-    output = []
-    for x, y in quad:
-        dx, dy = x - center[0], (y - center[1]) * (1 - .78 * progress)
-        output.append((center[0] + (target[0] - center[0]) * progress
-                       + dx * math.cos(rotation) - dy * math.sin(rotation),
-                       TOP + center[1] + (target[1] - center[1]) * progress
-                       + dx * math.sin(rotation) + dy * math.cos(rotation)))
-    return output
 
 
 def build_wall():
@@ -107,72 +49,25 @@ def build_wall():
     assert np.array_equal(np.array(reconstructed.crop((0, TOP, 1080, TOP + intact.height))),
                           np.array(approved)), "Intact composition changed"
 
-    failing = Image.open(legacy_folder / "wall_05.png").convert("RGBA")
-    fixed = damage[-1].copy()
-    ImageDraw.Draw(fixed).rectangle((382, TOP, 706, TOP + 309), fill=(0, 0, 0, 0))
-    fronts = [masked(failing, quad) for quad, _ in DOORS]
-    back_cells = source_cells(SOURCE / "door_backs_raw.png", {
-        "grid": [2, 1], "alpha_floor": 48, "main_component": True})
-    backs = []
-    for cell, (quad, _) in zip(back_cells, DOORS):
-        x0, y0 = np.min(quad, axis=0)
-        x1, y1 = np.max(quad, axis=0)
-        texture = cell.crop(cell.getbbox()).resize((int(x1 - x0), int(y1 - y0)), Image.Resampling.LANCZOS)
-        layer = Image.new("RGBA", failing.size)
-        layer.paste(texture, (int(x0), int(y0)))
-        backs.append(masked(layer, quad))
-    beam = masked(failing, BEAM)
-    beam_parts = []
-    for left, right in [(375, 490), (490, 590), (590, 710)]:
-        quad = [(left, 20), (right, 20), (right, 178), (left, 178)]
-        beam_parts.append((masked(beam, quad), quad))
-    dust = source_cells(SOURCE / "dust_raw.png", {"grid": [3, 2], "alpha_floor": 32})
-    for index, cloud in enumerate(dust):
-        pixels = np.array(cloud)
-        horizontal = np.minimum(np.arange(cloud.width), np.arange(cloud.width)[::-1]) / 24.0
-        vertical = np.minimum(np.arange(cloud.height), np.arange(cloud.height)[::-1]) / 24.0
-        feather = np.clip(np.minimum(vertical[:, None], horizontal[None, :]), 0, 1)
-        pixels[:, :, 3] = np.round(pixels[:, :, 3] * feather)
-        dust[index] = Image.fromarray(pixels)
-    rubble_source = Image.open(legacy_folder / "wall_11.png").convert("RGBA")
-    rubble = Image.new("RGBA", SIZE)
-    shift = round(float(legacy["base_y"][0]) - float(legacy["base_y"][11]))
-    rubble.paste(rubble_source.crop((380, 260, 700, rubble_source.height)), (380, TOP + 260 + shift))
-    breach = []
-    for index, angle in enumerate(ANGLES):
-        frame = fixed.copy()
-        for side_index, (quad, side) in enumerate(DOORS):
-            projected_height = math.cos(math.radians(angle)) - (0.643 / 0.766) * math.sin(math.radians(angle))
-            texture = fronts[side_index] if projected_height >= 0 else backs[side_index]
-            frame.alpha_composite(project(texture, quad, door_target(quad, angle, side)))
-        progress = min(1, max(0, (index - 1) / 7))
-        for part_index, (part, quad) in enumerate(beam_parts):
-            frame.alpha_composite(project(part, quad, beam_target(quad, part_index, progress)))
-        frame.alpha_composite(opacity(rubble, min(1, max(0, (index - 4) / 5))))
-        if 6 <= index <= 12:
-            dust_index = min(index - 6, 5)
-            cloud = dust[dust_index].resize((589, 589), Image.Resampling.LANCZOS)
-            origin_y = 430 if dust_index < 3 else 390
-            frame.alpha_composite(opacity(cloud, [.20, .32, .45, .36, .24, .12][dust_index]),
-                                  (246, round(TOP + 350 + (index - 6) * 4 - origin_y * 1.15)))
-        if index == 0:
-            frame = damage[-1].copy()
+    breach = bake(damage[-1], SIZE)
+    for index, frame in enumerate(breach):
         frame.save(OUTPUT / f"breach_{index:02d}.png")
-        breach.append(frame)
 
     data = dict(frames=len(damage), damage_frames=[f"damage_{i:02d}.png" for i in range(len(damage))],
                 side_texture="sides.png", base_y=float(legacy["base_y"][0]) + TOP,
                 top_padding=TOP, rail_above_base=legacy["rail_above_base"],
                 breach_frames=[f"breach_{i:02d}.png" for i in range(len(breach))],
-                breach_frame_ms=100, charge_after=.9, burst_frames=[1, 3, 5, 7], impact_frame=8)
+                breach_frame_ms=100, charge_after=.9, burst_frames=[3, 4, 5, 6], impact_frame=7)
     (OUTPUT / "wall.json").write_text(json.dumps(data, indent=2))
-    manifest = dict(damage_sources=STAGES, door_angles=ANGLES, section=SECTION, top_padding=TOP,
-                    baseline=data["base_y"], source_sha256={name: hashlib.sha256((SOURCE / name).read_bytes()).hexdigest()
-                    for name in ["approved_wall_00.png", "dust_raw.png", "door_backs_raw.png"]})
+    manifest = dict(damage_sources=STAGES, method="authored frame sequence", section=SECTION, top_padding=TOP,
+                    baseline=data["base_y"], source_scale=SCALE, source_pivot=PIVOT,
+                    painted_order=ORDER, alpha_floor=24, entry="damage_04.png",
+                    held_pose=14, source_sha256={name: hashlib.sha256((SOURCE / name).read_bytes()).hexdigest()
+                    for name in ["approved_wall_00.png", "collapse_authored_raw.png"]})
     (SOURCE / "build.json").write_text(json.dumps(manifest, indent=2))
     review(sides, damage, "damage")
     review(sides, breach, "breach")
-    print("PASS intact/side pixels preserved; five HP stages; fourteen breach frames; fixed baseline", data["base_y"])
+    print("PASS intact/side pixels preserved; five HP stages; fifteen breach frames; fixed baseline", data["base_y"])
 
 
 def review(sides, frames, name):

@@ -25,15 +25,16 @@
     "breach_10.png",
     "breach_11.png",
     "breach_12.png",
-    "breach_13.png"
+    "breach_13.png",
+    "breach_14.png"
   ],
   "breach_frame_ms": 100,
   "charge_after": 0.9,
   "burst_frames": [
-    1,
     3,
+    4,
     5,
-    7
+    6
   ],
-  "impact_frame": 8
+  "impact_frame": 7
 }

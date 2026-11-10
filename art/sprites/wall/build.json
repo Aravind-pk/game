@@ -6,31 +6,39 @@
     4,
     5
   ],
-  "door_angles": [
-    0,
-    3,
-    8,
-    16,
-    28,
-    43,
-    59,
-    75,
-    88,
-    90,
-    90,
-    90,
-    90,
-    90
-  ],
+  "method": "authored frame sequence",
   "section": [
     270,
     810
   ],
   "top_padding": 80,
   "baseline": 392.6,
+  "source_scale": 2.035,
+  "source_pivot": [
+    156.75,
+    255.0
+  ],
+  "painted_order": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14
+  ],
+  "alpha_floor": 24,
+  "entry": "damage_04.png",
+  "held_pose": 14,
   "source_sha256": {
     "approved_wall_00.png": "3f7cb9b13d86fa98513acb18889d5d52286cf6c420c153127b64aa8018be7959",
-    "dust_raw.png": "95fcec348e5098f72287c14a20a60fd247d59ad20fcd4ea20caa2ed81bee9c51",
-    "door_backs_raw.png": "45edf99fb57ce2318fd93476d025191a42a7d9f29e70a5ba649a48f5d5079821"
+    "collapse_authored_raw.png": "5fa7740d3c70ede385ddfe08983919a67c5d30e00e6c3fb3b662ed051907af9c"
   }
 }

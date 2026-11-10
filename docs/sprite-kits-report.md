@@ -1,3 +1,68 @@
+# Gate collapse replacement — authored frames
+
+The rejected sliding-slab breach has been replaced by fifteen painted frames at 10 fps. The five HP damage stages, static side-wall picture, physical registration and fixed-rate playback are preserved. The finished wreck has fractured leaning pillars, torn hazard-striped door plates, a rubble heap, two small fires and smoke. No commits were made.
+
+## Production and outcome
+
+Used the built-in image-generation tool with two explicit references: [last damage stage](../art/sprites/wall/breach_start_reference.png) and [original wall_11 end state](../art/sprites/wall/breach_end_reference.png). The latter is registered to the original first-sheet baseline. The tool returned one 1254 × 1254 RGBA sheet with sixteen sequential paintings in a 4 × 4 layout. This keeps useful source gate detail around 300 px wide for the 270 px game display. The exact request, references and method are saved in [authored-collapse-prompts.md](../art/sprites/wall/authored-collapse-prompts.md); the untouched output is [collapse_authored_raw.png](../art/sprites/wall/collapse_authored_raw.png). The model identifier was not exposed. No external billed API was used.
+
+The installed order is the exact approved `damage_04.png`, then painted source cells 1–14. Generated cell 0 is not used, preserving the entry pixels. Cell 15 was rejected because its right pillar straightens again. The last accepted pose holds; there is no extra fire/smoke loop. The painted smoke and fires change through the settling frames, then remain part of that final held picture.
+
+Frame progression:
+
+- 0–3: the doors bulge and twist, the center seam flares, pillar masonry fractures, and the cyan bar is lost during the burst.
+- 4–7: separate door leaves tear outward, one folding and the other rotating; the lintel splits, masonry flies, and fire/dust fill the opening. These are newly painted shapes, with no slab translation, homography or rig deformation.
+- 8–10: plates and stones land across the threshold, dust rolls along the ground, and broken pillars settle outward.
+- 11–14: the rubble, twisted plates, small fires and smoke remain; the open gap admits the surviving monsters. The final frame is reached at 1.4 s and holds inside the unchanged 3.6 s defeat delay.
+
+`tools/sprites/bake_authored_breach.py` applies one common scale (2.035) and one pillar-foot pivot to all source cells. It does not fit each pose to changing alpha bounds. Alpha below 24/255 is removed to discard the generated faint colored matte; low-opacity effect tails fade before the padded texture boundary. Opaque artwork stays within the original gate-section footprint, while translucent smoke/dust can overlap the static sides. The existing 392.6 px padded anchor and 284.4 px rail offset remain unchanged. The source rectangles, order, scale, pivot, threshold and hashes are recorded in [build.json](../art/sprites/wall/build.json) and [raw manifest](../art/sprites/wall/collapse_authored_raw.frames.json).
+
+The one-command builder still rebuilds all wall assets. The old rig projection code has been removed from that build path. Explosion/shake accents now occur at painted burst indices 3/4/5/6, with the heavy impact and debris at 7. This is metadata consumed by the existing wall playback code. Monster movement and the fixed-rate clock were not changed. `main.gd` was not edited; its supplied HUD-clearing behavior is visible in the captures.
+
+## Visual and game checks
+
+The full sequence was reviewed at the gate's native 270 px width and 2× enlargement, stepped through all fifteen poses, and exercised at normal and 0.4× speed. Chrome worked in this run: the actual skill `inspect-sheet.mjs` CLI completed for the raw sheet, packed gate sheet and field composite. No decoded-pixel fallback was needed. The raw and final transparent layer reports have no alpha-threshold-128 blank, clipping or duplicate warnings. The field-composite edge warnings are expected because its scenery fills each rectangle.
+
+- [Native-size contact sheet](../art/sprites/wall/evidence/breach_contact.png) and [playback/stepping review](../art/sprites/wall/gate-review.html).
+- [Raw source audit/review](../art/sprites/wall/evidence/authored/raw-review.html), [shipping layer audit/review](../art/sprites/wall/evidence/authored/atlas-review.html), [field review](../art/sprites/wall/evidence/authored/field-review.html).
+- [Normal/slow playback check](../art/sprites/wall/evidence/authored/playback-check.json), [native/enlarged burst](../art/sprites/wall/evidence/authored/browser-5.png), [held wreck](../art/sprites/wall/evidence/authored/browser-14.png), [DPR 2 sample](../art/sprites/wall/evidence/authored/browser-dpr2.png).
+
+Recorded actual level-05 losses with `record_combat.gd` at 540 × 960, 10 fps. Normal automatic deployment loses at 34.50 s; frames 340–384 cover the last HP stage, all fifteen collapse samples and monsters crossing the ruined threshold. The weak deployment loses at 22.47 s; frames 195–261 cover all five HP stages, the burst, settling and several monsters crossing. The combat bar, ticker and HP plate disappear when the breach begins, exposing the full animation. I inspected the real frame progression and compared it against the rejected shutter contact and original ruined-gate reference. The burst reads as two separate leaves breaking free, and the ending retains fire, smoke and debris rather than a tidy opening.
+
+- [Normal loss contact](../art/sprites/wall/evidence/authored/normal-contact.png) / [short capture player](../art/sprites/wall/evidence/authored/normal/review.html).
+- [Weak loss contact](../art/sprites/wall/evidence/authored/weak-contact.png) / [short capture player](../art/sprites/wall/evidence/authored/weak/review.html).
+- [Trace, preservation and deterministic rebuild results](../art/sprites/wall/evidence/authored/capture-preservation-check.json).
+
+Both recordings contain every breach index 0–14 and one invariant local gate position. `sides.png`, `damage_00..04.png` and `wall_00.png` are byte-identical to their committed versions. Rebuilding twice produces identical asset hashes. Every shipping gate-frame rectangle equals the pixels in the audited packed sheet. The user-supplied `main.gd` is byte-identical to HEAD.
+
+## Tests, commands and limits
+
+Both requested Godot tests pass, zero failures: [monster_sprite_check](../art/sprites/wall/evidence/authored/monster-check.log) and [placement_check](../art/sprites/wall/evidence/authored/placement-check.log). The wall test now expects fifteen painted frames, checks exact last-damage-to-breach entry, all frame indices at 50 ms and 100 ms steps, the held final wreck, timing independence from prior HP damage, and unchanged wall/HP-plate/attack-line registration. [Import log](../art/sprites/wall/evidence/authored/import.log). `git diff --check` passes.
+
+```sh
+~/.local/opt/northgate-venv/bin/python tools/sprites/build_wall.py
+godot --headless --path godot --import
+godot --headless --path godot --script res://tests/monster_sprite_check.gd
+godot --headless --path godot --script res://tests/placement_check.gd
+```
+
+The skill inspector uses `--module-root ~/.local/opt/sprite-animation-skill --chrome /usr/bin/google-chrome`; frame manifests are beside the source and under `evidence/`. `python tools/sprites/make_wall_review.py` adapts its field review to native/enlarged, normal/slow, one-shot playback. The README Graphics and Adding art entries describe the painted sequence and rebuild command.
+
+Short capture commands, with absolute output directories:
+
+```sh
+godot --path godot --script "$PWD/tools/sprites/record_combat.gd" --fixed-fps 10 --quit-after 385 -- level=05 phase=combat capture_watch capture=/abs/normal capture_from=34 capture_to=38.4
+godot --path godot --script "$PWD/tools/sprites/record_combat.gd" --fixed-fps 10 --quit-after 263 -- level=05 phase=combat weak capture_watch capture=/abs/weak capture_from=19.5 capture_to=26.1
+```
+
+No fire/smoke overlay loop was added; the final painted wreck holds. There was no independent reviewer. Checks cover desktop Godot at 540 × 960 and the review browser at DPR 1/2, not mobile/web exports, all levels, alternate screen ratios, or a performance benchmark. Painted intermediate masonry has small detail variations, judged at game size; the record does not claim identical stones across paintings. Review pages and evidence remain ignored; only 112 new combat PNGs were retained.
+
+---
+
+# Historical report — superseded gate acceptance
+
+The gate assessment below describes the earlier rig-based result. The user rejected its sliding-slab motion and clean ending; those visual-pass claims are withdrawn. The preserved infrastructure remains valid. The authored replacement above is the current gate result. The older Kestrel/four-kit work was not changed by this task.
+
 # Kestrel destruction and gate breach — 2026-11-10
 
 Both jobs are wired into the game. Both requested Godot tests pass with zero failures. No commits were made. Changes stayed within the current file allowlist; `main.gd`, simulation, levels and the monster attack line were not edited.
