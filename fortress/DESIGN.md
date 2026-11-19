@@ -1,18 +1,22 @@
 # Fortress — gameplay design (prototype)
 
-A one-screen, portrait defense-and-build game. You live behind a **fence with one small door**.
-Outside are the trees, the rocks and three monster lanes; inside is everything you build. Monsters
-march straight down the lanes and wait at the fence. Step out to gather and they come for you.
+A portrait defense-and-build game in low-poly 3D. You live behind a **fence you can climb anywhere
+except at its towers**; monsters can't climb it. Outside are the trees (left flank), the rocks
+(right flank) and three **winding paths** that come in from off the map; inside is everything you
+build. Monsters follow their paths to the fence and wait there. Step out to gather and they come for you.
 
-Everything is drawn with basic shapes until the gameplay is right.
+The world is 30 m wide (1200 design px); the camera follows you. Style: Kingshot-like field (deep
+teal grass, beige dirt paths, lavender-grey faceted rock, cone trees) and a Monkey Mart-like yard
+(warm sand, pink stations, a chibi worker carrying a tall swaying stack).
 
 ## The loop
 
-**Go out → gather (and fight) → come back in → build or craft → feed the turrets → repeat.**
+**Climb out → gather (and fight) → climb back in → build or craft → feed the turrets → repeat.**
 
 ## Controls
 
 - Drag anywhere to move (a virtual joystick appears under your thumb). WASD or arrows on desktop.
+- Walk into the fence (away from a tower) to **vault over it**: a 0.42 s hop either way.
 - No buttons. Things happen by **standing near them**:
   - next to a tree or rock (outside): you harvest one item at a time onto the stack on your back;
   - on a build pad: the materials it still needs fly off your stack into it;
@@ -20,8 +24,9 @@ Everything is drawn with basic shapes until the gameplay is right.
   - next to a turret (from inside): your ammo boxes load into it;
   - over monster coins on the ground: they go straight into your wallet (no stack space).
 - Your own gun fires by itself at the nearest monster in close range (130 px) while your bag has shots.
-- A small arrow next to you points at the most useful thing to do, routed through the door, and it
-  won't send you out while monsters are gathered at the door.
+- A small arrow at your feet points at the most useful thing to do, routed over the fence at a spot
+  clear of the towers and, if possible, of monsters waiting there.
+- Red markers on the screen edge show monsters that are still off screen.
 
 ## What you carry
 
@@ -44,7 +49,8 @@ You only pick up what something currently needs.
 
 ## The fortress
 
-- **Fence** across the screen with a **door** the worker (and the woodcutter) can walk through.
+- **Fence** across the whole map. The worker and the woodcutter climb it anywhere but at a tower;
+  monsters never get over it.
 - **Turrets are towers in the fence**, one per lane, loaded from the inside. Monsters never attack
   them. Range 230 px, 2 shots/s, up to 5 boxes.
 - **Inside**: the ammo machine, its output pile, launchers, other pads, and houses that grow with
@@ -62,7 +68,7 @@ Build pads, two open at a time:
 | 5 | Fence +4 | 8 stone | Four more monsters can wait at the fence |
 | 6 | Bigger pack | 10 wood | Stack holds 18 |
 | 7 | Launcher (right) | 6 stone, 4 coins | Reaches the centre and right turrets |
-| 8 | Woodcutter | 5 coins, 6 wood | Helper: walks out through the door, chops trees, feeds the machine. Monsters ignore it |
+| 8 | Woodcutter | 5 coins, 6 wood | Helper: climbs out over the fence, chops trees, feeds the machine. Monsters ignore it |
 
 ## Powers
 
@@ -95,18 +101,18 @@ each turret.
 
 ## Monsters
 
-They walk straight down their lane, stop at the fence and **wait there** (they don't die on it).
-Turrets and your gun can still shoot them while they wait.
+They come in from off the map and follow their winding path to the fence, then **wait there**
+(they don't die on it). Turrets and your gun can still shoot them while they wait.
 
 | Monster | Shape | HP | Speed | Notices you within | Hit | Scrap | From wave |
 |---|---|---:|---:|---:|---:|---:|---:|
-| Grunt | red circle | 3 | slow | 90 px | 1 heart | 1 coin | 1 |
-| Runner | orange triangle | 2 | fast | 130 px | 1 heart | 1 | 3 |
-| Brute | dark red square | 14 | very slow | 70 px | 2 hearts | 4 | 5 |
+| Grunt | round red blob with horns | 3 | 56 | 90 px | 1 heart | 1 coin | 1 |
+| Runner | tall orange cyclops | 2 | 112 | 130 px | 1 heart | 1 | 3 |
+| Brute | big dark red block with tusks | 14 | 40 | 70 px | 2 hearts | 4 | 5 |
 
-A monster that notices you (red ring) chases you until you are more than 260 px away. Waiting
-monsters keep the doorway clear but will chase you if you step out next to them. Monsters get 16%
-more HP every wave.
+A monster that notices you (a red "!" over it) chases you until you are more than 260 px away or
+back over the fence; then it returns to its path. Waiting monsters chase you if you climb out next
+to them. Monsters get 21% more HP every wave.
 
 ## How you lose
 
@@ -114,7 +120,6 @@ more HP every wave.
    the upgrade). Shown as the FENCE pips in the top bar.
 2. **You are overrun**: you lose all 6 hearts to touches. Hearts come back while you are inside
    (one every 4 s).
-3. **A monster follows you in**: a chasing monster gets through the door.
 
 Survive wave 12 with the field cleared and the fortress holds.
 
@@ -126,10 +131,10 @@ runners from wave 3 and brutes from wave 5, one every 1.1 s in a random lane.
 ## The tension this creates
 
 - Everything you need is outside, and outside is where the monsters are. Each trip is a choice:
-  how full is your bag, are monsters waiting by the door, is the scrap in a lane worth the risk?
+  how full is your bag, are monsters waiting along the fence, is the scrap on a path worth the risk?
 - Ammo has to be shuttled by hand until launchers take over, and launchers cost coins, which
   means going into the lanes. Coins also charge the power-up: save it for the heavy waves.
-- A chaser on your tail means you can't go home: shoot it, or lead it away until it gives up.
+- A chaser on your tail costs hearts while you climb: shoot it first, or hop the fence where it is clear.
 - Monsters piling up at the fence are a slow clock: feed the turrets or the fence gives.
 
 ## Balance check
@@ -140,14 +145,20 @@ never moves; `seed` changes the lanes monsters spawn in. Four seeds each:
 
 | Player | Wins |
 |---|---|
-| Bot, full speed | 3 of 4 |
-| Bot, 70% speed | 2 of 4 |
-| Bot, 50% speed | 1 of 4 |
+| Bot, full speed | 4 of 4 |
+| Bot, 70% speed | 3 of 4 |
+| Bot, 50% speed | 2 of 4 |
 | Does nothing | 0 of 4 (fence gives in wave 2–3) |
 
 The bot evolves its turrets Gatling (left), Cannon (centre), Frost (right) and picks Bomb when
 the field is crowded, Supply when the turrets are low, Rapid otherwise.
 
-The bot never dodges, so a person should do better than its pace suggests. The bot (and the guide
-arrow) fights a close chaser if it has shots and otherwise leads it away before heading for the
-door, so it never loses by being followed in.
+The bot sees the whole map and never dodges; a person only sees the camera's window, so the bot
+runs a little easier than a person at the same pace. The bot (and the guide arrow) fights a close
+chaser if it has shots and otherwise climbs back over the fence, where it can't follow.
+
+## Code layout
+
+- `main.gd` (node `Game`): all rules and the simulation, plus the HUD drawn in screen space.
+- `view3d.gd` (node `View`): the 3D view. It reads the game state every frame, pools a node per
+  entity by `uid`, and draws the labels over the world (costs, ammo, HP, ranges) on a 2D canvas.

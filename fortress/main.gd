@@ -1,10 +1,10 @@
 extends Node2D
 ## FORTRESS: gameplay prototype drawn with basic shapes. See DESIGN.md.
-## You live behind a fence with one small door. Outside: trees, rocks and the monster lanes.
-## Inside: the ammo machine, launchers and everything else you build. Monsters march straight
-## down three lanes and wait at the fence; too many waiting and the fence gives. Step outside to
-## gather and they come for you: a few touches and you are down, and if one follows you through the
-## door, the fortress falls.
+## You live behind a fence that you vault over anywhere but at its towers; monsters can't climb it.
+## Outside: trees, rocks and three winding monster paths that come in from off the map. Inside: the
+## ammo machine, launchers and everything else you build. Monsters follow their path to the fence and
+## wait there; too many waiting and the fence gives. Step outside to gather and they come for you: a
+## few touches and you are down.
 ##
 ## Automation (after `--`):
 ##   sim=bot | sim=idle      headless balance run: prints a log and quits (pace=0.7 slows the bot)
@@ -13,20 +13,25 @@ extends Node2D
 ##   shot=/path.png shot_time=2
 
 # ---------------------------------------------------------------- layout (design pixels)
-const W := 720.0
-const H := 1280.0
+const W := 1200.0                # the world; the camera follows you around it
+const H := 1640.0
 const HUD_H := 92.0
-const SPAWN_Y := 104.0
-const FENCE_Y := 860.0
+const SW := 720.0                 # the screen (HUD) size, apart from the world
+const SH := 1280.0
+const FENCE_Y := 1100.0
 const FENCE_H := 18.0
-const DOOR_X := 430.0
-const DOOR_W := 64.0
-const LANES := [220.0, 360.0, 500.0]
-const MACHINE_POS := Vector2(300, 1030)
-const OUTPUT_POS := Vector2(300, 940)
+const LANES := [380.0, 600.0, 820.0]   # where each path meets the fence, under its turret
+const TOWER_HALF := 44.0          # you can't climb the fence within this of a tower
+const VAULT_TIME := 0.42
+const MACHINE_POS := Vector2(600, 1450)
+const OUTPUT_POS := Vector2(600, 1350)
 const PAD_HALF := 34.0
-const DOOR_OUT := Vector2(DOOR_X, FENCE_Y - 34.0)
-const DOOR_IN := Vector2(DOOR_X, FENCE_Y + FENCE_H + 36.0)
+## The monster paths, from off the top of the map to the fence (smoothed into curves).
+const PATHS := [
+	[Vector2(170, -80), Vector2(300, 180), Vector2(150, 400), Vector2(330, 610), Vector2(320, 850), Vector2(380, 1074)],
+	[Vector2(640, -80), Vector2(500, 180), Vector2(700, 390), Vector2(540, 610), Vector2(660, 850), Vector2(600, 1074)],
+	[Vector2(1030, -80), Vector2(900, 190), Vector2(1050, 400), Vector2(870, 610), Vector2(880, 850), Vector2(820, 1074)],
+]
 
 # ---------------------------------------------------------------- tuning
 const PLAYER_SPEED := 240.0
@@ -54,7 +59,7 @@ const TURRET_RATE := 2.0
 const RAPID_MULT := 2.0
 const POWER_MAX := 12          # monster coins to charge the power-up
 const POWER_TIME := 12.0       # seconds of rapid fire once activated
-const POWER_BTN := Vector2(W - 54, 46)
+const POWER_BTN := Vector2(SW - 54, 46)
 const POWER_R := 32.0
 const FREEZE_TIME := 8.0
 const FREEZE_MULT := 0.35
@@ -88,16 +93,16 @@ const BOT_SPEED := 150.0
 const BOT_CARRY := 4
 const CUT_TIME := 0.6
 const COIN_LIFE := 30.0
-const HP_GROWTH := 0.16
+const HP_GROWTH := 0.21
 const GIVE_UP := 260.0         # a chasing monster loses interest beyond this distance
 
 const ITEM_COLOR := {
 	"wood": Color("#b07a3e"), "stone": Color("#a3a8ad"), "coin": Color("#ffd24a"), "ammo": Color("#f2c14e"),
 }
 const MONSTERS := {
-	"grunt": {"hp": 3, "speed": 42.0, "r": 14.0, "notice": 90.0, "hit": 1, "drop": 1, "color": Color("#e5534b")},
-	"runner": {"hp": 2, "speed": 86.0, "r": 12.0, "notice": 130.0, "hit": 1, "drop": 1, "color": Color("#ff9561")},
-	"brute": {"hp": 14, "speed": 30.0, "r": 22.0, "notice": 70.0, "hit": 2, "drop": 4, "color": Color("#a8323a")},
+	"grunt": {"hp": 3, "speed": 56.0, "r": 14.0, "notice": 90.0, "hit": 1, "drop": 1, "color": Color("#e5534b")},
+	"runner": {"hp": 2, "speed": 112.0, "r": 12.0, "notice": 130.0, "hit": 1, "drop": 1, "color": Color("#ff9561")},
+	"brute": {"hp": 14, "speed": 40.0, "r": 22.0, "notice": 70.0, "hit": 2, "drop": 4, "color": Color("#a8323a")},
 }
 
 # ---------------------------------------------------------------- state
@@ -149,13 +154,14 @@ var autoplay := false
 var idle := false
 var args := {}
 var font: Font
+var hud_font: Font
 var next_uid := 0
-var world_2d := true           # false when a 3D view draws the world; then only the HUD is drawn here
+var paths: Array = []          # {pts, len, total} per lane: the smoothed path and its running length
 
 
 func _ready() -> void:
 	font = ThemeDB.fallback_font
-	world_2d = not get_parent().has_node("View")
+	hud_font = load("res://fonts/BarlowCondensed-ExtraBold.ttf")
 	for a in OS.get_cmdline_user_args():
 		var kv := a.split("=")
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
@@ -182,7 +188,10 @@ func reset() -> void:
 	state = "play"
 	lose_reason = ""
 	time = 0.0
-	player = {"pos": Vector2(DOOR_X, 1030), "face": Vector2.UP}
+	player = {"pos": Vector2(600, 1250), "face": Vector2.UP}
+	if paths.is_empty():
+		for raw in PATHS:
+			paths.append(_smooth_path(raw))
 	stack = []
 	capacity = START_CAPACITY
 	bag = BAG_MAX
@@ -193,9 +202,9 @@ func reset() -> void:
 	harvest_t = 0.0
 	act_t = 0.0
 	nodes = []
-	for i in 6:
-		nodes.append({"kind": "wood", "pos": Vector2(48 + (i % 2) * 44, 240 + i * 92), "stock": NODE_STOCK, "regrow": 0.0})
-		nodes.append({"kind": "stone", "pos": Vector2(672 - (i % 2) * 44, 270 + i * 92), "stock": NODE_STOCK, "regrow": 0.0})
+	for i in 8:  # trees on the left flank, rocks on the right
+		nodes.append({"kind": "wood", "pos": Vector2(70 + (i % 2) * 90 + (i % 3) * 12, 600 + i * 60), "stock": NODE_STOCK, "regrow": 0.0})
+		nodes.append({"kind": "stone", "pos": Vector2(1130 - (i % 2) * 90 - (i % 3) * 12, 620 + i * 58), "stock": NODE_STOCK, "regrow": 0.0})
 	pickups = []
 	turrets = []
 	for i in 3:
@@ -208,11 +217,11 @@ func reset() -> void:
 		_pad("machine", "AMMO", MACHINE_POS, {"wood": 8}),
 		_pad("turret_l", "TURRET", turrets[0].pos, {"wood": 5, "stone": 5}),
 		_pad("turret_r", "TURRET", turrets[2].pos, {"wood": 5, "stone": 5}),
-		_pad("launcher_l", "LAUNCHER", Vector2(110, 960), {"stone": 6, "coin": 3}),
-		_pad("fence", "FENCE +4", Vector2(610, 1080), {"stone": 8}),
-		_pad("backpack", "BIGGER PACK", Vector2(380, 1100), {"wood": 10}),
-		_pad("launcher_r", "LAUNCHER", Vector2(610, 960), {"stone": 6, "coin": 4}),
-		_pad("cutter", "WOODCUTTER", Vector2(110, 1090), {"coin": 5, "wood": 6}),
+		_pad("launcher_l", "LAUNCHER", Vector2(480, 1260), {"stone": 6, "coin": 3}),
+		_pad("fence", "FENCE +4", Vector2(980, 1330), {"stone": 8}),
+		_pad("backpack", "BIGGER PACK", Vector2(800, 1460), {"wood": 10}),
+		_pad("launcher_r", "LAUNCHER", Vector2(720, 1260), {"stone": 6, "coin": 4}),
+		_pad("cutter", "WOODCUTTER", Vector2(300, 1450), {"coin": 5, "wood": 6}),
 	]
 	bots = []
 	monsters = []
@@ -278,34 +287,114 @@ func _inside(p: Vector2) -> bool:
 	return p.y > FENCE_Y + FENCE_H * 0.5
 
 
-func _in_door(x: float, r: float) -> bool:
-	return absf(x - DOOR_X) <= DOOR_W * 0.5 - r
-
-
-## The next waypoint toward `to`: through the door when it is on the other side of the fence.
+## The next waypoint toward `to`. Across the fence that is a spot to climb it: clear of the towers
+## and, if possible, of monsters waiting there.
 func _route(from: Vector2, to: Vector2) -> Vector2:
 	if _inside(from) == _inside(to):
 		return to
-	var near_side := DOOR_IN if _inside(from) else DOOR_OUT
-	var far_side := DOOR_OUT if _inside(from) else DOOR_IN
-	if absf(from.x - DOOR_X) < 10.0 and from.distance_to(near_side) < 60.0:
-		return far_side
-	return near_side
+	var cx := _crossing_x(from, to)
+	var near_y := FENCE_Y + FENCE_H + 26.0 if _inside(from) else FENCE_Y - 26.0
+	var far_y := FENCE_Y - 40.0 if _inside(from) else FENCE_Y + FENCE_H + 40.0
+	if absf(from.x - cx) < 14.0 and absf(from.y - near_y) < 24.0:
+		return Vector2(cx, far_y)  # at the fence: push across and climb
+	return Vector2(cx, near_y)
 
 
-## Moves a body, letting it through the fence only at the door.
+func _crossing_x(from: Vector2, to: Vector2) -> float:
+	var k := clampf((FENCE_Y - from.y) / (to.y - from.y), 0.0, 1.0) if absf(to.y - from.y) > 0.1 else 0.0
+	if absf(from.y - (FENCE_Y + FENCE_H * 0.5)) < 70.0:  # already at the fence: climb right here
+		k = 0.0
+	var base := clampf(lerpf(from.x, to.x, k), 40.0, W - 40.0)
+	var fallback := -1.0
+	for step in 40:
+		var d := (step + 1) / 2 * 24.0 * (1.0 if step % 2 == 0 else -1.0)
+		var x := base + d
+		if x < 40.0 or x > W - 40.0 or _tower_at(x):
+			continue
+		if fallback < 0.0:
+			fallback = x
+		if _safe(Vector2(x, FENCE_Y - 20.0)):
+			return x
+	return fallback if fallback >= 0.0 else base
+
+
+func _tower_at(x: float) -> bool:
+	for t in turrets:
+		if absf(x - float(t.pos.x)) < TOWER_HALF:
+			return true
+	return false
+
+
+## Moves a body; nothing passes through the fence (climbing over it is `_walk`).
 func _slide(p: Vector2, delta: Vector2, r: float) -> Vector2:
 	var n := p + delta
-	var band_top := FENCE_Y - r
-	var band_bottom := FENCE_Y + FENCE_H + r
-	if n.y > band_top and n.y < band_bottom and not _in_door(n.x, r * 0.6):
-		if p.y <= band_top:
-			n.y = band_top
-		elif p.y >= band_bottom:
-			n.y = band_bottom
-		else:  # inside the doorway and drifting sideways: stay in it
-			n.x = clampf(n.x, DOOR_X - DOOR_W * 0.5 + r * 0.6, DOOR_X + DOOR_W * 0.5 - r * 0.6)
-	return Vector2(clampf(n.x, 22.0, W - 22.0), clampf(n.y, SPAWN_Y + 30.0, H - 26.0))
+	var top := FENCE_Y - r
+	var bottom := FENCE_Y + FENCE_H + r
+	if p.y <= top and n.y > top:
+		n.y = top
+	elif p.y >= bottom and n.y < bottom:
+		n.y = bottom
+	return Vector2(clampf(n.x, 22.0, W - 22.0), clampf(n.y, -140.0, H - 26.0))
+
+
+## Moves a walker (you or a helper) who climbs over the fence when pushing into it away from a tower.
+func _walk(b: Dictionary, delta: Vector2, r: float, dt: float) -> void:
+	if b.has("vault"):
+		var v: Dictionary = b.vault
+		v.t += dt
+		var k := minf(float(v.t) / VAULT_TIME, 1.0)
+		b.pos = (v.from as Vector2).lerp(v.to, k)
+		if k >= 1.0:
+			b.erase("vault")
+		return
+	var p: Vector2 = b.pos
+	var outside := p.y < FENCE_Y
+	var touching := (outside and p.y >= FENCE_Y - r - 2.0) or (not outside and p.y <= FENCE_Y + FENCE_H + r + 2.0)
+	var toward := delta.y > 0.0 if outside else delta.y < 0.0
+	if touching and toward and absf(delta.y) > delta.length() * 0.45 and not _tower_at(p.x):
+		var to := Vector2(p.x, FENCE_Y + FENCE_H + r + 2.0 if outside else FENCE_Y - r - 2.0)
+		b.vault = {"t": 0.0, "from": p, "to": to}
+		return
+	var n := _slide(p, delta, r)
+	n.y = maxf(n.y, 70.0)  # walkers stay on the map
+	b.pos = n
+
+
+## A path smoothed through its points (Catmull-Rom), with the running length at every sample.
+func _smooth_path(raw: Array) -> Dictionary:
+	var pts := PackedVector2Array()
+	for i in raw.size() - 1:
+		var p0: Vector2 = raw[maxi(i - 1, 0)]
+		var p1: Vector2 = raw[i]
+		var p2: Vector2 = raw[i + 1]
+		var p3: Vector2 = raw[mini(i + 2, raw.size() - 1)]
+		for k in 16:
+			var t := k / 16.0
+			var t2 := t * t
+			var t3 := t2 * t
+			pts.append(0.5 * ((2.0 * p1) + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3))
+	pts.append(raw[raw.size() - 1])
+	var lens := PackedFloat32Array([0.0])
+	for i in range(1, pts.size()):
+		lens.append(lens[i - 1] + pts[i].distance_to(pts[i - 1]))
+	return {"pts": pts, "len": lens, "total": lens[lens.size() - 1]}
+
+
+func _path_point(path: Dictionary, s: float) -> Vector2:
+	var lens: PackedFloat32Array = path.len
+	var pts: PackedVector2Array = path.pts
+	var i := clampi(lens.bsearch(s), 1, pts.size() - 1)
+	var span := lens[i] - lens[i - 1]
+	return pts[i - 1].lerp(pts[i], clampf((s - lens[i - 1]) / span, 0.0, 1.0) if span > 0.0 else 1.0)
+
+
+func _nearest_s(path: Dictionary, p: Vector2) -> float:
+	var pts: PackedVector2Array = path.pts
+	var best := 0
+	for i in pts.size():
+		if pts[i].distance_squared_to(p) < pts[best].distance_squared_to(p):
+			best = i
+	return (path.len as PackedFloat32Array)[best]
 
 
 func _move_player(dt: float) -> void:
@@ -323,7 +412,7 @@ func _move_player(dt: float) -> void:
 	if dir.length() > 0.05:
 		player.face = dir.normalized()
 	var pace := float(args.get("pace", "1")) if autoplay else 1.0  # slower bot = a human-like player
-	player.pos = _slide(player.pos, dir.limit_length(1.0) * PLAYER_SPEED * pace * dt, PLAYER_R)
+	_walk(player, dir.limit_length(1.0) * PLAYER_SPEED * pace * dt, PLAYER_R, dt)
 
 
 func _harvest(dt: float) -> void:
@@ -605,7 +694,7 @@ func _update_bots(dt: float) -> void:
 		_cutter(b, dt)
 
 
-## Woodcutter: walks out through the door, chops trees and feeds the ammo machine. Monsters ignore it.
+## Woodcutter: climbs out over the fence, chops trees and feeds the ammo machine. Monsters ignore it.
 func _cutter(b: Dictionary, dt: float) -> void:
 	if b.carry < BOT_CARRY:
 		if b.node < 0 or nodes[b.node].stock <= 0:
@@ -635,7 +724,7 @@ func _move_to(b: Dictionary, target: Vector2, dt: float) -> bool:
 	var to: Vector2 = step_to - b.pos
 	if step_to == target and to.length() <= 6.0:
 		return true
-	b.pos = _slide(b.pos, to.normalized() * minf(to.length(), BOT_SPEED * dt), 10.0)
+	_walk(b, to.normalized() * minf(to.length(), BOT_SPEED * dt), 10.0, dt)
 	return false
 
 
@@ -685,7 +774,8 @@ func _spawn(type: String) -> void:
 	var d: Dictionary = MONSTERS[type]
 	var lane := rng.randi_range(0, 2)
 	var hp := roundi(d.hp * (1.0 + HP_GROWTH * (wave - 1)))
-	monsters.append({"uid": _uid(), "type": type, "pos": Vector2(LANES[lane] + rng.randf_range(-22.0, 22.0), SPAWN_Y), "lane": lane,
+	var off := rng.randf_range(-20.0, 20.0)
+	monsters.append({"uid": _uid(), "type": type, "pos": _path_point(paths[lane], 0.0) + Vector2(off, 0), "lane": lane, "s": 0.0, "off": off,
 		"hp": float(hp), "max": float(hp), "slow_t": 0.0, "speed": d.speed * rng.randf_range(0.92, 1.08), "r": d.r, "chase": false,
 		"waiting": false, "hit_cool": 0.0})
 
@@ -712,16 +802,14 @@ func _update_monsters(dt: float) -> void:
 		if not m.chase and not _inside(p) and to_player <= d.notice:
 			m.chase = true
 			m.waiting = false
-		elif m.chase and to_player > GIVE_UP:
+		elif m.chase and (to_player > GIVE_UP or _inside(p)):  # gave up, or you got over the fence
 			m.chase = false
+			m.s = _nearest_s(paths[m.lane], mp)
 		m.hit_cool = maxf(m.hit_cool - dt, 0.0)
 		m.slow_t = maxf(m.slow_t - dt, 0.0)
 		if m.chase:
 			var goal := _route(mp, p)
 			m.pos = _slide(mp, (goal - mp).normalized() * minf(goal.distance_to(mp), m.speed * _speed_mult(m) * dt), m.r)
-			if _inside(m.pos):
-				_lose("A monster followed you in")
-				return
 			if (m.pos as Vector2).distance_to(p) <= m.r + PLAYER_R and m.hit_cool <= 0.0 and hurt_t <= 0.0:
 				m.hit_cool = 1.0
 				hurt_t = HURT_GRACE
@@ -734,14 +822,20 @@ func _update_monsters(dt: float) -> void:
 					_lose("You were overrun")
 					return
 			continue
-		# march: drift back to the lane, then straight down to the fence and wait there
-		var lane_x: float = LANES[m.lane]
-		m.pos.x = move_toward(mp.x, clampf(mp.x, lane_x - 26.0, lane_x + 26.0), 40.0 * dt)
-		var stop: float = FENCE_Y - m.r - 2.0
-		if mp.y < stop:
-			m.pos.y = minf(mp.y + m.speed * _speed_mult(m) * dt, stop)
-		elif not m.waiting:
+		# march: along the path to the fence and wait there (back onto the path first after a chase)
+		if m.waiting:
+			continue
+		var path: Dictionary = paths[m.lane]
+		var step_len: float = m.speed * _speed_mult(m) * dt
+		var target := _path_point(path, m.s) + Vector2(m.off, 0)
+		if mp.distance_to(target) > step_len + 3.0:
+			m.pos = _slide(mp, (target - mp).normalized() * step_len, m.r)
+		elif m.s >= float(path.total):
+			m.pos = target
 			m.waiting = true
+		else:
+			m.s = minf(m.s + step_len, float(path.total))
+			m.pos = _path_point(path, m.s) + Vector2(m.off, 0)
 	_spread_waiting()
 	if _waiting() >= fence_max:
 		_lose("The fence gave way")
@@ -763,10 +857,6 @@ func _spread_waiting() -> void:
 				var push := (min_d - absf(dx)) * 0.5 * (1.0 if dx >= 0.0 else -1.0)
 				a.pos.x = clampf(a.pos.x - push, 20.0, W - 20.0)
 				b.pos.x = clampf(b.pos.x + push, 20.0, W - 20.0)
-	for m in monsters:  # the doorway stays clear: waiting monsters stand to either side of it
-		var half: float = DOOR_W * 0.5 + m.r + 4.0
-		if m.waiting and absf(m.pos.x - DOOR_X) < half:
-			m.pos.x = DOOR_X - half if m.pos.x < DOOR_X else DOOR_X + half
 
 
 func _lose(reason: String) -> void:
@@ -1001,22 +1091,20 @@ func _ammo_short() -> bool:
 func _advice() -> Vector2:
 	var p: Vector2 = player.pos
 	var space := capacity - stack.size()
-	# outside and in trouble: get back in through the door
+	# outside and in trouble: get back over the fence
 	if not _inside(p):
 		var close := {}
 		for m in monsters:
 			if m.chase and (close.is_empty() or (m.pos as Vector2).distance_to(p) < (close.pos as Vector2).distance_to(p)):
 				close = m
 		if not close.is_empty() and (close.pos as Vector2).distance_to(p) < 200.0:
-			# never lead a chaser to the door: fight it if you have shots, else run it off until it gives up
+			# fight it if you have shots, else get back over the fence (it can't follow)
 			var away: Vector2 = (p - (close.pos as Vector2)).normalized()
 			if bag > 0 and hearts > 2:
 				return p + away * 40.0
-			var flee := p + away * 140.0
-			flee.y = minf(flee.y, FENCE_Y - 60.0)
-			return flee
+			return Vector2(p.x, FENCE_Y + 90.0)
 		if hearts <= 2:
-			return DOOR_IN + Vector2(0, 60)
+			return Vector2(p.x, FENCE_Y + 90.0)
 	if _count("ammo") > 0:
 		var t := _neediest_turret()
 		if not t.is_empty():
@@ -1058,7 +1146,7 @@ func _advice() -> Vector2:
 			var n := _nearest_safe_node(p, want)
 			if not n.is_empty():
 				return n.pos + (Vector2(34, 0) if want == "wood" else Vector2(-34, 0))
-	return p if _inside(p) else DOOR_IN + Vector2(0, 60)
+	return p if _inside(p) else Vector2(p.x, FENCE_Y + 90.0)
 
 
 ## Where to stand for a spot: pads in the fence line are worked from the inside.
@@ -1076,9 +1164,9 @@ func _stack_needed_by(pad: Dictionary) -> bool:
 	return false
 
 
-## Gathering means going out: not while monsters wait at the door, unless your bag is well stocked.
+## Gathering means going out: not while monsters wait all along the fence, unless your bag is well stocked.
 func _outside_ok() -> bool:
-	return _safe(DOOR_OUT) or bag >= 20
+	return bag >= 20 or _safe(Vector2(_crossing_x(player.pos, Vector2(player.pos.x, FENCE_Y - 200.0)), FENCE_Y - 20.0))
 
 
 func _want_kind() -> String:
@@ -1157,57 +1245,6 @@ func _item(pos: Vector2, kind: String, s: float) -> void:
 
 
 func _draw() -> void:
-	if not world_2d:
-		_draw_overlay()
-		return
-	draw_rect(Rect2(0, 0, W, H), Color("#56663f"))
-	draw_rect(Rect2(0, HUD_H, W, SPAWN_Y - HUD_H + 26), Color("#3f3530"))
-	draw_rect(Rect2(0, FENCE_Y, W, H - FENCE_Y), Color("#6b5d48"))
-	for x in LANES:
-		draw_rect(Rect2(x - 32, SPAWN_Y, 64, FENCE_Y - SPAWN_Y), Color(0.8, 0.72, 0.5, 0.18))
-	_draw_fortress()
-	_draw_fence()
-	for n in nodes:
-		_draw_node(n)
-	for pad in _visible_pads():
-		_draw_pad(pad)
-	for u in _upgrade_pads():
-		_draw_upgrade(u)
-	_draw_machine()
-	for l in launchers:
-		_draw_launcher(l)
-	for t in turrets:
-		_draw_turret(t)
-	for k in pickups:
-		if k.life > 6.0 or fmod(k.life, 0.5) > 0.2:
-			_item(k.pos, k.kind, 6)
-	for m in monsters:
-		_draw_monster(m)
-	for s in shots:
-		var c := Color(0.6, 0.95, 1.0) if s.player else Color(1, 0.92, 0.55)
-		if s.get("evo", "") == "frost":
-			c = Color("#9fd3ff")
-		draw_line(s.a, s.b, Color(c, clampf(s.t / 0.08, 0, 1)), 3.0)
-	for b in bots:
-		_draw_bot(b)
-	_draw_player()
-	for b in lobs:
-		var k := clampf(b.t / b.dur, 0, 1)
-		_item((b.from as Vector2).lerp(b.to, k) + Vector2(0, -sin(k * PI) * 90.0), "ammo", 7)
-	for f in fx:
-		var k := clampf(f.t / f.dur, 0, 1)
-		var pos: Vector2 = (f.from as Vector2).lerp(f.to, k) + Vector2(0, -sin(k * PI) * 30.0)
-		if f.kind == "blast":
-			draw_circle(f.from, float(f.r) * (0.4 + 0.6 * k), Color(1.0, 0.6, 0.3, 0.35 * (1.0 - k)))
-			continue
-		if f.kind == "spark":
-			draw_circle(pos, 4.0 * (1.0 - k) + 1.0, Color("#ffcf6b"))
-		elif f.kind == "hurt":
-			draw_circle(pos, 5.0 * (1.0 - k) + 1.0, Color("#ff5e5e"))
-		else:
-			_item(pos, f.kind, 6)
-	if state == "play" and not autoplay:
-		_draw_arrow()
 	_draw_overlay()
 
 
@@ -1221,255 +1258,76 @@ func _draw_overlay() -> void:
 		_draw_end()
 
 
-func _draw_fortress() -> void:
-	var houses := 2 + built_count
-	for i in houses:
-		var x := 60.0 + (i % 6) * 120.0
-		var y := H - 34.0 - (i / 6) * 48.0
-		draw_rect(Rect2(x - 22, y - 10, 44, 28), Color("#b9a27c"))
-		draw_colored_polygon(PackedVector2Array([Vector2(x - 28, y - 10), Vector2(x, y - 32), Vector2(x + 28, y - 10)]), Color("#8c3b2e"))
 
 
-func _draw_fence() -> void:
-	var col := Color("#8a6a45")
-	var dark := Color("#4a3624")
-	var gap0 := DOOR_X - DOOR_W * 0.5
-	var gap1 := DOOR_X + DOOR_W * 0.5
-	for seg in [[0.0, gap0], [gap1, W]]:
-		draw_rect(Rect2(seg[0], FENCE_Y + 4, seg[1] - seg[0], 5), col)
-		draw_rect(Rect2(seg[0], FENCE_Y + 11, seg[1] - seg[0], 5), col)
-		var x: float = seg[0] + 6.0
-		while x < seg[1] - 4.0:
-			draw_rect(Rect2(x - 3, FENCE_Y - 6, 6, FENCE_H + 8), dark)
-			x += 22.0
-	# door posts
-	draw_rect(Rect2(gap0 - 6, FENCE_Y - 12, 8, FENCE_H + 16), dark)
-	draw_rect(Rect2(gap1 - 2, FENCE_Y - 12, 8, FENCE_H + 16), dark)
-	# strain: the fence glows red as it fills
-	var strain := float(_waiting()) / float(fence_max)
-	if strain > 0.0:
-		draw_rect(Rect2(0, FENCE_Y + 2, W, FENCE_H - 2), Color(1.0, 0.25, 0.2, 0.25 * strain + 0.1 * sin(time * 6.0) * strain))
 
 
-func _draw_node(n: Dictionary) -> void:
-	var useful := _useful(n.kind)
-	var a := 1.0 if useful else 0.55
-	if n.kind == "wood":
-		if n.stock > 0:
-			draw_rect(Rect2(n.pos + Vector2(-5, 4), Vector2(10, 16)), Color(0.42, 0.28, 0.16, a))
-			draw_circle(n.pos, 22.0, Color(0.24, 0.55, 0.29, a))
-			draw_circle(n.pos + Vector2(-6, -6), 10.0, Color(0.33, 0.66, 0.38, a))
-		else:
-			draw_circle(n.pos + Vector2(0, 10), 8.0, Color("#6b4a2b"))
-	else:
-		if n.stock > 0:
-			var pts := PackedVector2Array([n.pos + Vector2(-24, 12), n.pos + Vector2(-16, -14), n.pos + Vector2(6, -20),
-				n.pos + Vector2(24, -4), n.pos + Vector2(20, 14)])
-			draw_colored_polygon(pts, Color(0.55, 0.57, 0.6, a))
-			draw_polyline(pts + PackedVector2Array([pts[0]]), Color(0.3, 0.32, 0.35, a), 2.0)
-		else:
-			draw_circle(n.pos + Vector2(-8, 8), 5.0, Color("#6e7378"))
-			draw_circle(n.pos + Vector2(6, 10), 4.0, Color("#6e7378"))
-	if n.stock > 0 and n.stock < NODE_STOCK:
-		for i in n.stock:
-			draw_circle(n.pos + Vector2(-12 + i * 6, 28), 2.2, Color(1, 1, 1, 0.7))
 
 
-func _draw_pad(pad: Dictionary) -> void:
-	var r := Rect2(pad.pos - Vector2(PAD_HALF, PAD_HALF), Vector2(PAD_HALF * 2, PAD_HALF * 2))
-	draw_rect(r, Color(1, 1, 1, 0.1))
-	var pts := [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y), r.position]
-	for i in 4:
-		for k in 5:
-			if k % 2 == 0:
-				draw_line((pts[i] as Vector2).lerp(pts[i + 1], k / 5.0), (pts[i] as Vector2).lerp(pts[i + 1], (k + 1) / 5.0),
-					Color("#f2e4cb"), 3.0)
-	_text(pad.label, pad.pos + Vector2(0, -PAD_HALF - 12), 14, Color("#f2e4cb"))
-	var kinds := []
-	var total := 0
-	var paid := 0
-	for kind in pad.cost:
-		total += int(pad.cost[kind])
-		paid += int(pad.paid.get(kind, 0))
-		if _remaining(pad, kind) > 0:
-			kinds.append(kind)
-	for i in kinds.size():
-		var y: float = pad.pos.y - 10 + i * 24 - (kinds.size() - 1) * 6
-		_item(Vector2(pad.pos.x - 12, y), kinds[i], 8)
-		_text("%d" % _remaining(pad, kinds[i]), Vector2(pad.pos.x + 14, y), 18, Color.WHITE)
-	draw_rect(Rect2(r.position.x + 4, r.end.y - 8, (r.size.x - 8) * paid / float(total), 4), Color("#7af1eb"))
-	if str(pad.id).begins_with("launcher"):  # show what it will reach
-		draw_arc(pad.pos, LAUNCH_RANGE, PI, TAU, 48, Color(0.95, 0.76, 0.3, 0.35), 2.0)
 
 
-func _draw_upgrade(u: Dictionary) -> void:
-	var afford := wallet >= int(u.cost)
-	var a := 1.0 if afford else 0.45
-	var c := Color(0.95, 0.89, 0.8, a)
-	if u.choice != "lv2":
-		c = Color((EVOLUTIONS[u.choice].color as Color).lightened(0.3), a)
-	draw_circle(u.pos, UPGRADE_R, Color(0, 0, 0, 0.25))
-	draw_arc(u.pos, UPGRADE_R, 0, TAU, 24, c, 2.5)
-	_item(u.pos + Vector2(-8, 0), "coin", 6)
-	_text("%d" % u.cost, u.pos + Vector2(8, 0), 14, Color(1, 1, 1, a))
-	if _near(player.pos, u.pos, 130.0):  # names only when you are close, so the columns don't crowd
-		var lw := font.get_string_size(u.label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
-		draw_rect(Rect2(u.pos + Vector2(UPGRADE_R + 4, -10), Vector2(lw + 10, 20)), Color(0, 0, 0, 0.6))
-		_text(u.label, u.pos + Vector2(UPGRADE_R + 9 + lw * 0.5, 0), 13, c)
-	if u.key == dwell_key and dwell_t > 0.0:
-		draw_arc(u.pos, UPGRADE_R + 5.0, -PI * 0.5, -PI * 0.5 + TAU * dwell_t / UPGRADE_DWELL, 24, Color("#ffd24a"), 4.0)
 
 
-func _draw_machine() -> void:
-	if not machine.built:
-		return
-	var r := Rect2(MACHINE_POS - Vector2(34, 28), Vector2(68, 56))
-	draw_rect(r, Color("#4b5563"))
-	draw_rect(r, Color("#22272e"), false, 3.0)
-	var spin := time * 4.0 if machine.input > 0 else 0.0
-	for k in 6:
-		var a := spin + TAU * k / 6.0
-		draw_line(MACHINE_POS, MACHINE_POS + Vector2(cos(a), sin(a)) * 16.0, Color("#f2c14e"), 4.0)
-	draw_circle(MACHINE_POS, 7.0, Color("#22272e"))
-	if machine.input > 0:
-		_item(MACHINE_POS + Vector2(48, 18), "wood", 6)
-		_text("%d" % machine.input, MACHINE_POS + Vector2(48, 36), 14, Color.WHITE)
-	draw_rect(Rect2(OUTPUT_POS - Vector2(30, 18), Vector2(60, 40)), Color(0, 0, 0, 0.18))
-	for i in machine.out:
-		var col: int = i % 4
-		var row: int = i / 4
-		_item(OUTPUT_POS + Vector2(-18 + col * 12, 10 - row * 9), "ammo", 6)
-
-
-func _draw_launcher(l: Dictionary) -> void:
-	var p: Vector2 = l.pos
-	draw_line(OUTPUT_POS, p, Color(0.95, 0.76, 0.3, 0.35), 3.0)  # fed from the output pile
-	draw_rect(Rect2(p - Vector2(22, 18), Vector2(44, 36)), Color("#5b4a7a"))
-	draw_rect(Rect2(p - Vector2(22, 18), Vector2(44, 36)), Color("#2b2140"), false, 3.0)
-	var arm := Vector2(0, -1).rotated(-0.6 + 0.6 * (l.cool / LAUNCH_TIME))
-	draw_line(p, p + arm * 28.0, Color("#2b2140"), 7.0)
-	draw_circle(p + arm * 28.0, 6.0, Color("#f2c14e"))
-
-
-func _draw_turret(t: Dictionary) -> void:
-	if not t.built:
-		draw_rect(Rect2(t.pos - Vector2(20, 20), Vector2(40, 40)), Color(1, 1, 1, 0.12))
-		return
-	if _near(player.pos, t.pos, 120.0):
-		draw_arc(t.pos, TURRET_RANGE, PI, TAU, 64, Color(0.48, 0.95, 0.92, 0.25), 2.0)
-	var body := Color("#2e5d8a") if t.evo == "" else (EVOLUTIONS[t.evo].color as Color)
-	draw_rect(Rect2(t.pos - Vector2(26, 26), Vector2(52, 52)), body)
-	draw_rect(Rect2(t.pos - Vector2(26, 26), Vector2(52, 52)), body.darkened(0.55), false, 3.0)
-	var aim: Vector2 = t.aim
-	var side := Vector2(-aim.y, aim.x)
-	match t.evo:
-		"gatling":
-			draw_line(t.pos + side * 6.0, t.pos + side * 6.0 + aim * 38.0, body.darkened(0.55), 6.0)
-			draw_line(t.pos - side * 6.0, t.pos - side * 6.0 + aim * 38.0, body.darkened(0.55), 6.0)
-		"cannon":
-			draw_line(t.pos, t.pos + aim * 32.0, body.darkened(0.55), 18.0)
-		_:
-			draw_line(t.pos, t.pos + aim * 36.0, body.darkened(0.55), 10.0)
-	draw_circle(t.pos, 12.0, body.lightened(0.25))
-	for k in int(t.level):  # level pips
-		draw_circle(t.pos + Vector2(-14 + k * 14, -34), 4.0, Color("#ffd24a"))
-	if t.flash > 0.0:
-		draw_circle(t.pos + (t.aim as Vector2) * 40.0, 7.0, Color("#ffe08f"))
-	var max_ammo := TURRET_BOXES * SHOTS_PER_BOX
-	draw_rect(Rect2(t.pos + Vector2(-26, 32), Vector2(52, 7)), Color(0, 0, 0, 0.5))
-	draw_rect(Rect2(t.pos + Vector2(-26, 32), Vector2(52.0 * t.ammo / max_ammo, 7)), Color("#f2c14e"))
-	if t.ammo <= 0:
-		var pulse := 0.5 + 0.5 * sin(time * 8.0)
-		draw_arc(t.pos, 36.0 + pulse * 6.0, 0, TAU, 32, Color(0.95, 0.35, 0.3, 0.9), 4.0)
-
-
-func _draw_monster(m: Dictionary) -> void:
-	var c: Color = MONSTERS[m.type].color
-	var p: Vector2 = m.pos
-	var r: float = m.r
-	if m.chase:
-		draw_arc(p, r + 5.0, 0, TAU, 20, Color(1, 0.3, 0.3, 0.8), 2.0)
-	match m.type:
-		"grunt":
-			draw_circle(p, r, c)
-			draw_circle(p, r, c.darkened(0.5), false, 2.0)
-		"runner":
-			var pts := PackedVector2Array([p + Vector2(-r, -r), p + Vector2(r, -r), p + Vector2(0, r * 1.2)])
-			draw_colored_polygon(pts, c)
-		"brute":
-			draw_rect(Rect2(p - Vector2(r, r), Vector2(r * 2, r * 2)), c)
-			draw_rect(Rect2(p - Vector2(r, r), Vector2(r * 2, r * 2)), c.darkened(0.5), false, 3.0)
-	if m.slow_t > 0.0 or freeze_t > 0.0:
-		draw_circle(p, r + 2.0, Color(0.62, 0.83, 1.0, 0.45))
-	if m.hp < m.max:
-		draw_rect(Rect2(p + Vector2(-r, -r - 9), Vector2(r * 2, 4)), Color(0, 0, 0, 0.6))
-		draw_rect(Rect2(p + Vector2(-r, -r - 9), Vector2(r * 2 * m.hp / float(m.max), 4)), Color("#ff6b5e"))
-
-
-func _draw_bot(b: Dictionary) -> void:
-	var c := Color("#5fbf6a")
-	draw_circle(b.pos, 12.0, c)
-	draw_circle(b.pos, 12.0, c.darkened(0.5), false, 2.0)
-	for i in b.carry:
-		_item(b.pos + Vector2(0, -20 - i * 8), "wood", 5)
-
-
-func _draw_player() -> void:
-	var p: Vector2 = player.pos
-	if not _inside(p):
-		draw_arc(p, GUN_RANGE, 0, TAU, 48, Color(0.6, 0.95, 1.0, 0.12 if bag > 0 else 0.0), 2.0)
-	draw_circle(p + Vector2(0, 14), 14.0, Color(0, 0, 0, 0.25))
-	var blink := hurt_t > 0.0 and fmod(hurt_t, 0.16) < 0.08
-	draw_circle(p, PLAYER_R + 1.0, Color("#ff5e5e") if blink else Color("#f2e4cb"))
-	draw_circle(p, PLAYER_R + 1.0, Color("#2b2f36"), false, 3.0)
-	draw_circle(p + (player.face as Vector2) * 9.0, 4.5, Color("#2b2f36"))
-	# your own ammo bag, separate from the stack
-	draw_rect(Rect2(p + Vector2(-20, 22), Vector2(40, 5)), Color(0, 0, 0, 0.5))
-	draw_rect(Rect2(p + Vector2(-20, 22), Vector2(40.0 * bag / BAG_MAX, 5)), Color("#7af1eb"))
-	for i in stack.size():
-		_item(p + Vector2(0, -30 - i * 9), stack[i], 9)
-	if stack.size() >= capacity:
-		_text("FULL", p + Vector2(0, 38), 13, Color("#ffcb5e"))
-
-
-func _draw_arrow() -> void:
-	var target := _route(player.pos, _advice())
-	var p: Vector2 = player.pos
-	var d := target - p
-	if d.length() < 90.0:
-		return
-	var dir := d.normalized()
-	var tip := p + dir * 52.0
-	var side := Vector2(-dir.y, dir.x)
-	draw_colored_polygon(PackedVector2Array([tip, tip - dir * 16.0 + side * 10.0, tip - dir * 16.0 - side * 10.0]),
-		Color(1, 1, 1, 0.85))
-	var pulse := 0.5 + 0.5 * sin(time * 5.0)
-	draw_arc(target, 18.0 + pulse * 6.0, 0, TAU, 24, Color(1, 1, 1, 0.5), 2.0)
 
 
 func _draw_hud() -> void:
-	draw_rect(Rect2(0, 0, W, HUD_H), Color("#16181c"))
-	_text("WAVE %d/%d" % [wave, WAVES], Vector2(80, 30), 20, Color("#f2e4cb"))
+	var dark := Color(0.09, 0.07, 0.14, 0.62)
+	# wave
+	_panel(Rect2(16, 16, 196, 62), dark)
+	_otext("WAVE %d/%d" % [wave, WAVES], Vector2(114, 38), 26, Color.WHITE)
 	if not spawn_queue.is_empty():
-		_text("INCOMING %d" % spawn_queue.size(), Vector2(80, 62), 15, Color("#ff7b6b"))
+		_otext("INCOMING %d" % spawn_queue.size(), Vector2(114, 64), 17, Color("#ff8a7a"))
 	elif wave < WAVES:
-		_text("NEXT IN %ds" % int(ceil(wave_t)), Vector2(80, 62), 15, Color("#a9a395"))
-	# fence: how many monsters it can hold
-	_text("FENCE", Vector2(W * 0.5 - 40, 24), 14, Color("#a9a395"))
-	var pw := minf(16.0, 190.0 / fence_max)
-	var x0 := W * 0.5 - 40 - pw * fence_max * 0.5
+		_otext("NEXT IN %ds" % int(ceil(wave_t)), Vector2(114, 64), 17, Color("#d6d0e6"))
+	# fence: how many monsters it can hold before it gives
 	var waiting := _waiting()
+	var gw := 196.0
+	_panel(Rect2(SW * 0.5 - gw * 0.5 - 12, 16, gw + 24, 62), dark)
+	_otext("FENCE", Vector2(SW * 0.5, 32), 15, Color("#d6d0e6"))
+	var pw := gw / fence_max
 	for i in fence_max:
-		draw_rect(Rect2(x0 + i * pw + 1, 40, pw - 3, 20), Color("#ff6b5e") if i < waiting else Color("#8a6a45"))
-	# hearts
+		var r := Rect2(SW * 0.5 - gw * 0.5 + i * pw + 1.5, 46, pw - 3.0, 20)
+		var sb := StyleBoxFlat.new()
+		sb.set_corner_radius_all(4)
+		sb.bg_color = Color("#ff5a4e") if i < waiting else Color("#5b5670")
+		if i < waiting and waiting >= fence_max - 2:
+			sb.bg_color = sb.bg_color.lightened(0.25 * (0.5 + 0.5 * sin(time * 10.0)))
+		draw_style_box(sb, r)
+	# hearts and coins
 	for i in HEARTS:
-		var c := Color("#ff6b6b") if i < hearts else Color("#3a2a2a")
-		var hp := Vector2(W * 0.5 + 92 + i * 22, 30)
-		draw_circle(hp + Vector2(-4, 0), 5.0, c)
-		draw_circle(hp + Vector2(4, 0), 5.0, c)
-		draw_colored_polygon(PackedVector2Array([hp + Vector2(-9, 1), hp + Vector2(9, 1), hp + Vector2(0, 11)]), c)
-	_text("BAG %d" % bag, Vector2(W * 0.5 + 136, 64), 14, Color("#7af1eb"))
+		var c := Color("#ff5a64") if i < hearts else Color(0.25, 0.2, 0.3, 0.8)
+		var hp := Vector2(SW * 0.5 + 146 + i * 23, 30)
+		_heart(hp, c)
+	_panel(Rect2(SW * 0.5 + 138, 48, 128, 32), dark)
+	draw_circle(Vector2(SW * 0.5 + 158, 64), 10.0, Color("#ffc23a"))
+	draw_circle(Vector2(SW * 0.5 + 158, 64), 5.5, Color("#ffe08a"))
+	_otext("%d" % wallet, Vector2(SW * 0.5 + 210, 64), 22, Color.WHITE)
 	_draw_power()
+
+
+func _panel(r: Rect2, col: Color) -> void:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = col
+	sb.set_corner_radius_all(int(minf(r.size.y * 0.5, 20.0)))
+	draw_style_box(sb, r)
+
+
+func _otext(s: String, centre: Vector2, size: int, col: Color) -> void:
+	var f: Font = hud_font if hud_font else font
+	var tw := f.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	var at := centre + Vector2(-tw * 0.5, size * 0.36)
+	draw_string_outline(f, at, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, 6, Color("#241d2c"))
+	draw_string(f, at, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, col)
+
+
+func _heart(hp: Vector2, c: Color) -> void:
+	draw_circle(hp + Vector2(-5, -2), 6.5, Color("#241d2c"))
+	draw_circle(hp + Vector2(5, -2), 6.5, Color("#241d2c"))
+	draw_colored_polygon(PackedVector2Array([hp + Vector2(-11.5, 0), hp + Vector2(11.5, 0), hp + Vector2(0, 13)]), Color("#241d2c"))
+	draw_circle(hp + Vector2(-4.5, -2), 5.0, c)
+	draw_circle(hp + Vector2(4.5, -2), 5.0, c)
+	draw_colored_polygon(PackedVector2Array([hp + Vector2(-9.3, 0), hp + Vector2(9.3, 0), hp + Vector2(0, 10.5)]), c)
+	draw_circle(hp + Vector2(-5, -3.5), 1.8, Color(1, 1, 1, 0.6))
 
 
 ## The power meter: fills with every monster coin; full, it pulses and a tap fires it.
@@ -1478,31 +1336,34 @@ func _draw_power() -> void:
 	var full := power >= POWER_MAX
 	var active := power_t > 0.0
 	var pulse := 0.5 + 0.5 * sin(time * 7.0)
-	draw_circle(c, POWER_R, Color("#22262c"))
+	var gold := Color("#ffc23a")
+	if full and not active:  # ready: a pulsing halo
+		draw_circle(c, POWER_R + 8.0 + pulse * 5.0, Color(1.0, 0.76, 0.23, 0.25))
+	draw_circle(c, POWER_R + 4.0, Color("#241d2c"))
+	draw_circle(c, POWER_R, Color("#3a3150"))
 	var frac := power_t / POWER_TIME if active else float(power) / POWER_MAX
-	var col := Color("#7af1eb") if active else Color("#ffd24a")
+	var col := Color("#7af1eb") if active else gold
 	if frac > 0.0:
-		draw_arc(c, POWER_R - 4.0, -PI * 0.5, -PI * 0.5 + TAU * frac, 48, col, 7.0)
+		draw_arc(c, POWER_R - 5.0, -PI * 0.5, -PI * 0.5 + TAU * frac, 48, col, 9.0)
 	if full and not active:
-		draw_circle(c, POWER_R - 9.0, Color(1.0, 0.82, 0.29, 0.25 + 0.35 * pulse))
-		draw_arc(c, POWER_R + 4.0 + pulse * 4.0, 0, TAU, 40, Color(1.0, 0.82, 0.29, 0.8), 3.0)
+		draw_circle(c, POWER_R - 10.0, gold.lerp(Color.WHITE, 0.2 * pulse))
 	var bolt := PackedVector2Array([c + Vector2(3, -15), c + Vector2(-8, 2), c + Vector2(-1, 2), c + Vector2(-4, 15),
 		c + Vector2(8, -3), c + Vector2(1, -3)])
-	draw_colored_polygon(bolt, col if (full or active) else Color("#6b6f76"))
+	draw_colored_polygon(bolt, Color("#241d2c") if full and not active else (col if active else Color("#8a83a0")))
+	if full and not active:
+		_otext("TAP!", c + Vector2(0, POWER_R + 18), 18, gold)
+	if freeze_t > 0.0:
+		draw_arc(c, POWER_R + 8.0, -PI * 0.5, -PI * 0.5 + TAU * freeze_t / FREEZE_TIME, 40, Color("#9fd3ff"), 4.0)
 	if power_menu:
 		for k in POWERS.size():
 			var b := _power_button(k)
 			var pc: Color = POWERS[k].color
-			draw_circle(b, 28.0, Color("#22262c"))
+			draw_circle(b, 31.0, Color("#241d2c"))
+			draw_circle(b, 28.0, Color("#3a3150"))
 			draw_arc(b, 28.0, 0, TAU, 32, pc, 3.0)
 			_power_icon(POWERS[k].id, b, pc)
-			_text(POWERS[k].label, b + Vector2(-60, 0), 14, pc)
-	if freeze_t > 0.0:
-		draw_arc(c, POWER_R + 6.0, -PI * 0.5, -PI * 0.5 + TAU * freeze_t / FREEZE_TIME, 40, Color("#9fd3ff"), 3.0)
-	_text("TAP!" if full and not active else ("%d" % wallet), c + Vector2(-58, 0), 15,
-		Color("#ffd24a") if full and not active else Color("#f2e4cb"))
-	if not full and not active:
-		draw_circle(c + Vector2(-80, 0), 6.0, Color("#ffd24a"))
+			_panel(Rect2(b + Vector2(-122, -16), Vector2(82, 32)), Color(0.09, 0.07, 0.14, 0.7))
+			_otext(POWERS[k].label, b + Vector2(-81, 0), 18, pc)
 
 
 func _power_icon(id: String, c: Vector2, col: Color) -> void:
@@ -1523,16 +1384,22 @@ func _power_icon(id: String, c: Vector2, col: Color) -> void:
 
 
 func _draw_end() -> void:
-	draw_rect(Rect2(0, 0, W, H), Color(0, 0, 0, 0.55))
+	draw_rect(Rect2(0, 0, SW, SH), Color(0.05, 0.03, 0.1, 0.55))
 	var won := state == "won"
-	draw_rect(Rect2(80, 430, W - 160, 340), Color("#1f2328"))
-	draw_rect(Rect2(80, 430, W - 160, 340), Color("#7af1eb") if won else Color("#ff6b5e"), false, 4.0)
-	_text("FORTRESS HOLDS" if won else "FORTRESS FELL", Vector2(W * 0.5, 495), 40, Color.WHITE)
+	var r := Rect2(70, 420, SW - 140, 360)
+	_panel(Rect2(r.position + Vector2(0, 8), r.size), Color("#241d2c"))
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color("#3a3150")
+	sb.set_corner_radius_all(26)
+	sb.border_color = Color("#7af1eb") if won else Color("#ff6b5e")
+	sb.set_border_width_all(5)
+	draw_style_box(sb, r)
+	_otext("FORTRESS HOLDS" if won else "FORTRESS FELL", Vector2(SW * 0.5, 490), 48, Color.WHITE)
 	if not won:
-		_text(lose_reason, Vector2(W * 0.5, 545), 22, Color("#ff9a8f"))
-	_text("Waves survived: %d / %d" % [wave if won else wave - 1, WAVES], Vector2(W * 0.5, 600), 22, Color("#f2e4cb"))
-	_text("Monsters stopped: %d" % kills, Vector2(W * 0.5, 640), 22, Color("#f2e4cb"))
-	_text("TAP TO PLAY AGAIN", Vector2(W * 0.5, 715), 22, Color("#ffcb5e"))
+		_otext(lose_reason.to_upper(), Vector2(SW * 0.5, 545), 24, Color("#ff9a8f"))
+	_otext("WAVES SURVIVED  %d / %d" % [wave if won else wave - 1, WAVES], Vector2(SW * 0.5, 610), 26, Color("#f2e4cb"))
+	_otext("MONSTERS STOPPED  %d" % kills, Vector2(SW * 0.5, 650), 26, Color("#f2e4cb"))
+	_otext("TAP TO PLAY AGAIN", Vector2(SW * 0.5, 725), 28, Color("#ffc23a"))
 
 
 # ================================================================== automation
