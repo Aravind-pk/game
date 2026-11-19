@@ -1,112 +1,119 @@
 # Fortress — gameplay design (prototype)
 
-A one-screen, portrait defense-and-build game. You are a worker **outside** your fortress wall.
-Monsters march straight down three lanes toward the wall. You gather materials in the field,
-carry them to build pads, turn wood into ammo, and keep the fixed turrets loaded. Every wave you
-survive, the fortress grows.
+A one-screen, portrait defense-and-build game. You live behind a **fence with one small door**.
+Outside are the trees, the rocks and three monster lanes; inside is everything you build. Monsters
+march straight down the lanes and wait at the fence. Step out to gather and they come for you.
 
 Everything is drawn with basic shapes until the gameplay is right.
 
-## The one-sentence loop
+## The loop
 
-**Gather → carry → build or craft → load turrets → monsters drop scrap → gather again.**
+**Go out → gather (and fight) → come back in → build or craft → feed the turrets → repeat.**
 
 ## Controls
 
 - Drag anywhere to move (a virtual joystick appears under your thumb). WASD or arrows on desktop.
-- There are no buttons in play. Everything happens by **standing near things**:
-  - next to a tree or rock: you harvest it, one item at a time, onto the stack on your back;
+- No buttons. Things happen by **standing near them**:
+  - next to a tree or rock (outside): you harvest one item at a time onto the stack on your back;
   - on a build pad: the materials it still needs fly off your stack into it;
-  - at the ammo machine: your wood goes in; at its output pile: ammo boxes come onto your stack;
-  - next to a turret: your ammo boxes load into it;
+  - at the ammo machine: your wood goes in; at its output pile, boxes come out to you;
+  - next to a turret (from inside): your ammo boxes load into it;
   - over scrap on the ground: you pick it up.
-- A small arrow next to you always points at the most useful thing to do next.
+- Your own gun fires by itself at the nearest monster in close range (130 px) while your bag has shots.
+- A small arrow next to you points at the most useful thing to do, routed through the door, and it
+  won't send you out while monsters are gathered at the door.
+
+## What you carry
+
+| | Holds | Filled at | Used for |
+|---|---|---|---|
+| **Stack** (on your back) | 10 items (18 with Bigger pack) | Trees, rocks, scrap, machine output | Building, feeding the machine, carrying boxes to turrets |
+| **Ammo bag** (your gun) | 30 shots, separate from the stack | Machine output: the bag fills first, 1 box = 10 shots | Your gun |
 
 ## Materials
 
-| Item | Shape | Where it comes from | What it is for |
+| Item | Shape | From | For |
 |---|---|---|---|
-| Wood | brown square | Trees on the left edge (5 per tree, regrow in 7 s) | Ammo, turrets, backpack, woodcutter |
-| Stone | grey square | Rocks on the right edge (5 per rock, regrow in 7 s) | Turrets, gate upgrade, rapid fire, **gate repair** |
-| Scrap | blue square | Dropped by monsters when they die (1, or 4 from a brute); fades after 30 s | Helpers and upgrades |
-| Ammo box | yellow square | The ammo machine: 1 wood → 2 boxes (1 s per wood) | Loaded into turrets: 1 box = 10 shots |
+| Wood | brown square | Trees on the left, outside (5 per tree, regrow in 7 s) | Ammo, turrets, pack, woodcutter |
+| Stone | grey square | Rocks on the right, outside | Turrets, launchers, fence, rapid fire |
+| Scrap | blue square | Dropped by monsters in the lanes (1, or 4 from a brute); fades after 30 s | Launchers and upgrades |
+| Ammo box | yellow square | The ammo machine: 1 wood → 2 boxes | Turrets (1 box = 10 shots), your bag |
 
-You carry one mixed stack, **10 items** to start. You only pick up what something currently
-needs, so your stack never fills with junk.
+You only pick up what something currently needs.
 
-## The fortress (build pads, in unlock order)
+## The fortress
 
-Two pads are open at a time. Finish one and the next appears, so there is always a choice of two.
+- **Fence** across the screen with a **door** the worker (and the woodcutter) can walk through.
+- **Turrets are towers in the fence**, one per lane, loaded from the inside. Monsters never attack
+  them. Range 230 px, 2 shots/s, up to 5 boxes.
+- **Inside**: the ammo machine, its output pile, launchers, other pads, and houses that grow with
+  every building.
+
+Build pads, two open at a time:
 
 | # | Pad | Cost | Effect |
 |---|---|---|---|
-| — | Centre turret | already built, 2 boxes loaded | Covers the middle lane |
-| 1 | Ammo machine | 8 wood | Turns wood into ammo boxes |
-| 2 | Left turret | 5 wood, 5 stone | Covers the left lane |
-| 3 | Right turret | 5 wood, 5 stone | Covers the right lane |
-| 4 | Gate +5 | 10 stone | Gate takes 5 more monsters |
-| 5 | Ammo runner (helper) | 8 scrap | Carries boxes from the machine to the emptiest turret |
-| 6 | Rapid fire | 10 scrap, 6 stone | All turrets fire 1.8× faster |
-| 7 | Bigger pack | 10 wood | Carry 18 items |
-| 8 | Woodcutter (helper) | 12 scrap, 6 wood | Chops trees and feeds the ammo machine |
-
-Built things also appear as houses inside the wall, so the fortress visibly grows.
-
-## Turrets
-
-- Fixed in place, one per lane. They never move and **monsters never attack them**.
-- Fire at the nearest monster within 230 px (about one lane each side), 2 shots/s, 1 damage per shot.
-- Hold up to 5 boxes (50 shots). An empty turret shows a pulsing red ring: go and feed it.
+| — | Centre turret | already built | Covers the middle lane |
+| 1 | Ammo machine | 8 wood | Wood in, boxes out onto its pile. You still have to distribute them |
+| 2 | Left turret | 5 wood, 5 stone | Tower in the fence on the left lane |
+| 3 | Right turret | 5 wood, 5 stone | Tower on the right lane |
+| 4 | Launcher (left) | 6 stone, 4 scrap | Takes boxes from the machine pile and lobs them to turrets in its reach (left and centre) |
+| 5 | Fence +4 | 8 stone | Four more monsters can wait at the fence |
+| 6 | Rapid fire | 10 scrap, 6 stone | Turrets fire 1.8× faster |
+| 7 | Bigger pack | 10 wood | Stack holds 18 |
+| 8 | Launcher (right) | 8 stone, 8 scrap | Reaches the centre and right turrets |
+| 9 | Woodcutter | 12 scrap, 6 wood | Helper: walks out through the door, chops trees, feeds the machine. Monsters ignore it |
 
 ## Monsters
 
-They walk straight down their lane and ignore you and the turrets.
+They walk straight down their lane, stop at the fence and **wait there** (they don't die on it).
+Turrets and your gun can still shoot them while they wait.
 
-| Monster | Shape | HP | Speed | Gate damage | Scrap | From wave |
-|---|---|---:|---:|---:|---:|---:|
-| Grunt | red circle | 3 | slow | 1 | 1 | 1 |
-| Runner | orange triangle | 2 | fast | 1 | 1 | 3 |
-| Brute | dark red square | 14 | very slow | 3 | 4 | 5 |
+| Monster | Shape | HP | Speed | Notices you within | Hit | Scrap | From wave |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Grunt | red circle | 3 | slow | 90 px | 1 heart | 1 | 1 |
+| Runner | orange triangle | 2 | fast | 130 px | 1 heart | 1 | 3 |
+| Brute | dark red square | 14 | very slow | 70 px | 2 hearts | 4 | 5 |
 
-## The gate
+A monster that notices you (red ring) chases you until you are more than 260 px away. Waiting
+monsters keep the doorway clear but will chase you if you step out next to them. Monsters get 8%
+more HP every wave.
 
-- Reaching the wall does not lose the game. Each monster that gets there **cracks the gate**
-  by its gate damage. The gate starts able to take **12** cracks (shown as pips in the top bar).
-- When the cracks reach the limit, the gate breaks and the run is over.
-- Repair: when the gate is cracked, a repair pad appears in front of it. **3 stone mends 1 crack.**
+## How you lose
+
+1. **The fence gives way**: the number of monsters waiting at it reaches its capacity (8, 12 with
+   the upgrade). Shown as the FENCE pips in the top bar.
+2. **You are overrun**: you lose all 6 hearts to touches. Hearts come back while you are inside
+   (one every 4 s).
+3. **A monster follows you in**: a chasing monster gets through the door.
+
+Survive wave 10 with the field cleared and the fortress holds.
 
 ## Waves
 
-- 10 waves. The first comes after 30 s, giving you time to build the ammo machine.
-- Monsters get 8% more HP every wave. Wave *n* brings 3 + 2n grunts, runners from wave 3, brutes from wave 5, one every 1.1 s, each
-  in a random lane.
-- A 16 s break follows each wave. The top bar counts down to the next one.
-- Survive wave 10 and the fortress holds. That is the win for this prototype.
+10 waves. The first comes after 30 s; 16 s breaks between waves. Wave *n* brings 3 + 2n grunts,
+runners from wave 3 and brutes from wave 5, one every 1.1 s in a random lane.
 
-## Why it should feel good
+## The tension this creates
 
-- There is always one obvious next job (the arrow), but the two open pads, the gate repair and
-  hungry turrets compete for your time. That tension is the game.
-- Every action gives instant feedback: items fly from you into what you are building.
-- Kills feed the economy (scrap), so defending well makes building faster.
-- Helpers take over the boring trips, so the game shifts from running errands to managing.
-
-## Out of scope for the first prototype
-
-Art, sound, more lanes, upgrades per turret, multiple maps, saving progress.
+- Everything you need is outside, and outside is where the monsters are. Each trip is a choice:
+  how full is your bag, are monsters waiting by the door, is the scrap in a lane worth the risk?
+- Ammo has to be shuttled by hand until launchers take over, and launchers cost scrap, which
+  means going into the lanes.
+- Monsters piling up at the fence are a slow clock: feed the turrets or the fence gives.
 
 ## Balance check
 
-`godot --headless --path fortress -- sim=bot pace=1` runs the built-in bot (the same logic as the
-guide arrow) through all 10 waves and prints a log. `pace` slows it down to stand in for a human;
-`sim=idle` never moves. Current results:
+`godot --headless --path fortress -- sim=bot pace=1 seed=1` runs the built-in bot (the same logic
+as the guide arrow) and prints a log. `pace` slows it down to stand in for a human; `sim=idle`
+never moves; `seed` changes the lanes monsters spawn in. Four seeds each:
 
-| Player | Result |
+| Player | Wins |
 |---|---|
-| Bot, full speed | Wins, gate untouched, builds all 8 pads |
-| Bot, 70% speed | Wins with 3 of 12 cracks left |
-| Bot, 50% speed | Gate breaks in wave 8 |
-| Does nothing | Gate breaks in wave 4 |
+| Bot, full speed | 3 of 4 (usually 2–3 hearts left) |
+| Bot, 70% speed | 3 of 4 |
+| Bot, 50% speed | 2 of 4 |
+| Does nothing | 0 of 4 (fence gives in wave 3) |
 
-The levers that mattered most: turret range (one turret covering every lane made building
-pointless), boxes per wood (ammo used to eat all the wood) and per-wave HP growth.
+The bot rarely builds past the first five pads; scrap is risky to collect. If the late game
+feels thin, scrap costs are the first lever.

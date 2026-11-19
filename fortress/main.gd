@@ -1,11 +1,13 @@
 extends Node2D
 ## FORTRESS: gameplay prototype drawn with basic shapes. See DESIGN.md.
-## Loop: gather wood and stone, carry them to build pads, turn wood into ammo at the machine and
-## carry the boxes to the turrets. Monsters march straight down three lanes; each one that reaches
-## the wall cracks the gate, and the gate breaks after enough cracks.
+## You live behind a fence with one small door. Outside: trees, rocks and the monster lanes.
+## Inside: the ammo machine, launchers and everything else you build. Monsters march straight
+## down three lanes and wait at the fence; too many waiting and the fence gives. Step outside to
+## gather and they come for you: a few touches and you are down, and if one follows you through the
+## door, the fortress falls.
 ##
 ## Automation (after `--`):
-##   sim=bot | sim=idle      headless balance run: prints a log and quits
+##   sim=bot | sim=idle      headless balance run: prints a log and quits (pace=0.7 slows the bot)
 ##   autoplay                the built-in bot plays (screenshots, demos)
 ##   warp=120                fast-forward this many seconds before showing anything
 ##   shot=/path.png shot_time=2
@@ -15,22 +17,30 @@ const W := 720.0
 const H := 1280.0
 const HUD_H := 92.0
 const SPAWN_Y := 104.0
-const WALL_Y := 1110.0
-const WALL_H := 34.0
-const GATE_W := 150.0
-const LANES := [180.0, 360.0, 540.0]
-const TURRET_Y := 990.0
-const MACHINE_POS := Vector2(270, 1004)
-const OUTPUT_POS := Vector2(270, 916)
-const GATE_PAD_POS := Vector2(360, 1068)
+const FENCE_Y := 860.0
+const FENCE_H := 18.0
+const DOOR_X := 430.0
+const DOOR_W := 64.0
+const LANES := [220.0, 360.0, 500.0]
+const MACHINE_POS := Vector2(250, 1010)
+const OUTPUT_POS := Vector2(250, 928)
 const PAD_HALF := 34.0
+const DOOR_OUT := Vector2(DOOR_X, FENCE_Y - 34.0)
+const DOOR_IN := Vector2(DOOR_X, FENCE_Y + FENCE_H + 36.0)
 
 # ---------------------------------------------------------------- tuning
 const PLAYER_SPEED := 240.0
+const PLAYER_R := 16.0
 const REACH := 54.0            # how close you must stand to harvest, pick up or deposit
 const HARVEST_TIME := 0.32
 const ACT_TIME := 0.07         # one item moves per tick when depositing or picking up
 const START_CAPACITY := 10
+const HEARTS := 6
+const HEART_REGEN := 4.0       # seconds per heart while inside the fence
+const HURT_GRACE := 0.7        # seconds you can't be hit again after a touch
+const BAG_MAX := 30            # your own gun's shots, separate from what you carry
+const GUN_RANGE := 130.0
+const GUN_RATE := 3.0
 const NODE_STOCK := 5
 const NODE_REGROW := 7.0
 const MACHINE_TIME := 0.5      # seconds per ammo box
@@ -42,8 +52,9 @@ const TURRET_BOXES := 5
 const TURRET_RANGE := 230.0
 const TURRET_RATE := 2.0
 const RAPID_MULT := 1.8
-const GATE_START := 12
-const STONE_PER_REPAIR := 3
+const LAUNCH_RANGE := 270.0
+const LAUNCH_TIME := 1.2
+const FENCE_START := 8         # monsters that can wait at the fence before it gives
 const WAVES := 10
 const FIRST_WAVE := 30.0
 const WAVE_BREAK := 16.0
@@ -51,32 +62,41 @@ const SPAWN_GAP := 1.1
 const BOT_SPEED := 150.0
 const BOT_CARRY := 4
 const CUT_TIME := 0.6
-const SCRAP_LIFE := 30.0       # scrap on the ground fades after this long
-const HP_GROWTH := 0.08        # monsters get this much tougher every wave
+const SCRAP_LIFE := 30.0
+const HP_GROWTH := 0.08
+const GIVE_UP := 260.0         # a chasing monster loses interest beyond this distance
 
 const ITEM_COLOR := {
 	"wood": Color("#b07a3e"), "stone": Color("#a3a8ad"), "scrap": Color("#6fb3e0"), "ammo": Color("#f2c14e"),
 }
 const MONSTERS := {
-	"grunt": {"hp": 3, "speed": 42.0, "r": 14.0, "breach": 1, "drop": 1, "color": Color("#e5534b")},
-	"runner": {"hp": 2, "speed": 86.0, "r": 12.0, "breach": 1, "drop": 1, "color": Color("#ff9561")},
-	"brute": {"hp": 14, "speed": 26.0, "r": 22.0, "breach": 3, "drop": 4, "color": Color("#a8323a")},
+	"grunt": {"hp": 3, "speed": 42.0, "r": 14.0, "notice": 90.0, "hit": 1, "drop": 1, "color": Color("#e5534b")},
+	"runner": {"hp": 2, "speed": 86.0, "r": 12.0, "notice": 130.0, "hit": 1, "drop": 1, "color": Color("#ff9561")},
+	"brute": {"hp": 14, "speed": 30.0, "r": 22.0, "notice": 70.0, "hit": 2, "drop": 4, "color": Color("#a8323a")},
 }
 
 # ---------------------------------------------------------------- state
 var rng := RandomNumberGenerator.new()
 var state := "play"            # play | won | lost
+var lose_reason := ""
 var time := 0.0
 var player := {}
-var stack: Array = []          # item kinds carried, bottom first
+var stack: Array = []
 var capacity := START_CAPACITY
+var bag := BAG_MAX
+var hearts := HEARTS
+var heal_t := 0.0
+var hurt_t := 0.0
+var gun_cool := 0.0
 var harvest_t := 0.0
 var act_t := 0.0
-var nodes: Array = []          # {kind, pos, stock, regrow}
-var pickups: Array = []        # {kind, pos}
-var turrets: Array = []        # {pos, built, ammo, cool, aim, flash}
+var nodes: Array = []
+var pickups: Array = []
+var turrets: Array = []
 var machine := {}
-var pads: Array = []           # {id, label, pos, cost, paid, done}
+var launchers: Array = []      # {pos, cool}
+var lobs: Array = []           # boxes in flight from a launcher: {from, to, t, dur, turret}
+var pads: Array = []
 var bots: Array = []
 var monsters: Array = []
 var shots: Array = []
@@ -85,9 +105,7 @@ var wave := 0
 var wave_t := FIRST_WAVE
 var spawn_queue: Array = []
 var spawn_t := 0.0
-var gate_max := GATE_START
-var breaches := 0
-var gate_stone := 0
+var fence_max := FENCE_START
 var rapid := false
 var kills := 0
 var built_count := 0
@@ -122,33 +140,42 @@ func _ready() -> void:
 
 
 func reset() -> void:
-	rng.seed = 7
+	rng.seed = int(args.get("seed", "7"))
 	state = "play"
+	lose_reason = ""
 	time = 0.0
-	player = {"pos": Vector2(360, 820), "face": Vector2.UP}
+	player = {"pos": Vector2(DOOR_X, 1030), "face": Vector2.UP}
 	stack = []
 	capacity = START_CAPACITY
+	bag = BAG_MAX
+	hearts = HEARTS
+	heal_t = 0.0
+	hurt_t = 0.0
+	gun_cool = 0.0
 	harvest_t = 0.0
 	act_t = 0.0
 	nodes = []
 	for i in 6:
-		nodes.append({"kind": "wood", "pos": Vector2(56 + (i % 2) * 48, 300 + i * 95), "stock": NODE_STOCK, "regrow": 0.0})
-		nodes.append({"kind": "stone", "pos": Vector2(664 - (i % 2) * 48, 330 + i * 95), "stock": NODE_STOCK, "regrow": 0.0})
+		nodes.append({"kind": "wood", "pos": Vector2(48 + (i % 2) * 44, 240 + i * 92), "stock": NODE_STOCK, "regrow": 0.0})
+		nodes.append({"kind": "stone", "pos": Vector2(672 - (i % 2) * 44, 270 + i * 92), "stock": NODE_STOCK, "regrow": 0.0})
 	pickups = []
 	turrets = []
 	for i in 3:
-		turrets.append({"pos": Vector2(LANES[i], TURRET_Y), "built": i == 1,
+		turrets.append({"pos": Vector2(LANES[i], FENCE_Y + FENCE_H * 0.5), "built": i == 1,
 			"ammo": SHOTS_PER_BOX * 2 if i == 1 else 0, "cool": 0.0, "aim": Vector2.UP, "flash": 0.0})
 	machine = {"built": false, "input": 0, "out": 0, "t": 0.0}
+	launchers = []
+	lobs = []
 	pads = [
 		_pad("machine", "AMMO", MACHINE_POS, {"wood": 8}),
-		_pad("turret_l", "TURRET", Vector2(180, TURRET_Y), {"wood": 5, "stone": 5}),
-		_pad("turret_r", "TURRET", Vector2(540, TURRET_Y), {"wood": 5, "stone": 5}),
-		_pad("gate", "GATE +5", Vector2(470, 1060), {"stone": 10}),
-		_pad("runner", "AMMO RUNNER", Vector2(620, 1060), {"scrap": 8}),
-		_pad("rapid", "RAPID FIRE", Vector2(100, 1060), {"scrap": 10, "stone": 6}),
-		_pad("backpack", "BIGGER PACK", Vector2(620, 900), {"wood": 10}),
-		_pad("cutter", "WOODCUTTER", Vector2(100, 900), {"scrap": 12, "wood": 6}),
+		_pad("turret_l", "TURRET", turrets[0].pos, {"wood": 5, "stone": 5}),
+		_pad("turret_r", "TURRET", turrets[2].pos, {"wood": 5, "stone": 5}),
+		_pad("launcher_l", "LAUNCHER", Vector2(110, 960), {"stone": 6, "scrap": 4}),
+		_pad("fence", "FENCE +4", Vector2(610, 1080), {"stone": 8}),
+		_pad("rapid", "RAPID FIRE", Vector2(110, 1090), {"scrap": 10, "stone": 6}),
+		_pad("backpack", "BIGGER PACK", Vector2(380, 1100), {"wood": 10}),
+		_pad("launcher_r", "LAUNCHER", Vector2(610, 960), {"stone": 8, "scrap": 8}),
+		_pad("cutter", "WOODCUTTER", Vector2(520, 1180), {"scrap": 12, "wood": 6}),
 	]
 	bots = []
 	monsters = []
@@ -158,9 +185,7 @@ func reset() -> void:
 	wave_t = FIRST_WAVE
 	spawn_queue = []
 	spawn_t = 0.0
-	gate_max = GATE_START
-	breaches = 0
-	gate_stone = 0
+	fence_max = FENCE_START
 	rapid = false
 	kills = 0
 	built_count = 0
@@ -189,18 +214,55 @@ func step(dt: float) -> void:
 	act_t -= dt
 	if act_t <= 0.0:
 		act_t = ACT_TIME if _try_act() else 0.0
+	_update_player_gun(dt)
+	_update_hearts(dt)
 	_update_nodes(dt)
 	_update_machine(dt)
+	_update_launchers(dt)
 	_update_bots(dt)
 	_update_waves(dt)
 	_update_monsters(dt)
 	_update_turrets(dt)
 
 
+func _inside(p: Vector2) -> bool:
+	return p.y > FENCE_Y + FENCE_H * 0.5
+
+
+func _in_door(x: float, r: float) -> bool:
+	return absf(x - DOOR_X) <= DOOR_W * 0.5 - r
+
+
+## The next waypoint toward `to`: through the door when it is on the other side of the fence.
+func _route(from: Vector2, to: Vector2) -> Vector2:
+	if _inside(from) == _inside(to):
+		return to
+	var near_side := DOOR_IN if _inside(from) else DOOR_OUT
+	var far_side := DOOR_OUT if _inside(from) else DOOR_IN
+	if absf(from.x - DOOR_X) < 10.0 and from.distance_to(near_side) < 60.0:
+		return far_side
+	return near_side
+
+
+## Moves a body, letting it through the fence only at the door.
+func _slide(p: Vector2, delta: Vector2, r: float) -> Vector2:
+	var n := p + delta
+	var band_top := FENCE_Y - r
+	var band_bottom := FENCE_Y + FENCE_H + r
+	if n.y > band_top and n.y < band_bottom and not _in_door(n.x, r * 0.6):
+		if p.y <= band_top:
+			n.y = band_top
+		elif p.y >= band_bottom:
+			n.y = band_bottom
+		else:  # inside the doorway and drifting sideways: stay in it
+			n.x = clampf(n.x, DOOR_X - DOOR_W * 0.5 + r * 0.6, DOOR_X + DOOR_W * 0.5 - r * 0.6)
+	return Vector2(clampf(n.x, 22.0, W - 22.0), clampf(n.y, SPAWN_Y + 30.0, H - 26.0))
+
+
 func _move_player(dt: float) -> void:
 	var dir := Vector2.ZERO
 	if autoplay:
-		var to := _advice() - (player.pos as Vector2)
+		var to := _route(player.pos, _advice()) - (player.pos as Vector2)
 		if to.length() > 6.0:
 			dir = to.normalized() * minf(1.0, to.length() / (PLAYER_SPEED * dt))
 	elif not idle:
@@ -212,8 +274,7 @@ func _move_player(dt: float) -> void:
 	if dir.length() > 0.05:
 		player.face = dir.normalized()
 	var pace := float(args.get("pace", "1")) if autoplay else 1.0  # slower bot = a human-like player
-	var p: Vector2 = player.pos + dir.limit_length(1.0) * PLAYER_SPEED * pace * dt
-	player.pos = Vector2(clampf(p.x, 22.0, W - 22.0), clampf(p.y, SPAWN_Y + 30.0, WALL_Y - 22.0))
+	player.pos = _slide(player.pos, dir.limit_length(1.0) * PLAYER_SPEED * pace * dt, PLAYER_R)
 
 
 func _harvest(dt: float) -> void:
@@ -251,23 +312,22 @@ func _try_act() -> bool:
 		_fly(p, MACHINE_POS, "wood")
 		return true
 	for t in turrets:
-		if t.built and _near(p, t.pos, REACH) and _free_boxes(t) > 0 and _take("ammo"):
+		if t.built and _inside(p) and _near(p, t.pos, REACH + 10.0) and _free_boxes(t) > 0 and _take("ammo"):
 			t.ammo += SHOTS_PER_BOX
 			_fly(p, t.pos, "ammo")
 			return true
-	if breaches > 0 and _near(p, GATE_PAD_POS, REACH) and _take("stone"):
-		gate_stone += 1
-		_fly(p, GATE_PAD_POS, "stone")
-		if gate_stone >= STONE_PER_REPAIR:
-			gate_stone = 0
-			breaches -= 1
-		return true
-	if stack.size() < capacity:
-		if machine.built and machine.out > 0 and _near(p, OUTPUT_POS, REACH) and _useful("ammo"):
+	if machine.built and machine.out > 0 and _near(p, OUTPUT_POS, REACH):
+		if bag + SHOTS_PER_BOX <= BAG_MAX:  # your own bag first
+			machine.out -= 1
+			bag += SHOTS_PER_BOX
+			_fly(OUTPUT_POS, p, "ammo")
+			return true
+		if stack.size() < capacity and _useful("ammo"):
 			machine.out -= 1
 			stack.append("ammo")
 			_fly(OUTPUT_POS, p, "ammo")
 			return true
+	if stack.size() < capacity:
 		for i in pickups.size():
 			var k: Dictionary = pickups[i]
 			if _near(p, k.pos, REACH) and _useful(k.kind):
@@ -290,20 +350,51 @@ func _complete(pad: Dictionary) -> void:
 		"turret_r":
 			turrets[2].built = true
 			turrets[2].ammo = SHOTS_PER_BOX
-		"gate":
-			gate_max += 5
-		"runner":
-			bots.append({"kind": "runner", "pos": OUTPUT_POS + Vector2(40, 0), "carry": 0, "node": -1, "t": 0.0})
+		"fence":
+			fence_max += 4
+		"launcher_l", "launcher_r":
+			launchers.append({"pos": pad.pos, "cool": 0.0})
 		"rapid":
 			rapid = true
 		"backpack":
 			capacity += 8
 		"cutter":
-			bots.append({"kind": "cutter", "pos": Vector2(150, 900), "carry": 0, "node": -1, "t": 0.0})
+			bots.append({"kind": "cutter", "pos": pad.pos, "carry": 0, "node": -1, "t": 0.0})
 	for i in 10:
 		var a := TAU * i / 10.0
 		fx.append({"from": pad.pos, "to": pad.pos + Vector2(cos(a), sin(a)) * 60.0, "t": 0.0, "dur": 0.45, "kind": "ammo"})
-	_log("built %s at %ds (wave %d, gate %d/%d)" % [pad.id, int(time), wave, gate_max - breaches, gate_max])
+	_log("built %s at %ds (wave %d, fence %d/%d, hearts %d)" % [pad.id, int(time), wave, _waiting(), fence_max, hearts])
+
+
+## Your own gun: fires at the nearest monster within close range while the bag has shots.
+func _update_player_gun(dt: float) -> void:
+	gun_cool = maxf(gun_cool - dt, -dt)
+	if bag <= 0 or gun_cool > 0.0:
+		return
+	var best := -1
+	var best_d := GUN_RANGE
+	for j in monsters.size():
+		var d: float = (monsters[j].pos as Vector2).distance_to(player.pos)
+		if d < best_d:
+			best_d = d
+			best = j
+	if best < 0:
+		return
+	bag -= 1
+	gun_cool += 1.0 / GUN_RATE
+	shots.append({"a": player.pos, "b": monsters[best].pos, "t": 0.08, "player": true})
+	_hit(best)
+
+
+func _update_hearts(dt: float) -> void:
+	hurt_t = maxf(hurt_t - dt, 0.0)
+	if _inside(player.pos) and hearts < HEARTS:
+		heal_t += dt
+		if heal_t >= HEART_REGEN:
+			heal_t = 0.0
+			hearts += 1
+	else:
+		heal_t = 0.0
 
 
 func _update_nodes(dt: float) -> void:
@@ -325,36 +416,47 @@ func _update_machine(dt: float) -> void:
 		machine.out = mini(machine.out + BOXES_PER_WOOD, MACHINE_OUT_MAX)
 
 
+## Launchers take boxes from the machine's output and lob them to turrets within reach.
+func _update_launchers(dt: float) -> void:
+	for l in launchers:
+		l.cool = maxf(l.cool - dt, 0.0)
+		if l.cool > 0.0 or machine.out <= 0:
+			continue
+		var best := -1
+		for i in turrets.size():
+			var t: Dictionary = turrets[i]
+			if _free_boxes(t) - _boxes_in_flight(i) > 0 and (l.pos as Vector2).distance_to(t.pos) <= LAUNCH_RANGE:
+				if best < 0 or t.ammo < turrets[best].ammo:
+					best = i
+		if best < 0:
+			continue
+		machine.out -= 1
+		l.cool = LAUNCH_TIME
+		lobs.append({"from": l.pos, "to": turrets[best].pos, "t": 0.0, "dur": 0.7, "turret": best})
+	var k := 0
+	while k < lobs.size():
+		lobs[k].t += dt
+		if lobs[k].t >= lobs[k].dur:
+			turrets[lobs[k].turret].ammo += SHOTS_PER_BOX
+			lobs.remove_at(k)
+		else:
+			k += 1
+
+
+func _boxes_in_flight(turret: int) -> int:
+	var n := 0
+	for b in lobs:
+		if b.turret == turret:
+			n += 1
+	return n
+
+
 func _update_bots(dt: float) -> void:
 	for b in bots:
-		if b.kind == "runner":
-			_runner(b, dt)
-		else:
-			_cutter(b, dt)
+		_cutter(b, dt)
 
 
-## Ammo runner: boxes from the machine's output to the emptiest turret.
-func _runner(b: Dictionary, dt: float) -> void:
-	if b.carry == 0:
-		var want := _total_free_boxes() - _count("ammo")
-		if machine.out > 0 and want > 0:
-			if _move_to(b, OUTPUT_POS + Vector2(28, 0), dt):
-				var n := mini(mini(BOT_CARRY, machine.out), want)
-				machine.out -= n
-				b.carry = n
-		else:
-			_move_to(b, OUTPUT_POS + Vector2(44, -20), dt)
-		return
-	var t := _neediest_turret()
-	if t.is_empty():
-		return
-	if _move_to(b, t.pos + Vector2(0, -38), dt):
-		while b.carry > 0 and _free_boxes(t) > 0:
-			t.ammo += SHOTS_PER_BOX
-			b.carry -= 1
-
-
-## Woodcutter: chops trees and feeds the ammo machine.
+## Woodcutter: walks out through the door, chops trees and feeds the ammo machine. Monsters ignore it.
 func _cutter(b: Dictionary, dt: float) -> void:
 	if b.carry < BOT_CARRY:
 		if b.node < 0 or nodes[b.node].stock <= 0:
@@ -373,17 +475,18 @@ func _cutter(b: Dictionary, dt: float) -> void:
 			return
 		if b.carry == 0:
 			return
-	if _move_to(b, MACHINE_POS + Vector2(-46, 0), dt) and machine.built and machine.input < MACHINE_IN_MAX:
+	if _move_to(b, MACHINE_POS + Vector2(46, 0), dt) and machine.built and machine.input < MACHINE_IN_MAX:
 		var n2 := mini(b.carry, MACHINE_IN_MAX - machine.input)
 		machine.input += n2
 		b.carry -= n2
 
 
 func _move_to(b: Dictionary, target: Vector2, dt: float) -> bool:
-	var to: Vector2 = target - b.pos
-	if to.length() <= 6.0:
+	var step_to := _route(b.pos, target)
+	var to: Vector2 = step_to - b.pos
+	if step_to == target and to.length() <= 6.0:
 		return true
-	b.pos += to.normalized() * minf(to.length(), BOT_SPEED * dt)
+	b.pos = _slide(b.pos, to.normalized() * minf(to.length(), BOT_SPEED * dt), 10.0)
 	return false
 
 
@@ -395,7 +498,7 @@ func _update_waves(dt: float) -> void:
 				_start_wave()
 		elif monsters.is_empty():
 			state = "won"
-			_log("WON at %ds, gate %d/%d, kills %d" % [int(time), gate_max - breaches, gate_max, kills])
+			_log("WON at %ds, hearts %d, kills %d" % [int(time), hearts, kills])
 		return
 	spawn_t -= dt
 	if spawn_t <= 0.0:
@@ -425,34 +528,97 @@ func _start_wave() -> void:
 	for t in turrets:
 		if t.built:
 			ammo += t.ammo
-	_log("wave %d at %ds: %d monsters | gate %d/%d | turret shots %d | built %d" % [wave, int(time),
-		list.size(), gate_max - breaches, gate_max, ammo, built_count])
+	_log("wave %d at %ds: %d monsters | fence %d/%d | hearts %d | turret shots %d | built %d" % [wave, int(time),
+		list.size(), _waiting(), fence_max, hearts, ammo, built_count])
 
 
 func _spawn(type: String) -> void:
 	var d: Dictionary = MONSTERS[type]
 	var lane := rng.randi_range(0, 2)
-	monsters.append({"type": type, "pos": Vector2(LANES[lane] + rng.randf_range(-22.0, 22.0), SPAWN_Y),
-		"hp": roundi(d.hp * (1.0 + HP_GROWTH * (wave - 1))), "max": roundi(d.hp * (1.0 + HP_GROWTH * (wave - 1))), "speed": d.speed * rng.randf_range(0.92, 1.08), "r": d.r})
+	var hp := roundi(d.hp * (1.0 + HP_GROWTH * (wave - 1)))
+	monsters.append({"type": type, "pos": Vector2(LANES[lane] + rng.randf_range(-22.0, 22.0), SPAWN_Y), "lane": lane,
+		"hp": hp, "max": hp, "speed": d.speed * rng.randf_range(0.92, 1.08), "r": d.r, "chase": false,
+		"waiting": false, "hit_cool": 0.0})
+
+
+func _waiting() -> int:
+	var n := 0
+	for m in monsters:
+		if m.waiting:
+			n += 1
+	return n
 
 
 func _update_monsters(dt: float) -> void:
-	var i := 0
-	while i < monsters.size():
-		var m: Dictionary = monsters[i]
-		m.pos.y += m.speed * dt
-		if m.pos.y + m.r >= WALL_Y:
-			breaches += int(MONSTERS[m.type].breach)
-			for k in 6:
-				fx.append({"from": m.pos, "to": m.pos + Vector2(rng.randf_range(-50, 50), rng.randf_range(-40, 0)),
-					"t": 0.0, "dur": 0.4, "kind": "spark"})
-			monsters.remove_at(i)
-			if breaches >= gate_max:
-				state = "lost"
-				_log("LOST at %ds in wave %d, kills %d" % [int(time), wave, kills])
+	var p: Vector2 = player.pos
+	for m in monsters:
+		var d: Dictionary = MONSTERS[m.type]
+		var mp: Vector2 = m.pos
+		var to_player := mp.distance_to(p)
+		# notice you when you are outside and close; lose interest once you are far away
+		if not m.chase and not _inside(p) and to_player <= d.notice:
+			m.chase = true
+			m.waiting = false
+		elif m.chase and to_player > GIVE_UP:
+			m.chase = false
+		m.hit_cool = maxf(m.hit_cool - dt, 0.0)
+		if m.chase:
+			var goal := _route(mp, p)
+			m.pos = _slide(mp, (goal - mp).normalized() * minf(goal.distance_to(mp), m.speed * dt), m.r)
+			if _inside(m.pos):
+				_lose("A monster followed you in")
 				return
+			if (m.pos as Vector2).distance_to(p) <= m.r + PLAYER_R and m.hit_cool <= 0.0 and hurt_t <= 0.0:
+				m.hit_cool = 1.0
+				hurt_t = HURT_GRACE
+				hearts -= int(d.hit)
+				for k in 5:
+					fx.append({"from": p, "to": p + Vector2(rng.randf_range(-40, 40), rng.randf_range(-40, 10)),
+						"t": 0.0, "dur": 0.35, "kind": "hurt"})
+				if hearts <= 0:
+					hearts = 0
+					_lose("You were overrun")
+					return
 			continue
-		i += 1
+		# march: drift back to the lane, then straight down to the fence and wait there
+		var lane_x: float = LANES[m.lane]
+		m.pos.x = move_toward(mp.x, clampf(mp.x, lane_x - 26.0, lane_x + 26.0), 40.0 * dt)
+		var stop: float = FENCE_Y - m.r - 2.0
+		if mp.y < stop:
+			m.pos.y = minf(mp.y + m.speed * dt, stop)
+		elif not m.waiting:
+			m.waiting = true
+	_spread_waiting()
+	if _waiting() >= fence_max:
+		_lose("The fence gave way")
+
+
+## Monsters waiting at the fence stand shoulder to shoulder instead of on top of each other.
+func _spread_waiting() -> void:
+	for i in monsters.size():
+		var a: Dictionary = monsters[i]
+		if not a.waiting:
+			continue
+		for j in range(i + 1, monsters.size()):
+			var b: Dictionary = monsters[j]
+			if not b.waiting:
+				continue
+			var dx: float = b.pos.x - a.pos.x
+			var min_d: float = a.r + b.r + 2.0
+			if absf(dx) < min_d:
+				var push := (min_d - absf(dx)) * 0.5 * (1.0 if dx >= 0.0 else -1.0)
+				a.pos.x = clampf(a.pos.x - push, 20.0, W - 20.0)
+				b.pos.x = clampf(b.pos.x + push, 20.0, W - 20.0)
+	for m in monsters:  # the doorway stays clear: waiting monsters stand to either side of it
+		var half: float = DOOR_W * 0.5 + m.r + 4.0
+		if m.waiting and absf(m.pos.x - DOOR_X) < half:
+			m.pos.x = DOOR_X - half if m.pos.x < DOOR_X else DOOR_X + half
+
+
+func _lose(reason: String) -> void:
+	state = "lost"
+	lose_reason = reason
+	_log("LOST (%s) at %ds in wave %d, kills %d" % [reason, int(time), wave, kills])
 
 
 func _update_turrets(dt: float) -> void:
@@ -471,22 +637,27 @@ func _update_turrets(dt: float) -> void:
 				best = j
 		if best < 0:
 			continue
-		var m: Dictionary = monsters[best]
-		t.aim = ((m.pos as Vector2) - (t.pos as Vector2)).normalized()
+		t.aim = ((monsters[best].pos as Vector2) - (t.pos as Vector2)).normalized()
 		if t.ammo <= 0 or t.cool > 0.0:
 			continue
 		t.ammo -= 1
 		t.cool += 1.0 / rate
 		t.flash = 0.06
-		shots.append({"a": t.pos + t.aim * 28.0, "b": m.pos, "t": 0.08})
-		m.hp -= 1
-		if m.hp <= 0:
-			kills += 1
-			if _scrap_wanted_later():
-				for k in int(MONSTERS[m.type].drop):
-					pickups.append({"kind": "scrap", "life": SCRAP_LIFE,
-						"pos": m.pos + Vector2(rng.randf_range(-16, 16), rng.randf_range(-16, 16))})
-			monsters.remove_at(best)
+		shots.append({"a": t.pos + t.aim * 28.0, "b": monsters[best].pos, "t": 0.08, "player": false})
+		_hit(best)
+
+
+func _hit(index: int) -> void:
+	var m: Dictionary = monsters[index]
+	m.hp -= 1
+	if m.hp > 0:
+		return
+	kills += 1
+	if _scrap_wanted_later():
+		for k in int(MONSTERS[m.type].drop):
+			pickups.append({"kind": "scrap", "life": SCRAP_LIFE,
+				"pos": m.pos + Vector2(rng.randf_range(-16, 16), rng.randf_range(-16, 16))})
+	monsters.remove_at(index)
 
 
 func _update_fx(dt: float) -> void:
@@ -553,13 +724,10 @@ func _visible_pads() -> Array:
 	return out
 
 
-## How many more of `kind` the open pads and the gate can still take.
 func _need(kind: String) -> int:
 	var n := 0
 	for p in _visible_pads():
 		n += maxi(_remaining(p, kind), 0)
-	if kind == "stone" and breaches > 0:
-		n += breaches * STONE_PER_REPAIR - gate_stone
 	return n
 
 
@@ -570,7 +738,7 @@ func _useful(kind: String) -> bool:
 			if machine.built:
 				return true
 		"ammo":
-			return _count("ammo") < _total_free_boxes()
+			return _count("ammo") < _manual_free_boxes()
 	return _count(kind) < _need(kind)
 
 
@@ -585,10 +753,26 @@ func _total_free_boxes() -> int:
 	return n
 
 
+func _covered(t: Dictionary) -> bool:
+	for l in launchers:
+		if (l.pos as Vector2).distance_to(t.pos) <= LAUNCH_RANGE:
+			return true
+	return false
+
+
+## Space in the turrets no launcher reaches: those are the ones you still carry boxes to.
+func _manual_free_boxes() -> int:
+	var n := 0
+	for t in turrets:
+		if not _covered(t):
+			n += _free_boxes(t)
+	return n
+
+
 func _neediest_turret() -> Dictionary:
 	var best := {}
 	for t in turrets:
-		if _free_boxes(t) > 0 and (best.is_empty() or t.ammo < best.ammo):
+		if _free_boxes(t) > 0 and not _covered(t) and (best.is_empty() or t.ammo < best.ammo):
 			best = t
 	return best
 
@@ -616,7 +800,22 @@ func _nearest_node_index(p: Vector2, kind: String) -> int:
 	return best
 
 
-## Monsters only drop scrap while something still to be built needs it.
+## No monster close enough to notice you there.
+func _safe(at: Vector2) -> bool:
+	for m in monsters:
+		if (m.pos as Vector2).distance_to(at) < float(MONSTERS[m.type].notice) + 40.0:
+			return false
+	return true
+
+
+func _nearest_safe_node(p: Vector2, kind: String) -> Dictionary:
+	var best := {}
+	for n in nodes:
+		if n.stock > 0 and n.kind == kind and _safe(n.pos) and (best.is_empty() or p.distance_to(n.pos) < p.distance_to(best.pos)):
+			best = n
+	return best
+
+
 func _scrap_wanted_later() -> bool:
 	for p in pads:
 		if not p.done and _remaining(p, "scrap") > 0:
@@ -624,49 +823,68 @@ func _scrap_wanted_later() -> bool:
 	return false
 
 
+func _ammo_short() -> bool:
+	return machine.built and machine.input * BOXES_PER_WOOD + machine.out < _total_free_boxes() + (BAG_MAX - bag) / SHOTS_PER_BOX
+
+
 ## The most useful place to go next. Drives the guide arrow and the bot.
 func _advice() -> Vector2:
 	var p: Vector2 = player.pos
 	var space := capacity - stack.size()
+	# outside and in trouble: get back in through the door
+	if not _inside(p):
+		var threat := false
+		for m in monsters:
+			if m.chase and (m.pos as Vector2).distance_to(p) < 110.0:
+				threat = true
+		if hearts <= 2 or (threat and (bag <= 0 or hearts <= 3)):
+			return DOOR_IN + Vector2(0, 60)
 	if _count("ammo") > 0:
 		var t := _neediest_turret()
 		if not t.is_empty():
-			return t.pos + Vector2(0, -40)
-	var hungry := false
-	for t in turrets:
-		if _free_boxes(t) >= 2:
-			hungry = true
-	if hungry and machine.built and machine.out > 0 and space > 0:
-		return OUTPUT_POS + Vector2(0, -20)
-	if breaches > 0 and _count("stone") > 0:
-		return GATE_PAD_POS + Vector2(0, -24)
-	if machine.built and _count("wood") > 0 and machine.input < MACHINE_IN_MAX and _ammo_short():
-		return MACHINE_POS + Vector2(0, -36)
-	for pad in _visible_pads():
-		for kind in pad.cost:
-			if _remaining(pad, kind) > 0 and _count(kind) > 0:
-				return pad.pos
-	if machine.built and _count("wood") > 0 and machine.input < MACHINE_IN_MAX:
-		return MACHINE_POS + Vector2(0, -36)
-	if space > 0:
+			return t.pos + Vector2(0, 46)
+	if machine.built and machine.out > 0 and (bag <= BAG_MAX - SHOTS_PER_BOX * 2 or (_manual_free_boxes() >= 2 and space > 0)):
+		return OUTPUT_POS + Vector2(0, 26)
+	for pad in _visible_pads():  # already at a pad that takes something you carry: finish unloading
+		if _near(p, pad.pos, PAD_HALF + 10.0):
+			for kind in pad.cost:
+				if _remaining(pad, kind) > 0 and _count(kind) > 0:
+					return _stand(pad.pos)
+	var want := _want_kind()
+	var can_gather := space > 0 and (not _inside(p) or _outside_ok())
+	if space == 0 or want == "" or not can_gather or _count(want) == 0 and want == "scrap":  # fill up first, then deliver
+		for pad in _visible_pads():
+			for kind in pad.cost:
+				if _remaining(pad, kind) > 0 and _count(kind) > 0:
+					return _stand(pad.pos)
+	if machine.built and _count("wood") > 0 and machine.input < MACHINE_IN_MAX and (_ammo_short() or _need("wood") == 0) \
+			and (space == 0 or want != "wood" or not can_gather or _near(p, MACHINE_POS, REACH)):
+		return MACHINE_POS + Vector2(0, 40)
+	if can_gather:
 		if _useful("scrap"):
 			var best := {}
 			for k in pickups:
-				if k.kind == "scrap" and (best.is_empty() or p.distance_to(k.pos) < p.distance_to(best.pos)):
+				if k.kind == "scrap" and _safe(k.pos) and (best.is_empty() or p.distance_to(k.pos) < p.distance_to(best.pos)):
 					best = k
 			if not best.is_empty():
 				return best.pos
-		var want := _want_kind()
 		if want != "":
-			var n := _nearest_node(p, INF, want)
+			var n := _nearest_safe_node(p, want)
 			if not n.is_empty():
 				return n.pos + (Vector2(34, 0) if want == "wood" else Vector2(-34, 0))
-	return p
+	return p if _inside(p) else DOOR_IN + Vector2(0, 60)
 
 
-## The turrets need more boxes than the machine has queued.
-func _ammo_short() -> bool:
-	return machine.built and machine.input * BOXES_PER_WOOD + machine.out < _total_free_boxes()
+## Where to stand for a spot: pads in the fence line are worked from the inside.
+func _stand(at: Vector2) -> Vector2:
+	if absf(at.y - (FENCE_Y + FENCE_H * 0.5)) < 30.0:
+		return at + Vector2(0, 40)
+	return at
+
+
+## Gathering means going out: not while monsters wait at the door, unless your bag is well stocked.
+func _outside_ok() -> bool:
+	return _safe(DOOR_OUT) or bag >= 20
 
 
 func _want_kind() -> String:
@@ -680,7 +898,7 @@ func _want_kind() -> String:
 				return "wood"
 	var wood := _need("wood") - _count("wood")
 	var stone := _need("stone") - _count("stone")
-	if stone > 0 and (stone >= wood or breaches > 0):
+	if stone > 0 and stone >= wood:
 		return "stone"
 	if wood > 0:
 		return "wood"
@@ -727,51 +945,43 @@ func _item(pos: Vector2, kind: String, s: float) -> void:
 
 
 func _draw() -> void:
-	# ground, spawn strip, fortress interior
 	draw_rect(Rect2(0, 0, W, H), Color("#56663f"))
 	draw_rect(Rect2(0, HUD_H, W, SPAWN_Y - HUD_H + 26), Color("#3f3530"))
-	draw_rect(Rect2(0, WALL_Y, W, H - WALL_Y), Color("#2c3138"))
+	draw_rect(Rect2(0, FENCE_Y, W, H - FENCE_Y), Color("#6b5d48"))
 	for x in LANES:
-		draw_rect(Rect2(x - 32, SPAWN_Y, 64, WALL_Y - SPAWN_Y), Color(0.8, 0.72, 0.5, 0.18))
+		draw_rect(Rect2(x - 32, SPAWN_Y, 64, FENCE_Y - SPAWN_Y), Color(0.8, 0.72, 0.5, 0.18))
 	_draw_fortress()
-	# wall and gate
-	draw_rect(Rect2(0, WALL_Y, W, WALL_H), Color("#8a919a"))
-	for x in range(0, int(W), 40):
-		draw_rect(Rect2(x + 4, WALL_Y - 10, 24, 12), Color("#8a919a"))
-	var g := Rect2(W * 0.5 - GATE_W * 0.5, WALL_Y - 6, GATE_W, WALL_H + 6)
-	draw_rect(g, Color("#6b4f33"))
-	var crack := float(breaches) / float(gate_max)
-	for k in int(crack * 8.0):
-		var x := g.position.x + 12 + k * 16
-		draw_line(Vector2(x, g.position.y + 4), Vector2(x + 8, g.end.y - 4), Color("#1d1410"), 3.0)
+	_draw_fence()
 	for n in nodes:
 		_draw_node(n)
 	for pad in _visible_pads():
 		_draw_pad(pad)
-	if breaches > 0 and state == "play":
-		var need := STONE_PER_REPAIR - gate_stone
-		draw_rect(Rect2(GATE_PAD_POS - Vector2(28, 22), Vector2(56, 44)), Color(1, 1, 1, 0.1))
-		draw_rect(Rect2(GATE_PAD_POS - Vector2(28, 22), Vector2(56, 44)), Color("#f2e4cb"), false, 2.0)
-		_item(GATE_PAD_POS + Vector2(-10, 0), "stone", 7)
-		_text("%d" % need, GATE_PAD_POS + Vector2(12, 0), 18, Color.WHITE)
 	_draw_machine()
+	for l in launchers:
+		_draw_launcher(l)
 	for t in turrets:
 		_draw_turret(t)
 	for k in pickups:
-		if k.life > 6.0 or fmod(k.life, 0.5) > 0.2:  # blinks in its last seconds
+		if k.life > 6.0 or fmod(k.life, 0.5) > 0.2:
 			_item(k.pos, k.kind, 6)
 	for m in monsters:
 		_draw_monster(m)
 	for s in shots:
-		draw_line(s.a, s.b, Color(1, 0.92, 0.55, clampf(s.t / 0.08, 0, 1)), 3.0)
+		var c := Color(0.6, 0.95, 1.0) if s.player else Color(1, 0.92, 0.55)
+		draw_line(s.a, s.b, Color(c, clampf(s.t / 0.08, 0, 1)), 3.0)
 	for b in bots:
 		_draw_bot(b)
 	_draw_player()
+	for b in lobs:
+		var k := clampf(b.t / b.dur, 0, 1)
+		_item((b.from as Vector2).lerp(b.to, k) + Vector2(0, -sin(k * PI) * 90.0), "ammo", 7)
 	for f in fx:
 		var k := clampf(f.t / f.dur, 0, 1)
 		var pos: Vector2 = (f.from as Vector2).lerp(f.to, k) + Vector2(0, -sin(k * PI) * 30.0)
 		if f.kind == "spark":
 			draw_circle(pos, 4.0 * (1.0 - k) + 1.0, Color("#ffcf6b"))
+		elif f.kind == "hurt":
+			draw_circle(pos, 5.0 * (1.0 - k) + 1.0, Color("#ff5e5e"))
 		else:
 			_item(pos, f.kind, 6)
 	if state == "play" and not autoplay:
@@ -787,12 +997,31 @@ func _draw() -> void:
 func _draw_fortress() -> void:
 	var houses := 2 + built_count
 	for i in houses:
-		var x := 50.0 + (i % 6) * 112.0 + (28.0 if (i / 6) % 2 == 1 else 0.0)
-		var y := WALL_Y + 74.0 + (i / 6) * 64.0
-		if y > H - 20:
-			break
-		draw_rect(Rect2(x - 26, y - 14, 52, 34), Color("#b9a27c"))
-		draw_colored_polygon(PackedVector2Array([Vector2(x - 32, y - 14), Vector2(x, y - 40), Vector2(x + 32, y - 14)]), Color("#8c3b2e"))
+		var x := 60.0 + (i % 6) * 120.0
+		var y := H - 34.0 - (i / 6) * 48.0
+		draw_rect(Rect2(x - 22, y - 10, 44, 28), Color("#b9a27c"))
+		draw_colored_polygon(PackedVector2Array([Vector2(x - 28, y - 10), Vector2(x, y - 32), Vector2(x + 28, y - 10)]), Color("#8c3b2e"))
+
+
+func _draw_fence() -> void:
+	var col := Color("#8a6a45")
+	var dark := Color("#4a3624")
+	var gap0 := DOOR_X - DOOR_W * 0.5
+	var gap1 := DOOR_X + DOOR_W * 0.5
+	for seg in [[0.0, gap0], [gap1, W]]:
+		draw_rect(Rect2(seg[0], FENCE_Y + 4, seg[1] - seg[0], 5), col)
+		draw_rect(Rect2(seg[0], FENCE_Y + 11, seg[1] - seg[0], 5), col)
+		var x: float = seg[0] + 6.0
+		while x < seg[1] - 4.0:
+			draw_rect(Rect2(x - 3, FENCE_Y - 6, 6, FENCE_H + 8), dark)
+			x += 22.0
+	# door posts
+	draw_rect(Rect2(gap0 - 6, FENCE_Y - 12, 8, FENCE_H + 16), dark)
+	draw_rect(Rect2(gap1 - 2, FENCE_Y - 12, 8, FENCE_H + 16), dark)
+	# strain: the fence glows red as it fills
+	var strain := float(_waiting()) / float(fence_max)
+	if strain > 0.0:
+		draw_rect(Rect2(0, FENCE_Y + 2, W, FENCE_H - 2), Color(1.0, 0.25, 0.2, 0.25 * strain + 0.1 * sin(time * 6.0) * strain))
 
 
 func _draw_node(n: Dictionary) -> void:
@@ -842,6 +1071,8 @@ func _draw_pad(pad: Dictionary) -> void:
 		_item(Vector2(pad.pos.x - 12, y), kinds[i], 8)
 		_text("%d" % _remaining(pad, kinds[i]), Vector2(pad.pos.x + 14, y), 18, Color.WHITE)
 	draw_rect(Rect2(r.position.x + 4, r.end.y - 8, (r.size.x - 8) * paid / float(total), 4), Color("#7af1eb"))
+	if str(pad.id).begins_with("launcher"):  # show what it will reach
+		draw_arc(pad.pos, LAUNCH_RANGE, PI, TAU, 48, Color(0.95, 0.76, 0.3, 0.35), 2.0)
 
 
 func _draw_machine() -> void:
@@ -856,9 +1087,8 @@ func _draw_machine() -> void:
 		draw_line(MACHINE_POS, MACHINE_POS + Vector2(cos(a), sin(a)) * 16.0, Color("#f2c14e"), 4.0)
 	draw_circle(MACHINE_POS, 7.0, Color("#22272e"))
 	if machine.input > 0:
-		_item(MACHINE_POS + Vector2(-48, 18), "wood", 6)
-		_text("%d" % machine.input, MACHINE_POS + Vector2(-48, 36), 14, Color.WHITE)
-	# output pile
+		_item(MACHINE_POS + Vector2(48, 18), "wood", 6)
+		_text("%d" % machine.input, MACHINE_POS + Vector2(48, 36), 14, Color.WHITE)
 	draw_rect(Rect2(OUTPUT_POS - Vector2(30, 18), Vector2(60, 40)), Color(0, 0, 0, 0.18))
 	for i in machine.out:
 		var col: int = i % 4
@@ -866,36 +1096,42 @@ func _draw_machine() -> void:
 		_item(OUTPUT_POS + Vector2(-18 + col * 12, 10 - row * 9), "ammo", 6)
 
 
+func _draw_launcher(l: Dictionary) -> void:
+	var p: Vector2 = l.pos
+	draw_line(OUTPUT_POS, p, Color(0.95, 0.76, 0.3, 0.35), 3.0)  # fed from the output pile
+	draw_rect(Rect2(p - Vector2(22, 18), Vector2(44, 36)), Color("#5b4a7a"))
+	draw_rect(Rect2(p - Vector2(22, 18), Vector2(44, 36)), Color("#2b2140"), false, 3.0)
+	var arm := Vector2(0, -1).rotated(-0.6 + 0.6 * (l.cool / LAUNCH_TIME))
+	draw_line(p, p + arm * 28.0, Color("#2b2140"), 7.0)
+	draw_circle(p + arm * 28.0, 6.0, Color("#f2c14e"))
+
+
 func _draw_turret(t: Dictionary) -> void:
 	if not t.built:
-		var pad_open := false
-		for p in _visible_pads():
-			if p.pos == t.pos:
-				pad_open = true
-		if not pad_open:
-			draw_arc(t.pos, 26.0, 0, TAU, 32, Color(1, 1, 1, 0.18), 2.0)
+		draw_rect(Rect2(t.pos - Vector2(20, 20), Vector2(40, 40)), Color(1, 1, 1, 0.12))
 		return
-	var near: bool = _near(player.pos, t.pos, 140.0)
-	if near:
-		draw_arc(t.pos, TURRET_RANGE, 0, TAU, 64, Color(0.48, 0.95, 0.92, 0.25), 2.0)
-	draw_rect(Rect2(t.pos - Vector2(24, 24), Vector2(48, 48)), Color("#2e5d8a"))
-	draw_rect(Rect2(t.pos - Vector2(24, 24), Vector2(48, 48)), Color("#16304a"), false, 3.0)
-	draw_line(t.pos, t.pos + (t.aim as Vector2) * 34.0, Color("#16304a"), 10.0)
+	if _near(player.pos, t.pos, 120.0):
+		draw_arc(t.pos, TURRET_RANGE, PI, TAU, 64, Color(0.48, 0.95, 0.92, 0.25), 2.0)
+	draw_rect(Rect2(t.pos - Vector2(26, 26), Vector2(52, 52)), Color("#2e5d8a"))
+	draw_rect(Rect2(t.pos - Vector2(26, 26), Vector2(52, 52)), Color("#16304a"), false, 3.0)
+	draw_line(t.pos, t.pos + (t.aim as Vector2) * 36.0, Color("#16304a"), 10.0)
 	draw_circle(t.pos, 12.0, Color("#3f7cb5"))
 	if t.flash > 0.0:
-		draw_circle(t.pos + (t.aim as Vector2) * 38.0, 7.0, Color("#ffe08f"))
+		draw_circle(t.pos + (t.aim as Vector2) * 40.0, 7.0, Color("#ffe08f"))
 	var max_ammo := TURRET_BOXES * SHOTS_PER_BOX
-	draw_rect(Rect2(t.pos + Vector2(-26, 30), Vector2(52, 7)), Color(0, 0, 0, 0.5))
-	draw_rect(Rect2(t.pos + Vector2(-26, 30), Vector2(52.0 * t.ammo / max_ammo, 7)), Color("#f2c14e"))
+	draw_rect(Rect2(t.pos + Vector2(-26, 32), Vector2(52, 7)), Color(0, 0, 0, 0.5))
+	draw_rect(Rect2(t.pos + Vector2(-26, 32), Vector2(52.0 * t.ammo / max_ammo, 7)), Color("#f2c14e"))
 	if t.ammo <= 0:
 		var pulse := 0.5 + 0.5 * sin(time * 8.0)
-		draw_arc(t.pos, 34.0 + pulse * 6.0, 0, TAU, 32, Color(0.95, 0.35, 0.3, 0.9), 4.0)
+		draw_arc(t.pos, 36.0 + pulse * 6.0, 0, TAU, 32, Color(0.95, 0.35, 0.3, 0.9), 4.0)
 
 
 func _draw_monster(m: Dictionary) -> void:
 	var c: Color = MONSTERS[m.type].color
 	var p: Vector2 = m.pos
 	var r: float = m.r
+	if m.chase:
+		draw_arc(p, r + 5.0, 0, TAU, 20, Color(1, 0.3, 0.3, 0.8), 2.0)
 	match m.type:
 		"grunt":
 			draw_circle(p, r, c)
@@ -912,27 +1148,33 @@ func _draw_monster(m: Dictionary) -> void:
 
 
 func _draw_bot(b: Dictionary) -> void:
-	var c := Color("#f2c14e") if b.kind == "runner" else Color("#5fbf6a")
+	var c := Color("#5fbf6a")
 	draw_circle(b.pos, 12.0, c)
 	draw_circle(b.pos, 12.0, c.darkened(0.5), false, 2.0)
 	for i in b.carry:
-		_item(b.pos + Vector2(0, -20 - i * 8), "ammo" if b.kind == "runner" else "wood", 5)
+		_item(b.pos + Vector2(0, -20 - i * 8), "wood", 5)
 
 
 func _draw_player() -> void:
 	var p: Vector2 = player.pos
+	if not _inside(p):
+		draw_arc(p, GUN_RANGE, 0, TAU, 48, Color(0.6, 0.95, 1.0, 0.12 if bag > 0 else 0.0), 2.0)
 	draw_circle(p + Vector2(0, 14), 14.0, Color(0, 0, 0, 0.25))
-	draw_circle(p, 17.0, Color("#f2e4cb"))
-	draw_circle(p, 17.0, Color("#2b2f36"), false, 3.0)
+	var blink := hurt_t > 0.0 and fmod(hurt_t, 0.16) < 0.08
+	draw_circle(p, PLAYER_R + 1.0, Color("#ff5e5e") if blink else Color("#f2e4cb"))
+	draw_circle(p, PLAYER_R + 1.0, Color("#2b2f36"), false, 3.0)
 	draw_circle(p + (player.face as Vector2) * 9.0, 4.5, Color("#2b2f36"))
+	# your own ammo bag, separate from the stack
+	draw_rect(Rect2(p + Vector2(-20, 22), Vector2(40, 5)), Color(0, 0, 0, 0.5))
+	draw_rect(Rect2(p + Vector2(-20, 22), Vector2(40.0 * bag / BAG_MAX, 5)), Color("#7af1eb"))
 	for i in stack.size():
 		_item(p + Vector2(0, -30 - i * 9), stack[i], 9)
 	if stack.size() >= capacity:
-		_text("FULL", p + Vector2(0, 30), 13, Color("#ffcb5e"))
+		_text("FULL", p + Vector2(0, 38), 13, Color("#ffcb5e"))
 
 
 func _draw_arrow() -> void:
-	var target := _advice()
+	var target := _route(player.pos, _advice())
 	var p: Vector2 = player.pos
 	var d := target - p
 	if d.length() < 90.0:
@@ -948,30 +1190,41 @@ func _draw_arrow() -> void:
 
 func _draw_hud() -> void:
 	draw_rect(Rect2(0, 0, W, HUD_H), Color("#16181c"))
-	_text("WAVE %d/%d" % [wave, WAVES], Vector2(90, 34), 22, Color("#f2e4cb"))
-	if not spawn_queue.is_empty() or (wave > 0 and not monsters.is_empty() and wave_t >= WAVE_BREAK - 0.01):
-		_text("INCOMING %d" % (spawn_queue.size() + monsters.size()), Vector2(90, 66), 16, Color("#ff7b6b"))
+	_text("WAVE %d/%d" % [wave, WAVES], Vector2(80, 30), 20, Color("#f2e4cb"))
+	if not spawn_queue.is_empty():
+		_text("INCOMING %d" % spawn_queue.size(), Vector2(80, 62), 15, Color("#ff7b6b"))
 	elif wave < WAVES:
-		_text("NEXT IN %ds" % int(ceil(wave_t)), Vector2(90, 66), 16, Color("#a9a395"))
-	_text("GATE", Vector2(W * 0.5, 26), 16, Color("#a9a395"))
-	var pw := minf(18.0, 300.0 / gate_max)
-	var x0 := W * 0.5 - pw * gate_max * 0.5
-	for i in gate_max:
-		var c := Color("#7af1eb") if i < gate_max - breaches else Color("#5a2a2a")
-		draw_rect(Rect2(x0 + i * pw + 1, 44, pw - 3, 22), c)
-	_text("%d/%d" % [stack.size(), capacity], Vector2(W - 70, 34), 20, Color("#f2e4cb"))
-	_text("CARRY", Vector2(W - 70, 64), 14, Color("#a9a395"))
+		_text("NEXT IN %ds" % int(ceil(wave_t)), Vector2(80, 62), 15, Color("#a9a395"))
+	# fence: how many monsters it can hold
+	_text("FENCE", Vector2(W * 0.5 - 40, 24), 14, Color("#a9a395"))
+	var pw := minf(16.0, 190.0 / fence_max)
+	var x0 := W * 0.5 - 40 - pw * fence_max * 0.5
+	var waiting := _waiting()
+	for i in fence_max:
+		draw_rect(Rect2(x0 + i * pw + 1, 40, pw - 3, 20), Color("#ff6b5e") if i < waiting else Color("#8a6a45"))
+	# hearts
+	for i in HEARTS:
+		var c := Color("#ff6b6b") if i < hearts else Color("#3a2a2a")
+		var hp := Vector2(W * 0.5 + 92 + i * 22, 30)
+		draw_circle(hp + Vector2(-4, 0), 5.0, c)
+		draw_circle(hp + Vector2(4, 0), 5.0, c)
+		draw_colored_polygon(PackedVector2Array([hp + Vector2(-9, 1), hp + Vector2(9, 1), hp + Vector2(0, 11)]), c)
+	_text("BAG %d" % bag, Vector2(W * 0.5 + 136, 64), 14, Color("#7af1eb"))
+	_text("%d/%d" % [stack.size(), capacity], Vector2(W - 50, 30), 20, Color("#f2e4cb"))
+	_text("CARRY", Vector2(W - 50, 62), 13, Color("#a9a395"))
 
 
 func _draw_end() -> void:
 	draw_rect(Rect2(0, 0, W, H), Color(0, 0, 0, 0.55))
 	var won := state == "won"
-	draw_rect(Rect2(90, 440, W - 180, 320), Color("#1f2328"))
-	draw_rect(Rect2(90, 440, W - 180, 320), Color("#7af1eb") if won else Color("#ff6b5e"), false, 4.0)
-	_text("FORTRESS HOLDS" if won else "GATE BROKEN", Vector2(W * 0.5, 510), 40, Color.WHITE)
-	_text("Waves survived: %d / %d" % [wave if won else wave - 1, WAVES], Vector2(W * 0.5, 580), 22, Color("#f2e4cb"))
-	_text("Monsters stopped: %d" % kills, Vector2(W * 0.5, 620), 22, Color("#f2e4cb"))
-	_text("TAP TO PLAY AGAIN", Vector2(W * 0.5, 700), 22, Color("#ffcb5e"))
+	draw_rect(Rect2(80, 430, W - 160, 340), Color("#1f2328"))
+	draw_rect(Rect2(80, 430, W - 160, 340), Color("#7af1eb") if won else Color("#ff6b5e"), false, 4.0)
+	_text("FORTRESS HOLDS" if won else "FORTRESS FELL", Vector2(W * 0.5, 495), 40, Color.WHITE)
+	if not won:
+		_text(lose_reason, Vector2(W * 0.5, 545), 22, Color("#ff9a8f"))
+	_text("Waves survived: %d / %d" % [wave if won else wave - 1, WAVES], Vector2(W * 0.5, 600), 22, Color("#f2e4cb"))
+	_text("Monsters stopped: %d" % kills, Vector2(W * 0.5, 640), 22, Color("#f2e4cb"))
+	_text("TAP TO PLAY AGAIN", Vector2(W * 0.5, 715), 22, Color("#ffcb5e"))
 
 
 # ================================================================== automation
@@ -983,10 +1236,24 @@ func _log(line: String) -> void:
 
 
 func _run_sim() -> void:
+	var next_trace := 0.0
 	while state == "play" and time < 1500.0:
 		step(1.0 / 30.0)
-	print("RESULT %s at %ds, wave %d, gate %d/%d, kills %d, built %d" % [state, int(time), wave,
-		gate_max - breaches, gate_max, kills, built_count])
+		if args.has("trace") and time >= next_trace and time < float(args.trace) and time >= float(args.get("from", "0")):
+			next_trace = time + 1.0
+			var near := 0
+			for m in monsters:
+				if m.chase:
+					near += 1
+			print("  t=%d pos=%s hearts=%d bag=%d chasers=%d stack=%d target=%s" % [int(time), player.pos.round(), hearts, bag, near, stack.size(), _advice().round()])
+	if args.has("dump"):
+		for m in monsters:
+			print("  monster %s at %s waiting=%s chase=%s hp=%d" % [m.type, (m.pos as Vector2).round(), m.waiting, m.chase, m.hp])
+		for t in turrets:
+			print("  turret at %s built=%s ammo=%d" % [t.pos, t.built, t.ammo])
+		print("  player %s bag=%d stack=%s machine=%s advice=%s" % [player.pos.round(), bag, stack, machine, _advice().round()])
+	print("RESULT %s at %ds, wave %d, hearts %d, fence %d/%d, kills %d, built %d" % [state, int(time), wave,
+		hearts, _waiting(), fence_max, kills, built_count])
 	get_tree().quit()
 
 
