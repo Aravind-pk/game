@@ -121,7 +121,7 @@ func mat(col: Color, outline: bool = false, alpha: float = 1.0, unshaded: bool =
 	if alpha < 1.0:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		m.shadow_enabled = false
-	if outline:
+	if outline and false:  # inverted-hull outlines break on hard edges; the references use none
 		var o := StandardMaterial3D.new()
 		o.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		o.albedo_color = C_OUTLINE
@@ -270,10 +270,12 @@ func _build_environment() -> void:
 	sun.light_energy = float(g.args.get("sun", "0.7"))
 	sun.light_color = Color("#ffe9c9")
 	sun.shadow_enabled = true
-	sun.shadow_blur = 1.2
-	sun.shadow_opacity = 0.7
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
-	sun.directional_shadow_max_distance = 60.0
+	sun.shadow_blur = 2.0
+	sun.shadow_opacity = 0.8
+	sun.shadow_normal_bias = 1.2
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	sun.directional_shadow_split_1 = 0.35
+	sun.directional_shadow_max_distance = 48.0
 	add_child(sun)
 	cam = Camera3D.new()
 	cam.keep_aspect = Camera3D.KEEP_WIDTH
@@ -429,8 +431,9 @@ func _cone_tree(parent: Node3D, p: Vector3, s: float, seed_v: int) -> Node3D:
 	var tree := node3(parent, p)
 	tree.scale = Vector3.ONE * s
 	add(tree, cyl(0.08, 0.11, 0.5, 6), mat(C_WOOD_DARK), Vector3(0, 0.25, 0))
-	add(tree, faceted(cyl(0.0, 0.62, 1.0, 7), 0.06, seed_v), mat(C_TREE), Vector3(0, 0.85, 0))
-	add(tree, faceted(cyl(0.0, 0.45, 0.8, 7), 0.05, seed_v + 1), mat(C_TREE_LIGHT), Vector3(0, 1.35, 0))
+	add(tree, cyl(0.0, 0.66, 0.95, 12), mat(C_TREE), Vector3(0, 0.8, 0))
+	add(tree, cyl(0.0, 0.52, 0.85, 12), mat(C_TREE.lerp(C_TREE_LIGHT, 0.5)), Vector3(0, 1.22, 0))
+	add(tree, cyl(0.0, 0.36, 0.7, 12), mat(C_TREE_LIGHT), Vector3(0, 1.62, 0))
 	return tree
 
 
@@ -463,7 +466,8 @@ func _build_yard() -> void:
 	var root := node3(self)
 	var z0: float = g.FENCE_H * S
 	var depth: float = (g.H - g.FENCE_Y - g.FENCE_H) * S
-	add(root, box(30.0, 0.04, depth + 1.0), mat(C_SAND), Vector3(0, 0.02, z0 + depth * 0.5 + 0.5), Vector3.ZERO, Vector3.ONE, false)
+	add(root, box(30.0, 0.04, depth + 0.4), mat(C_SAND), Vector3(0, 0.02, z0 + depth * 0.5 + 0.2), Vector3.ZERO, Vector3.ONE, false)
+	add(root, box(34.0, 0.03, 6.0), mat(C_GRASS), Vector3(0, 0.015, z0 + depth + 3.2), Vector3.ZERO, Vector3.ONE, false)
 	add(root, box(30.0, 0.03, 0.45), mat(C_SAND.darkened(0.08)), Vector3(0, 0.035, z0 + 0.22), Vector3.ZERO, Vector3.ONE, false)
 	# hedges along the yard's sides, bright lawn beyond
 	for side in [-1.0, 1.0]:
@@ -492,18 +496,73 @@ func _build_yard() -> void:
 
 
 func _house(i: int) -> Node3D:
-	var slots := [Vector2(140, 1585), Vector2(1060, 1585), Vector2(260, 1595), Vector2(940, 1595), Vector2(390, 1600),
-		Vector2(810, 1600), Vector2(80, 1500), Vector2(1120, 1500), Vector2(110, 1400), Vector2(1090, 1400)]
+	var slots := [Vector2(140, 1585), Vector2(1060, 1585), Vector2(270, 1590), Vector2(930, 1590), Vector2(400, 1595),
+		Vector2(800, 1595), Vector2(80, 1490), Vector2(1120, 1490), Vector2(100, 1385), Vector2(1100, 1385)]
 	var at: Vector2 = slots[i % slots.size()]
 	var h := node3(house_root, w(at))
-	h.scale = Vector3.ONE * 0.85
-	var roofs := [Color("#d9534b"), C_BLUE, Color("#2a9d90"), Color("#e8893a")]
-	add(h, box(1.5, 0.9, 1.0), mat(Color("#f3e6cc")), Vector3(0, 0.45, 0))
-	add(h, box(1.56, 0.12, 1.06), mat(C_WOOD), Vector3(0, 0.06, 0))
-	add(h, prism(1.75, 0.75, 1.2), mat(roofs[i % roofs.size()]), Vector3(0, 1.27, 0))
-	add(h, box(0.32, 0.5, 0.05), mat(C_WOOD_DARK), Vector3(-0.3, 0.25, -0.51))
-	add(h, box(0.3, 0.26, 0.05), mat(C_TEAL), Vector3(0.35, 0.55, -0.51))
-	add(h, box(0.16, 0.45, 0.16), mat(C_STONE_DARK), Vector3(0.45, 1.5, 0.2))
+	h.scale = Vector3.ONE * 1.0
+	h.rotation.y = [0.08, -0.1, 0.0, 0.12, -0.05][i % 5]
+	var roof_col: Color = [Color("#9a5a35"), Color("#3f6db8"), Color("#b5473a"), Color("#8a5232"), Color("#2f8a80")][i % 5]
+	var plaster := i % 2 == 0
+	var wall_col := Color("#efe0c0") if plaster else Color("#b98352")
+	var beam := mat(C_WOOD_DARK)
+	var wl := 1.5
+	var wd := 1.05
+	var wh := 0.95
+	add(h, box(wl + 0.16, 0.16, wd + 0.16), mat(C_STONE_DARK), Vector3(0, 0.08, 0))          # stone footing
+	add(h, box(wl, wh, wd), mat(wall_col), Vector3(0, 0.16 + wh * 0.5, 0))
+	for cx in [-wl * 0.5, wl * 0.5]:                                                            # corner posts
+		for cz in [-wd * 0.5, wd * 0.5]:
+			add(h, box(0.11, wh, 0.11), beam, Vector3(cx, 0.16 + wh * 0.5, cz))
+	add(h, box(wl + 0.04, 0.09, 0.06), beam, Vector3(0, 0.16 + wh - 0.05, wd * 0.5 + 0.01))  # lintel beam
+	if not plaster:  # plank lines
+		for k in 3:
+			add(h, box(wl - 0.1, 0.02, 0.02), mat(wall_col.darkened(0.2)), Vector3(0, 0.36 + k * 0.2, wd * 0.5 + 0.005),
+				Vector3.ZERO, Vector3.ONE, false)
+	# door with frame and a step, windows with frames and shutters
+	add(h, box(0.4, 0.58, 0.05), beam, Vector3(-0.32, 0.16 + 0.29, wd * 0.5 + 0.02))
+	add(h, box(0.3, 0.5, 0.05), mat(Color("#7a4a2a")), Vector3(-0.32, 0.16 + 0.26, wd * 0.5 + 0.04))
+	add(h, box(0.5, 0.06, 0.18), mat(C_STONE_DARK), Vector3(-0.32, 0.03, wd * 0.5 + 0.12))
+	for wx in [0.32]:
+		add(h, box(0.36, 0.32, 0.05), beam, Vector3(wx, 0.62, wd * 0.5 + 0.02))
+		add(h, box(0.26, 0.22, 0.05), mat(Color("#8fd0e6")), Vector3(wx, 0.62, wd * 0.5 + 0.04))
+		add(h, box(0.3, 0.07, 0.12), mat(Color("#7a4a2a")), Vector3(wx, 0.45, wd * 0.5 + 0.07))       # flower box
+		for fx in [-0.08, 0.0, 0.08]:
+			add(h, ball(0.04, 6, 3), mat(Color("#ff7a9a") if fx != 0.0 else Color("#ffd84a")), Vector3(wx + fx, 0.51, wd * 0.5 + 0.08),
+				Vector3.ZERO, Vector3.ONE, false)
+	add(h, box(0.05, 0.22, 0.24), beam, Vector3(wl * 0.5 + 0.02, 0.62, 0))                    # side window
+	add(h, box(0.05, 0.16, 0.16), mat(Color("#8fd0e6")), Vector3(wl * 0.5 + 0.04, 0.62, 0))
+	# roof: steep, with short eaves so the front wall shows. Gable-front and ridge-across alternate.
+	var top := 0.16 + wh
+	var roof_m := mat(roof_col)
+	var rh := 0.95
+	if i % 2 == 0:  # gable facing the camera
+		add(h, prism(wl + 0.26, rh, wd + 0.22), roof_m, Vector3(0, top + rh * 0.5, 0))
+		add(h, prism(wl + 0.02, rh - 0.12, 0.04), mat(wall_col), Vector3(0, top + (rh - 0.12) * 0.5, (wd + 0.22) * 0.5 + 0.01), Vector3.ZERO,
+			Vector3.ONE, false)
+		add(h, cyl(0.11, 0.11, 0.05, 14), beam, Vector3(0, top + 0.3, (wd + 0.22) * 0.5 + 0.035), Vector3(PI * 0.5, 0, 0), Vector3.ONE, false)
+		add(h, cyl(0.075, 0.075, 0.05, 14), mat(Color("#8fd0e6")), Vector3(0, top + 0.3, (wd + 0.22) * 0.5 + 0.05), Vector3(PI * 0.5, 0, 0),
+			Vector3.ONE, false)
+		var slope := atan2(rh, (wl + 0.26) * 0.5)
+		for sx in [-1.0, 1.0]:  # barge boards along the gable edges
+			add(h, box(sqrt(rh * rh + pow((wl + 0.26) * 0.5, 2)) + 0.06, 0.07, 0.07), mat(roof_col.darkened(0.35)),
+				Vector3(sx * (wl + 0.26) * 0.25, top + rh * 0.5, (wd + 0.22) * 0.5 + 0.03), Vector3(0, 0, sx * -slope + (0.0 if sx > 0 else 0.0)) * Vector3(1, 1, 1),
+				Vector3.ONE, false)
+	else:  # ridge running across, front slope towards the camera
+		add(h, prism(wd + 0.24, rh, wl + 0.26), roof_m, Vector3(0, top + rh * 0.5, 0), Vector3(0, PI * 0.5, 0))
+		add(h, box(wl + 0.32, 0.08, 0.1), mat(roof_col.darkened(0.3)), Vector3(0, top + rh, 0))
+		var run := (wd + 0.24) * 0.5
+		var ang := atan2(rh, run)
+		for k in 3:  # shingle rows on the front slope
+			var f := (k + 1) / 4.0
+			add(h, box(wl + 0.27, 0.025, 0.035), mat(roof_col.darkened(0.15)), Vector3(0, top + rh * f, run * (1.0 - f) + 0.015),
+				Vector3(-ang, 0, 0), Vector3.ONE, false)
+		add(h, box(0.3, 0.26, 0.05), beam, Vector3(0, top + 0.18, wd * 0.5 + 0.02))                      # dormer-ish window
+	var cx := 0.45 * (1 if i % 4 < 2 else -1)
+	add(h, box(0.2, 0.55, 0.2), mat(C_STONE), Vector3(cx, top + 0.65, -0.2))                            # chimney
+	add(h, box(0.25, 0.06, 0.25), mat(C_STONE_DARK), Vector3(cx, top + 0.94, -0.2))
+	if i % 3 == 0:  # a barrel by the door
+		add(h, cyl(0.13, 0.13, 0.3, 12), mat(C_WOOD), Vector3(-0.68, 0.15, wd * 0.5 + 0.2))
 	return h
 
 
@@ -591,11 +650,11 @@ func _build_machine() -> void:
 	add(m, box(1.8, 0.12, 1.4), mat(C_PINK_DARK, true), Vector3(0, 0.95, 0))
 	add(m, cyl(0.45, 0.3, 0.55, 8), mat(C_TEAL, true), Vector3(-0.35, 1.28, 0.1))  # hopper
 	add(m, cyl(0.12, 0.12, 0.5, 6), mat(Color("#8b93a8")), Vector3(0.45, 1.2, 0.2))  # chimney
-	gear = node3(m, Vector3(0.45, 0.5, -0.67))
+	gear = node3(m, Vector3(0.45, 0.5, 0.67))
 	add(gear, cyl(0.3, 0.3, 0.08, 8), mat(C_GOLD, true), Vector3.ZERO, Vector3(PI * 0.5, 0, 0))
 	for k in 4:
 		add(gear, box(0.72, 0.1, 0.1), mat(C_GOLD.darkened(0.15)), Vector3.ZERO, Vector3(0, 0, k * PI * 0.25))
-	add(m, box(0.5, 0.12, 0.9), mat(Color("#8b93a8")), Vector3(-0.35, 0.75, -0.9), Vector3(-0.5, 0, 0))  # chute
+	add(m, box(0.5, 0.12, 0.9), mat(Color("#8b93a8")), Vector3(-0.35, 0.75, -0.9), Vector3(0.5, 0, 0))  # chute to the pile
 	# the input pile of logs beside it
 	for k in 8:
 		var lg := add(m, item_mesh("wood"), item_mat("wood"), Vector3(1.15 + (k % 2) * 0.22, 0.08 + (k / 2) * 0.17, 0.2),
@@ -713,53 +772,78 @@ func _launcher(pos: Vector2) -> Node3D:
 
 
 ## The chibi worker: big head, hard hat, tiny body. `hat` and `suit` colour the player and helpers apart.
-func _worker(parent: Node, suit: Color, hat: Color, axe: bool = false) -> Dictionary:
+## A chibi character: big head, small body. `soldier` is the player (helmet, tunic, rifle);
+## otherwise a builder (hard hat, overalls) for the helpers.
+func _worker(parent: Node, suit: Color, hat: Color, axe: bool = false, soldier: bool = false) -> Dictionary:
 	var root := node3(parent)
 	var body := node3(root)
 	var parts := {"root": root, "body": body}
-	var suit_m := mat(suit, true)
+	var suit_m := mat(suit)
+	var pants := mat(Color("#3b3552") if soldier else suit.darkened(0.3))
+	var boot := mat(Color("#4a3428"))
 	for sx in [-0.1, 0.1]:
 		var hip := node3(body, Vector3(sx, 0.3, 0))
-		add(hip, cyl(0.07, 0.06, 0.28, 6), mat(suit.darkened(0.3), true), Vector3(0, -0.14, 0))
-		add(hip, box(0.13, 0.08, 0.18), mat(Color("#4a3a33"), true), Vector3(0, -0.27, -0.03))
+		add(hip, cyl(0.075, 0.065, 0.24, 12), pants, Vector3(0, -0.12, 0))
+		add(hip, box(0.14, 0.1, 0.2), boot, Vector3(0, -0.26, -0.03))
 		parts["leg%s" % ("l" if sx < 0 else "r")] = hip
-	add(body, cyl(0.17, 0.21, 0.36, 10), suit_m, Vector3(0, 0.46, 0))
+	add(body, cyl(0.17, 0.22, 0.38, 16), suit_m, Vector3(0, 0.47, 0))
+	if soldier:
+		add(body, cyl(0.225, 0.225, 0.07, 16), mat(Color("#6b4428")), Vector3(0, 0.33, 0))            # belt
+		add(body, box(0.09, 0.07, 0.04), mat(C_GOLD), Vector3(0, 0.33, -0.225))                        # buckle
+		add(body, box(0.05, 0.36, 0.03), mat(C_GOLD), Vector3(0, 0.5, -0.19), Vector3(0.12, 0, 0))   # tunic trim
+		for sx in [-0.2, 0.2]:
+			add(body, ball(0.1, 12, 6), mat(Color("#a8b0c2")), Vector3(sx, 0.62, 0))                  # pauldrons
 	for sx in [-0.24, 0.24]:
-		var sh := node3(body, Vector3(sx, 0.58, 0))
-		add(sh, cyl(0.055, 0.05, 0.26, 6), mat(C_SKIN, true), Vector3(0, -0.12, 0))
+		var sh := node3(body, Vector3(sx, 0.6, 0))
+		add(sh, cyl(0.06, 0.055, 0.24, 12), suit_m if soldier else mat(C_SKIN), Vector3(0, -0.11, 0))
+		add(sh, ball(0.065, 10, 5), mat(C_SKIN), Vector3(0, -0.25, 0))                                # hand
 		parts["arm%s" % ("l" if sx < 0 else "r")] = sh
-	var head := node3(body, Vector3(0, 0.88, 0))
+	var head := node3(body, Vector3(0, 0.9, 0))
 	parts["head"] = head
-	add(head, ball(0.27, 14, 7), mat(C_SKIN, true))
+	add(head, ball(0.27, 20, 10), mat(C_SKIN))
 	for sx in [-0.1, 0.1]:
-		add(head, ball(0.05, 8, 4), mat(Color("#1d1a24")), Vector3(sx, 0.0, -0.245), Vector3.ZERO, Vector3(1, 1.3, 0.6), false)
+		add(head, ball(0.05, 10, 5), mat(Color("#1d1a24")), Vector3(sx, 0.0, -0.245), Vector3.ZERO, Vector3(1, 1.3, 0.6), false)
 		add(head, ball(0.016, 6, 3), mat(Color.WHITE, false, 1.0, true), Vector3(sx + 0.015, 0.025, -0.275), Vector3.ZERO,
 			Vector3.ONE, false)
-		add(head, ball(0.045, 6, 3), mat(Color("#ff9e9e")), Vector3(sx * 1.6, -0.08, -0.215), Vector3.ZERO, Vector3(1, 0.6, 0.4),
-			false)
-	add(head, ball(0.29, 14, 6, true), mat(hat, true), Vector3(0, 0.06, 0))
-	add(head, cyl(0.33, 0.33, 0.035, 14), mat(hat.darkened(0.1), true), Vector3(0, 0.07, -0.04))
-	add(head, box(0.05, 0.08, 0.5), mat(hat.lightened(0.25)), Vector3(0, 0.33, 0), Vector3.ZERO, Vector3.ONE, false)
+		add(head, ball(0.045, 8, 4), mat(Color("#ff9e9e")), Vector3(sx * 1.6, -0.08, -0.215), Vector3.ZERO, Vector3(1, 0.6, 0.4), false)
+		if soldier:  # determined brows
+			add(head, box(0.1, 0.025, 0.03), mat(Color("#4a3428")), Vector3(sx, 0.085, -0.25), Vector3(0, 0, -sx * 2.5), Vector3.ONE, false)
+	if soldier:
+		var steel := mat(Color("#a8b0c2"))
+		add(head, ball(0.295, 20, 10, true), steel, Vector3(0, 0.05, 0))                                  # helmet
+		add(head, cyl(0.31, 0.31, 0.06, 20), mat(Color("#8a93a8")), Vector3(0, 0.07, 0))                # rim
+		add(head, box(0.07, 0.07, 0.42), mat(hat), Vector3(0, 0.36, 0.02))                               # crest
+		add(head, box(0.06, 0.14, 0.08), mat(hat), Vector3(0, 0.3, 0.22))
+	else:
+		add(head, ball(0.29, 18, 9, true), mat(hat), Vector3(0, 0.06, 0))
+		add(head, cyl(0.33, 0.33, 0.035, 18), mat(hat.darkened(0.1)), Vector3(0, 0.07, -0.04))
 	if axe:
 		var handle := node3(parts.armr, Vector3(0, -0.24, -0.05))
-		add(handle, cyl(0.025, 0.025, 0.45, 5), mat(C_WOOD_DARK), Vector3(0, 0.1, -0.1), Vector3(-0.6, 0, 0))
-		add(handle, box(0.05, 0.16, 0.14), mat(Color("#c9d2e0"), true), Vector3(0, 0.26, -0.22))
+		add(handle, cyl(0.025, 0.025, 0.45, 8), mat(C_WOOD_DARK), Vector3(0, 0.1, -0.1), Vector3(-0.6, 0, 0))
+		add(handle, box(0.05, 0.16, 0.14), mat(Color("#c9d2e0")), Vector3(0, 0.26, -0.22))
 		parts["axe"] = handle
 	return parts
 
 
+
 func _build_player() -> void:
-	player_parts = _worker(self, C_BLUE, C_GOLD)
+	player_parts = _worker(self, C_BLUE, Color("#e84a3c"), false, true)
 	player3d = player_parts.root
 	player3d.scale = Vector3.ONE * PLAYER_SCALE
-	var gun := node3(player_parts.armr, Vector3(0, -0.25, -0.06))
-	add(gun, box(0.08, 0.1, 0.26), mat(Color("#2fbfae"), true), Vector3(0, 0, -0.06))
-	var fl := add(gun, ball(0.08, 6, 3), mat(Color("#bff8ff"), false, 1.0, true), Vector3(0, 0, -0.24), Vector3.ZERO, Vector3.ONE,
+	# the rifle: in both hands when free, slung on the back while carrying
+	var rifle := node3(player_parts.body, Vector3(0.1, 0.42, -0.24))
+	add(rifle, box(0.07, 0.09, 0.42), mat(Color("#6b4428")), Vector3(0, 0, 0.02))
+	add(rifle, cyl(0.025, 0.025, 0.34, 10), mat(Color("#3a3f4c")), Vector3(0, 0.03, -0.32), Vector3(PI * 0.5, 0, 0))
+	add(rifle, box(0.05, 0.1, 0.06), mat(Color("#3a3f4c")), Vector3(0, -0.06, -0.04))
+	var fl := add(rifle, ball(0.08, 8, 4), mat(Color("#fff2b0"), false, 1.0, true), Vector3(0, 0.03, -0.52), Vector3.ZERO, Vector3.ONE,
 		false)
 	fl.visible = false
 	player_parts["flash"] = fl
-	stack_root = node3(player_parts.body, Vector3(0, 1.32, -0.02))
+	player_parts["rifle"] = rifle
+	# the carried stack rises from his arms, in front of his chest
+	stack_root = node3(player_parts.body, Vector3(0, 0.56, -0.36))
 	player_prev = g.player.pos
+
 
 
 func _build_arrow() -> void:
@@ -780,7 +864,7 @@ func _monster(type: String, r: float) -> Node3D:
 	var pupil := mat(Color("#1d1a24"))
 	match type:
 		"grunt":
-			add(body, faceted(ball(1.0, 8, 5), 0.0, 0), m, Vector3(0, 1.0, 0), Vector3.ZERO, Vector3(1.0, 0.92, 1.0))
+			add(body, ball(1.0, 18, 9), m, Vector3(0, 1.0, 0), Vector3.ZERO, Vector3(1.0, 0.92, 1.0))
 			for sx in [-0.35, 0.35]:
 				add(body, ball(0.26, 8, 4), eye_w, Vector3(sx, 1.25, -0.8))
 				add(body, ball(0.13, 6, 3), pupil, Vector3(sx, 1.25, -1.02), Vector3.ZERO, Vector3.ONE, false)
@@ -788,7 +872,8 @@ func _monster(type: String, r: float) -> Node3D:
 					Vector3(0, 0, -sx * 1.0))
 				add(body, ball(0.28, 6, 3), m, Vector3(sx * 1.3, 0.2, -0.1), Vector3.ZERO, Vector3(1, 0.6, 1.3))
 		"runner":
-			add(body, faceted(cyl(0.45, 0.9, 1.7, 7), 0.0, 0), m, Vector3(0, 1.05, 0))
+			add(body, cyl(0.45, 0.9, 1.7, 16), m, Vector3(0, 1.05, 0))
+			add(body, ball(0.45, 16, 8, true), m, Vector3(0, 1.9, 0))
 			add(body, ball(0.36, 8, 4), eye_w, Vector3(0, 1.35, -0.62))
 			add(body, ball(0.18, 6, 3), pupil, Vector3(0, 1.35, -0.92), Vector3.ZERO, Vector3.ONE, false)
 			for sx in [-0.35, 0.35]:
@@ -995,7 +1080,7 @@ func _update_bots(delta: float) -> void:
 		p.root.scale = Vector3.ONE * 1.25
 		_animate_worker(p, v, delta, false)
 		var chopping: bool = float(b.t) > 0.0
-		p.armr.rotation.x = -1.2 + sin(t * 18.0) * 0.9 if chopping else p.armr.rotation.x
+		p.armr.rotation.x = 1.6 + sin(t * 18.0) * 0.9 if chopping else p.armr.rotation.x
 		var logs: Array = p.logs
 		while logs.size() < int(b.carry):
 			var it := item_node(p.body, "wood")
@@ -1016,9 +1101,16 @@ func _animate_worker(p: Dictionary, v: Vector2, delta: float, carrying: bool) ->
 	var swing := sin(ph * 2.0) * 0.8 * k
 	p.legl.rotation.x = swing
 	p.legr.rotation.x = -swing
-	if carrying:
-		p.arml.rotation.x = lerp_angle(p.arml.rotation.x, -2.6, 0.3)
-		p.armr.rotation.x = lerp_angle(p.armr.rotation.x, -2.6, 0.3)
+	if carrying:  # hugging the stack in front
+		p.arml.rotation.x = lerp_angle(p.arml.rotation.x, 1.25, 0.3)
+		p.armr.rotation.x = lerp_angle(p.armr.rotation.x, 1.25, 0.3)
+		p.arml.rotation.z = lerp_angle(p.arml.rotation.z, -0.35, 0.3)
+		p.armr.rotation.z = lerp_angle(p.armr.rotation.z, 0.35, 0.3)
+	elif p.has("rifle"):  # rifle held ready
+		p.arml.rotation.x = lerp_angle(p.arml.rotation.x, 1.05 + swing * 0.1, 0.3)
+		p.armr.rotation.x = lerp_angle(p.armr.rotation.x, 0.85 + swing * 0.1, 0.3)
+		p.arml.rotation.z = lerp_angle(p.arml.rotation.z, -0.55, 0.3)
+		p.armr.rotation.z = lerp_angle(p.armr.rotation.z, 0.1, 0.3)
 	else:
 		p.arml.rotation.x = -swing * 0.8
 		p.armr.rotation.x = swing * 0.8
@@ -1050,8 +1142,8 @@ func _update_player(delta: float) -> void:
 		player_parts.legl.rotation.x = -1.3 * arc
 		player_parts.legr.rotation.x = -1.1 * arc
 		if not carrying:
-			player_parts.arml.rotation.x = -2.4 * arc
-			player_parts.armr.rotation.x = -2.4 * arc
+			player_parts.arml.rotation.x = 1.0 + 1.2 * arc
+			player_parts.armr.rotation.x = 0.8 + 1.2 * arc
 		player_parts.body.scale = Vector3(1.0 - 0.08 * arc, 1.0 + 0.1 * arc, 1.0 - 0.08 * arc)
 		was_vaulting = true
 	else:
@@ -1070,8 +1162,13 @@ func _update_player(delta: float) -> void:
 		if s.player and s.t > 0.05:
 			shooting = true
 	player_parts.flash.visible = shooting
-	if shooting and not carrying:
-		player_parts.armr.rotation.x = -1.5
+	var rifle: Node3D = player_parts.rifle
+	if carrying:  # slung across the back
+		rifle.position = rifle.position.lerp(Vector3(0.0, 0.55, 0.24), 0.3)
+		rifle.rotation = Vector3(0, 0, 0.9)
+	else:
+		rifle.position = rifle.position.lerp(Vector3(0.1, 0.42, -0.24), 0.3)
+		rifle.rotation = Vector3(-0.05 if not shooting else -0.12, 0, 0)
 	# the carried tower: rebuild the changed part, then sway it with the walk
 	var kinds: Array = g.stack
 	var same := 0
@@ -1317,6 +1414,10 @@ func _update_camera(delta: float) -> void:
 ## Where the camera looks: ahead of you, kept inside the map.
 func _cam_target() -> Vector3:
 	var p := w(g.player.pos)
+	if g.args.has("look_at"):  # screenshots: aim at a design-pixel spot
+		var xy: PackedStringArray = str(g.args.look_at).split(",")
+		var q := w(Vector2(float(xy[0]), float(xy[1])))
+		return Vector3(q.x, 0, q.z)
 	var half_w := tan(deg_to_rad(cam.fov * 0.5)) * cam_dist
 	var lim := maxf(15.0 - half_w + 0.6, 0.0)
 	# keep the screen's bottom edge on the yard and its top edge short of the map's far edge
