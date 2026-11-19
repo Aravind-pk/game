@@ -149,10 +149,13 @@ var autoplay := false
 var idle := false
 var args := {}
 var font: Font
+var next_uid := 0
+var world_2d := true           # false when a 3D view draws the world; then only the HUD is drawn here
 
 
 func _ready() -> void:
 	font = ThemeDB.fallback_font
+	world_2d = not get_parent().has_node("View")
 	for a in OS.get_cmdline_user_args():
 		var kv := a.split("=")
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
@@ -405,7 +408,7 @@ func activate_power(id: String = "rapid") -> void:
 			var i := monsters.size() - 1
 			while i >= 0:
 				for k in 6:
-					fx.append({"from": monsters[i].pos, "to": monsters[i].pos + Vector2(rng.randf_range(-30, 30), rng.randf_range(-30, 10)),
+					fx.append({"uid": _uid(), "from": monsters[i].pos, "to": monsters[i].pos + Vector2(rng.randf_range(-30, 30), rng.randf_range(-30, 10)),
 						"t": 0.0, "dur": 0.4, "kind": "spark"})
 				_hit(i, BOMB_DAMAGE)
 				i -= 1
@@ -443,7 +446,7 @@ func _complete(pad: Dictionary) -> void:
 			bots.append({"kind": "cutter", "pos": pad.pos, "carry": 0, "node": -1, "t": 0.0})
 	for i in 10:
 		var a := TAU * i / 10.0
-		fx.append({"from": pad.pos, "to": pad.pos + Vector2(cos(a), sin(a)) * 60.0, "t": 0.0, "dur": 0.45, "kind": "ammo"})
+		fx.append({"uid": _uid(), "from": pad.pos, "to": pad.pos + Vector2(cos(a), sin(a)) * 60.0, "t": 0.0, "dur": 0.45, "kind": "ammo"})
 	_log("built %s at %ds (wave %d, fence %d/%d, hearts %d)" % [pad.id, int(time), wave, _waiting(), fence_max, hearts])
 
 
@@ -463,7 +466,7 @@ func _update_player_gun(dt: float) -> void:
 		return
 	bag -= 1
 	gun_cool += 1.0 / GUN_RATE
-	shots.append({"a": player.pos, "b": monsters[best].pos, "t": 0.08, "player": true})
+	shots.append({"uid": _uid(), "a": player.pos, "b": monsters[best].pos, "t": 0.08, "player": true})
 	_hit(best)
 
 
@@ -512,7 +515,7 @@ func _update_upgrades(dt: float) -> void:
 	dwell_t = 0.0
 	for k in 10:
 		var a := TAU * k / 10.0
-		fx.append({"from": t.pos, "to": t.pos + Vector2(cos(a), sin(a)) * 50.0, "t": 0.0, "dur": 0.45, "kind": "coin"})
+		fx.append({"uid": _uid(), "from": t.pos, "to": t.pos + Vector2(cos(a), sin(a)) * 50.0, "t": 0.0, "dur": 0.45, "kind": "coin"})
 	_log("turret %d -> %s at %ds (wave %d)" % [here.turret, here.choice, int(time), wave])
 
 
@@ -578,7 +581,7 @@ func _update_launchers(dt: float) -> void:
 			continue
 		machine.out -= 1
 		l.cool = LAUNCH_TIME
-		lobs.append({"from": l.pos, "to": turrets[best].pos, "t": 0.0, "dur": 0.7, "turret": best})
+		lobs.append({"uid": _uid(), "from": l.pos, "to": turrets[best].pos, "t": 0.0, "dur": 0.7, "turret": best})
 	var k := 0
 	while k < lobs.size():
 		lobs[k].t += dt
@@ -682,7 +685,7 @@ func _spawn(type: String) -> void:
 	var d: Dictionary = MONSTERS[type]
 	var lane := rng.randi_range(0, 2)
 	var hp := roundi(d.hp * (1.0 + HP_GROWTH * (wave - 1)))
-	monsters.append({"type": type, "pos": Vector2(LANES[lane] + rng.randf_range(-22.0, 22.0), SPAWN_Y), "lane": lane,
+	monsters.append({"uid": _uid(), "type": type, "pos": Vector2(LANES[lane] + rng.randf_range(-22.0, 22.0), SPAWN_Y), "lane": lane,
 		"hp": float(hp), "max": float(hp), "slow_t": 0.0, "speed": d.speed * rng.randf_range(0.92, 1.08), "r": d.r, "chase": false,
 		"waiting": false, "hit_cool": 0.0})
 
@@ -724,7 +727,7 @@ func _update_monsters(dt: float) -> void:
 				hurt_t = HURT_GRACE
 				hearts -= int(d.hit)
 				for k in 5:
-					fx.append({"from": p, "to": p + Vector2(rng.randf_range(-40, 40), rng.randf_range(-40, 10)),
+					fx.append({"uid": _uid(), "from": p, "to": p + Vector2(rng.randf_range(-40, 40), rng.randf_range(-40, 10)),
 						"t": 0.0, "dur": 0.35, "kind": "hurt"})
 				if hearts <= 0:
 					hearts = 0
@@ -795,11 +798,11 @@ func _update_turrets(dt: float) -> void:
 		t.cool += 1.0 / float(st.rate)
 		t.flash = 0.06
 		var target: Vector2 = monsters[best].pos
-		shots.append({"a": t.pos + t.aim * 28.0, "b": target, "t": 0.08, "player": false, "evo": t.evo})
+		shots.append({"uid": _uid(), "a": t.pos + t.aim * 28.0, "b": target, "t": 0.08, "player": false, "evo": t.evo})
 		if float(st.slow) > 0.0:
 			monsters[best].slow_t = float(st.slow)
 		if float(st.splash) > 0.0:
-			fx.append({"from": target, "to": target, "t": 0.0, "dur": 0.25, "kind": "blast", "r": st.splash})
+			fx.append({"uid": _uid(), "from": target, "to": target, "t": 0.0, "dur": 0.25, "kind": "blast", "r": st.splash})
 			var j := monsters.size() - 1
 			while j >= 0:
 				if (monsters[j].pos as Vector2).distance_to(target) <= float(st.splash):
@@ -816,7 +819,7 @@ func _hit(index: int, dmg: float = 1.0) -> void:
 		return
 	kills += 1
 	for k in int(MONSTERS[m.type].drop):
-		pickups.append({"kind": "coin", "life": COIN_LIFE,
+		pickups.append({"uid": _uid(), "kind": "coin", "life": COIN_LIFE,
 				"pos": m.pos + Vector2(rng.randf_range(-16, 16), rng.randf_range(-16, 16))})
 	monsters.remove_at(index)
 
@@ -1128,8 +1131,13 @@ func _input(event: InputEvent) -> void:
 
 # ================================================================== drawing
 
+func _uid() -> int:
+	next_uid += 1
+	return next_uid
+
+
 func _fly(from: Vector2, to: Vector2, kind: String) -> void:
-	fx.append({"from": from, "to": to, "t": 0.0, "dur": 0.22, "kind": kind})
+	fx.append({"uid": _uid(), "from": from, "to": to, "t": 0.0, "dur": 0.22, "kind": kind})
 
 
 func _text(s: String, centre: Vector2, size: int, col: Color) -> void:
@@ -1149,6 +1157,9 @@ func _item(pos: Vector2, kind: String, s: float) -> void:
 
 
 func _draw() -> void:
+	if not world_2d:
+		_draw_overlay()
+		return
 	draw_rect(Rect2(0, 0, W, H), Color("#56663f"))
 	draw_rect(Rect2(0, HUD_H, W, SPAWN_Y - HUD_H + 26), Color("#3f3530"))
 	draw_rect(Rect2(0, FENCE_Y, W, H - FENCE_Y), Color("#6b5d48"))
@@ -1197,6 +1208,11 @@ func _draw() -> void:
 			_item(pos, f.kind, 6)
 	if state == "play" and not autoplay:
 		_draw_arrow()
+	_draw_overlay()
+
+
+## The screen-space layer drawn over either view: top bar, joystick, end panel.
+func _draw_overlay() -> void:
 	_draw_hud()
 	if joy_active:
 		draw_circle(joy_origin, 70.0, Color(1, 1, 1, 0.12))
