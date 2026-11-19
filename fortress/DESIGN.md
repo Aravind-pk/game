@@ -29,7 +29,7 @@ Everything is drawn with basic shapes until the gameplay is right.
 |---|---|---|---|
 | **Stack** (on your back) | 10 items (18 with Bigger pack) | Trees, rocks, machine output | Building, feeding the machine, carrying boxes to turrets |
 | **Ammo bag** (your gun) | 30 shots, separate from the stack | Machine output: the bag fills first, 1 box = 10 shots | Your gun |
-| **Wallet** | unlimited, separate from the stack | Monster coins you walk over | Launchers, woodcutter |
+| **Wallet** | unlimited, separate from the stack | Monster coins you walk over | Launchers, woodcutter, turret upgrades |
 
 ## Materials
 
@@ -64,11 +64,34 @@ Build pads, two open at a time:
 | 7 | Launcher (right) | 6 stone, 4 coins | Reaches the centre and right turrets |
 | 8 | Woodcutter | 5 coins, 6 wood | Helper: walks out through the door, chops trees, feeds the machine. Monsters ignore it |
 
-## Power-up
+## Powers
 
-Power-ups are not buildings. The **power meter** in the top-right corner fills by one for every
-monster coin you pick up (8 to charge, coins are not spent). When it is full it pulses: **tap it** for
-**12 s of rapid fire** (all turrets fire twice as fast). The meter then empties and starts again.
+The **power meter** in the top-right corner fills by one for every monster coin you pick up (12 to
+charge; coins are not spent). When it is full it pulses: **tap it** and four powers open below it.
+Tap one:
+
+| Power | Effect |
+|---|---|
+| Rapid | All turrets fire twice as fast for 12 s |
+| Freeze | Every monster moves at 35% speed for 8 s |
+| Bomb | 8 damage to every monster on the field |
+| Supply | +2 boxes in every turret and a full ammo bag |
+
+## Turret upgrades and evolutions
+
+Small round pads appear just inside the fence under each built turret. **Stand still on one for
+0.6 s** to buy it with coins (a gold ring fills while you wait, so walking past never buys anything).
+Names show when you are close.
+
+| Step | Cost | Effect |
+|---|---|---|
+| Level 2 | 8 coins | 1.5 damage per shot (from 1) |
+| Evolve: **Gatling** (orange, twin barrels) | 15 coins | 1 damage, twice the fire rate: shreds swarms, eats ammo |
+| Evolve: **Cannon** (grey, fat barrel) | 15 coins | 3 damage to everything within 55 px of the target, slow fire |
+| Evolve: **Frost** (blue) | 15 coins | 1.5 damage and halves the target's speed for 2 s |
+
+Each turret evolves once, so the three lanes can be built differently. Level pips sit on top of
+each turret.
 
 ## Monsters
 
@@ -82,7 +105,7 @@ Turrets and your gun can still shoot them while they wait.
 | Brute | dark red square | 14 | very slow | 70 px | 2 hearts | 4 | 5 |
 
 A monster that notices you (red ring) chases you until you are more than 260 px away. Waiting
-monsters keep the doorway clear but will chase you if you step out next to them. Monsters get 8%
+monsters keep the doorway clear but will chase you if you step out next to them. Monsters get 16%
 more HP every wave.
 
 ## How you lose
@@ -93,11 +116,11 @@ more HP every wave.
    (one every 4 s).
 3. **A monster follows you in**: a chasing monster gets through the door.
 
-Survive wave 10 with the field cleared and the fortress holds.
+Survive wave 12 with the field cleared and the fortress holds.
 
 ## Waves
 
-10 waves. The first comes after 30 s; 16 s breaks between waves. Wave *n* brings 3 + 2n grunts,
+12 waves. The first comes after 30 s; 16 s breaks between waves. Wave *n* brings 4 + 3n grunts,
 runners from wave 3 and brutes from wave 5, one every 1.1 s in a random lane.
 
 ## The tension this creates
@@ -117,10 +140,13 @@ never moves; `seed` changes the lanes monsters spawn in. Four seeds each:
 
 | Player | Wins |
 |---|---|
-| Bot, full speed | 4 of 4, all hearts left, 7–8 of 8 pads built |
+| Bot, full speed | 3 of 4 |
 | Bot, 70% speed | 2 of 4 |
-| Bot, 50% speed | 0 of 4 (overrun in waves 9–10) |
-| Does nothing | 0 of 4 (fence gives in wave 3) |
+| Bot, 50% speed | 1 of 4 |
+| Does nothing | 0 of 4 (fence gives in wave 2–3) |
+
+The bot evolves its turrets Gatling (left), Cannon (centre), Frost (right) and picks Bomb when
+the field is crowded, Supply when the turrets are low, Rapid otherwise.
 
 The bot never dodges, so a person should do better than its pace suggests. The bot (and the guide
 arrow) fights a close chaser if it has shots and otherwise leads it away before heading for the

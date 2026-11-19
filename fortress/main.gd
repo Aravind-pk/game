@@ -22,8 +22,8 @@ const FENCE_H := 18.0
 const DOOR_X := 430.0
 const DOOR_W := 64.0
 const LANES := [220.0, 360.0, 500.0]
-const MACHINE_POS := Vector2(250, 1010)
-const OUTPUT_POS := Vector2(250, 928)
+const MACHINE_POS := Vector2(300, 1030)
+const OUTPUT_POS := Vector2(300, 940)
 const PAD_HALF := 34.0
 const DOOR_OUT := Vector2(DOOR_X, FENCE_Y - 34.0)
 const DOOR_IN := Vector2(DOOR_X, FENCE_Y + FENCE_H + 36.0)
@@ -52,14 +52,35 @@ const TURRET_BOXES := 5
 const TURRET_RANGE := 230.0
 const TURRET_RATE := 2.0
 const RAPID_MULT := 2.0
-const POWER_MAX := 8          # monster coins to charge the power-up
+const POWER_MAX := 12          # monster coins to charge the power-up
 const POWER_TIME := 12.0       # seconds of rapid fire once activated
 const POWER_BTN := Vector2(W - 54, 46)
 const POWER_R := 32.0
+const FREEZE_TIME := 8.0
+const FREEZE_MULT := 0.35
+const BOMB_DAMAGE := 8.0
+const SUPPLY_BOXES := 2
+## Powers offered when the meter is full; tap the meter, then one of these.
+const POWERS := [
+	{"id": "rapid", "label": "RAPID", "color": Color("#7af1eb")},
+	{"id": "freeze", "label": "FREEZE", "color": Color("#9fd3ff")},
+	{"id": "bomb", "label": "BOMB", "color": Color("#ff7b5e")},
+	{"id": "supply", "label": "SUPPLY", "color": Color("#f2c14e")},
+]
+const UPGRADE_DWELL := 0.6     # stand still this long on an upgrade pad to buy it
+const UPGRADE_R := 20.0
+const LEVEL2_COST := 8
+const EVOLVE_COST := 15
+## Turret evolutions, bought at level 2: damage per shot, and fire rate as a multiple of the base turret's.
+const EVOLUTIONS := {
+	"gatling": {"label": "GATLING", "dmg": 1.0, "rate": 2.0, "splash": 0.0, "slow": 0.0, "color": Color("#c98a2b")},
+	"cannon": {"label": "CANNON", "dmg": 3.0, "rate": 0.45, "splash": 55.0, "slow": 0.0, "color": Color("#5a5f66")},
+	"frost": {"label": "FROST", "dmg": 1.5, "rate": 1.0, "splash": 0.0, "slow": 2.0, "color": Color("#62b6e8")},
+}
 const LAUNCH_RANGE := 270.0
 const LAUNCH_TIME := 1.2
 const FENCE_START := 10         # monsters that can wait at the fence before it gives
-const WAVES := 10
+const WAVES := 12
 const FIRST_WAVE := 30.0
 const WAVE_BREAK := 16.0
 const SPAWN_GAP := 1.1
@@ -67,7 +88,7 @@ const BOT_SPEED := 150.0
 const BOT_CARRY := 4
 const CUT_TIME := 0.6
 const COIN_LIFE := 30.0
-const HP_GROWTH := 0.08
+const HP_GROWTH := 0.16
 const GIVE_UP := 260.0         # a chasing monster loses interest beyond this distance
 
 const ITEM_COLOR := {
@@ -113,6 +134,10 @@ var fence_max := FENCE_START
 var wallet := 0               # monster coins in hand (not on the stack)
 var power := 0                # power meter, filled by every coin you pick up
 var power_t := 0.0            # rapid fire time left
+var freeze_t := 0.0
+var power_menu := false
+var dwell_key := ""
+var dwell_t := 0.0
 var kills := 0
 var built_count := 0
 var log_lines: Array = []
@@ -141,6 +166,10 @@ func _ready() -> void:
 		var t := float(args.warp)
 		while time < t and state == "play":
 			step(1.0 / 30.0)
+	if args.has("menu"):  # screenshots: the meter full and its power choice open
+		power = POWER_MAX
+		power_menu = true
+		autoplay = false
 	if args.has("shot"):
 		get_tree().create_timer(float(args.get("shot_time", "1.5"))).timeout.connect(_take_shot)
 
@@ -167,7 +196,7 @@ func reset() -> void:
 	pickups = []
 	turrets = []
 	for i in 3:
-		turrets.append({"pos": Vector2(LANES[i], FENCE_Y + FENCE_H * 0.5), "built": i == 1,
+		turrets.append({"pos": Vector2(LANES[i], FENCE_Y + FENCE_H * 0.5), "built": i == 1, "level": 1, "evo": "",
 			"ammo": SHOTS_PER_BOX * 2 if i == 1 else 0, "cool": 0.0, "aim": Vector2.UP, "flash": 0.0})
 	machine = {"built": false, "input": 0, "out": 0, "t": 0.0}
 	launchers = []
@@ -194,6 +223,10 @@ func reset() -> void:
 	wallet = 0
 	power = 0
 	power_t = 0.0
+	freeze_t = 0.0
+	power_menu = false
+	dwell_key = ""
+	dwell_t = 0.0
 	kills = 0
 	built_count = 0
 	log_lines = []
@@ -223,8 +256,10 @@ func step(dt: float) -> void:
 		act_t = ACT_TIME if _try_act() else 0.0
 	_collect_coins()
 	power_t = maxf(power_t - dt, 0.0)
+	freeze_t = maxf(freeze_t - dt, 0.0)
+	_update_upgrades(dt)
 	if autoplay and power >= POWER_MAX and monsters.size() >= 6:
-		activate_power()
+		activate_power("bomb" if monsters.size() >= 12 else ("supply" if _total_free_boxes() >= 6 else "rapid"))
 	_update_player_gun(dt)
 	_update_hearts(dt)
 	_update_nodes(dt)
@@ -355,13 +390,35 @@ func _collect_coins() -> void:
 			i += 1
 
 
-## Tapping the full power meter: rapid fire for every turret.
-func activate_power() -> void:
-	if power < POWER_MAX or power_t > 0.0 or state != "play":
+## Fires one of the powers once the meter is full.
+func activate_power(id: String = "rapid") -> void:
+	if power < POWER_MAX or state != "play":
 		return
 	power = 0
-	power_t = POWER_TIME
-	_log("power activated at %ds (wave %d)" % [int(time), wave])
+	power_menu = false
+	match id:
+		"rapid":
+			power_t = POWER_TIME
+		"freeze":
+			freeze_t = FREEZE_TIME
+		"bomb":
+			var i := monsters.size() - 1
+			while i >= 0:
+				for k in 6:
+					fx.append({"from": monsters[i].pos, "to": monsters[i].pos + Vector2(rng.randf_range(-30, 30), rng.randf_range(-30, 10)),
+						"t": 0.0, "dur": 0.4, "kind": "spark"})
+				_hit(i, BOMB_DAMAGE)
+				i -= 1
+		"supply":
+			for t in turrets:
+				if t.built:
+					t.ammo = mini(int(t.ammo) + SUPPLY_BOXES * SHOTS_PER_BOX, TURRET_BOXES * SHOTS_PER_BOX)
+			bag = BAG_MAX
+	_log("power %s at %ds (wave %d)" % [id, int(time), wave])
+
+
+func _power_button(k: int) -> Vector2:
+	return POWER_BTN + Vector2(0, 78 + k * 66)
 
 
 func _complete(pad: Dictionary) -> void:
@@ -408,6 +465,71 @@ func _update_player_gun(dt: float) -> void:
 	gun_cool += 1.0 / GUN_RATE
 	shots.append({"a": player.pos, "b": monsters[best].pos, "t": 0.08, "player": true})
 	_hit(best)
+
+
+## Upgrade pads under each built turret: level 2, then a choice of three evolutions.
+func _upgrade_pads() -> Array:
+	var out := []
+	for i in turrets.size():
+		var t: Dictionary = turrets[i]
+		if not t.built:
+			continue
+		var base := Vector2(t.pos.x, FENCE_Y + 66.0)
+		if t.level == 1:
+			out.append({"key": "%d:lv2" % i, "turret": i, "choice": "lv2", "pos": base, "cost": LEVEL2_COST, "label": "LV 2"})
+		elif t.evo == "":
+			var k := 0
+			for e in EVOLUTIONS:
+				out.append({"key": "%d:%s" % [i, e], "turret": i, "choice": e, "pos": base + Vector2(0, k * 50.0),
+					"cost": EVOLVE_COST, "label": EVOLUTIONS[e].label})
+				k += 1
+	return out
+
+
+func _update_upgrades(dt: float) -> void:
+	var here := {}
+	for u in _upgrade_pads():
+		if _near(player.pos, u.pos, UPGRADE_R + 12.0):
+			here = u
+	if here.is_empty() or wallet < int(here.cost):
+		dwell_key = ""
+		dwell_t = 0.0
+		return
+	if here.key != dwell_key:
+		dwell_key = here.key
+		dwell_t = 0.0
+	dwell_t += dt
+	if dwell_t < UPGRADE_DWELL:
+		return
+	wallet -= int(here.cost)
+	var t: Dictionary = turrets[here.turret]
+	if here.choice == "lv2":
+		t.level = 2
+	else:
+		t.evo = here.choice
+		t.level = 3
+	dwell_key = ""
+	dwell_t = 0.0
+	for k in 10:
+		var a := TAU * k / 10.0
+		fx.append({"from": t.pos, "to": t.pos + Vector2(cos(a), sin(a)) * 50.0, "t": 0.0, "dur": 0.45, "kind": "coin"})
+	_log("turret %d -> %s at %ds (wave %d)" % [here.turret, here.choice, int(time), wave])
+
+
+## Damage, rate and effects of a turret after its upgrades.
+func _turret_stats(t: Dictionary) -> Dictionary:
+	var st := {"dmg": 1.0, "rate": TURRET_RATE, "splash": 0.0, "slow": 0.0}
+	if t.level >= 2:
+		st.dmg = 1.5
+	if t.evo != "":
+		var e: Dictionary = EVOLUTIONS[t.evo]
+		st.dmg = float(e.dmg)
+		st.rate = TURRET_RATE * float(e.rate)
+		st.splash = float(e.splash)
+		st.slow = float(e.slow)
+	if power_t > 0.0:
+		st.rate *= RAPID_MULT
+	return st
 
 
 func _update_hearts(dt: float) -> void:
@@ -535,7 +657,7 @@ func _update_waves(dt: float) -> void:
 func _start_wave() -> void:
 	wave += 1
 	var list := []
-	for i in 3 + 2 * wave:
+	for i in 4 + 3 * wave:
 		list.append("grunt")
 	for i in maxi(0, wave - 2):
 		list.append("runner")
@@ -561,8 +683,12 @@ func _spawn(type: String) -> void:
 	var lane := rng.randi_range(0, 2)
 	var hp := roundi(d.hp * (1.0 + HP_GROWTH * (wave - 1)))
 	monsters.append({"type": type, "pos": Vector2(LANES[lane] + rng.randf_range(-22.0, 22.0), SPAWN_Y), "lane": lane,
-		"hp": hp, "max": hp, "speed": d.speed * rng.randf_range(0.92, 1.08), "r": d.r, "chase": false,
+		"hp": float(hp), "max": float(hp), "slow_t": 0.0, "speed": d.speed * rng.randf_range(0.92, 1.08), "r": d.r, "chase": false,
 		"waiting": false, "hit_cool": 0.0})
+
+
+func _speed_mult(m: Dictionary) -> float:
+	return (0.5 if m.slow_t > 0.0 else 1.0) * (FREEZE_MULT if freeze_t > 0.0 else 1.0)
 
 
 func _waiting() -> int:
@@ -586,9 +712,10 @@ func _update_monsters(dt: float) -> void:
 		elif m.chase and to_player > GIVE_UP:
 			m.chase = false
 		m.hit_cool = maxf(m.hit_cool - dt, 0.0)
+		m.slow_t = maxf(m.slow_t - dt, 0.0)
 		if m.chase:
 			var goal := _route(mp, p)
-			m.pos = _slide(mp, (goal - mp).normalized() * minf(goal.distance_to(mp), m.speed * dt), m.r)
+			m.pos = _slide(mp, (goal - mp).normalized() * minf(goal.distance_to(mp), m.speed * _speed_mult(m) * dt), m.r)
 			if _inside(m.pos):
 				_lose("A monster followed you in")
 				return
@@ -609,7 +736,7 @@ func _update_monsters(dt: float) -> void:
 		m.pos.x = move_toward(mp.x, clampf(mp.x, lane_x - 26.0, lane_x + 26.0), 40.0 * dt)
 		var stop: float = FENCE_Y - m.r - 2.0
 		if mp.y < stop:
-			m.pos.y = minf(mp.y + m.speed * dt, stop)
+			m.pos.y = minf(mp.y + m.speed * _speed_mult(m) * dt, stop)
 		elif not m.waiting:
 			m.waiting = true
 	_spread_waiting()
@@ -646,7 +773,6 @@ func _lose(reason: String) -> void:
 
 
 func _update_turrets(dt: float) -> void:
-	var rate := TURRET_RATE * (RAPID_MULT if power_t > 0.0 else 1.0)
 	for t in turrets:
 		t.cool = maxf(t.cool - dt, -dt)
 		t.flash = maxf(t.flash - dt, 0.0)
@@ -664,17 +790,29 @@ func _update_turrets(dt: float) -> void:
 		t.aim = ((monsters[best].pos as Vector2) - (t.pos as Vector2)).normalized()
 		if t.ammo <= 0 or t.cool > 0.0:
 			continue
+		var st := _turret_stats(t)
 		t.ammo -= 1
-		t.cool += 1.0 / rate
+		t.cool += 1.0 / float(st.rate)
 		t.flash = 0.06
-		shots.append({"a": t.pos + t.aim * 28.0, "b": monsters[best].pos, "t": 0.08, "player": false})
-		_hit(best)
+		var target: Vector2 = monsters[best].pos
+		shots.append({"a": t.pos + t.aim * 28.0, "b": target, "t": 0.08, "player": false, "evo": t.evo})
+		if float(st.slow) > 0.0:
+			monsters[best].slow_t = float(st.slow)
+		if float(st.splash) > 0.0:
+			fx.append({"from": target, "to": target, "t": 0.0, "dur": 0.25, "kind": "blast", "r": st.splash})
+			var j := monsters.size() - 1
+			while j >= 0:
+				if (monsters[j].pos as Vector2).distance_to(target) <= float(st.splash):
+					_hit(j, float(st.dmg))
+				j -= 1
+		else:
+			_hit(best, float(st.dmg))
 
 
-func _hit(index: int) -> void:
+func _hit(index: int, dmg: float = 1.0) -> void:
 	var m: Dictionary = monsters[index]
-	m.hp -= 1
-	if m.hp > 0:
+	m.hp -= dmg
+	if m.hp > 0.0:
 		return
 	kills += 1
 	for k in int(MONSTERS[m.type].drop):
@@ -887,6 +1025,10 @@ func _advice() -> Vector2:
 			for kind in pad.cost:
 				if _remaining(pad, kind) > 0 and _have(kind) > 0:
 					return _stand(pad.pos)
+	# coins to spend on a turret: go and stand on its upgrade pad
+	for u in _upgrade_pads():
+		if wallet >= int(u.cost) and (u.choice == "lv2" or u.choice == ["gatling", "cannon", "frost"][u.turret]):
+			return u.pos
 	var want := _want_kind()
 	var can_gather := space > 0 and (not _inside(p) or _outside_ok())
 	var coin_ready := false  # a pad that takes coins you already hold
@@ -966,8 +1108,13 @@ func _input(event: InputEvent) -> void:
 				reset()
 				return
 			if p.distance_to(POWER_BTN) <= POWER_R + 10.0:
-				activate_power()
+				power_menu = power >= POWER_MAX and not power_menu
 				return
+			if power_menu:
+				for k in POWERS.size():
+					if p.distance_to(_power_button(k)) <= 30.0:
+						activate_power(POWERS[k].id)
+						return
 			joy_active = true
 			joy_origin = p
 			joy_vec = Vector2.ZERO
@@ -1013,6 +1160,8 @@ func _draw() -> void:
 		_draw_node(n)
 	for pad in _visible_pads():
 		_draw_pad(pad)
+	for u in _upgrade_pads():
+		_draw_upgrade(u)
 	_draw_machine()
 	for l in launchers:
 		_draw_launcher(l)
@@ -1025,6 +1174,8 @@ func _draw() -> void:
 		_draw_monster(m)
 	for s in shots:
 		var c := Color(0.6, 0.95, 1.0) if s.player else Color(1, 0.92, 0.55)
+		if s.get("evo", "") == "frost":
+			c = Color("#9fd3ff")
 		draw_line(s.a, s.b, Color(c, clampf(s.t / 0.08, 0, 1)), 3.0)
 	for b in bots:
 		_draw_bot(b)
@@ -1035,6 +1186,9 @@ func _draw() -> void:
 	for f in fx:
 		var k := clampf(f.t / f.dur, 0, 1)
 		var pos: Vector2 = (f.from as Vector2).lerp(f.to, k) + Vector2(0, -sin(k * PI) * 30.0)
+		if f.kind == "blast":
+			draw_circle(f.from, float(f.r) * (0.4 + 0.6 * k), Color(1.0, 0.6, 0.3, 0.35 * (1.0 - k)))
+			continue
 		if f.kind == "spark":
 			draw_circle(pos, 4.0 * (1.0 - k) + 1.0, Color("#ffcf6b"))
 		elif f.kind == "hurt":
@@ -1132,6 +1286,24 @@ func _draw_pad(pad: Dictionary) -> void:
 		draw_arc(pad.pos, LAUNCH_RANGE, PI, TAU, 48, Color(0.95, 0.76, 0.3, 0.35), 2.0)
 
 
+func _draw_upgrade(u: Dictionary) -> void:
+	var afford := wallet >= int(u.cost)
+	var a := 1.0 if afford else 0.45
+	var c := Color(0.95, 0.89, 0.8, a)
+	if u.choice != "lv2":
+		c = Color((EVOLUTIONS[u.choice].color as Color).lightened(0.3), a)
+	draw_circle(u.pos, UPGRADE_R, Color(0, 0, 0, 0.25))
+	draw_arc(u.pos, UPGRADE_R, 0, TAU, 24, c, 2.5)
+	_item(u.pos + Vector2(-8, 0), "coin", 6)
+	_text("%d" % u.cost, u.pos + Vector2(8, 0), 14, Color(1, 1, 1, a))
+	if _near(player.pos, u.pos, 130.0):  # names only when you are close, so the columns don't crowd
+		var lw := font.get_string_size(u.label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+		draw_rect(Rect2(u.pos + Vector2(UPGRADE_R + 4, -10), Vector2(lw + 10, 20)), Color(0, 0, 0, 0.6))
+		_text(u.label, u.pos + Vector2(UPGRADE_R + 9 + lw * 0.5, 0), 13, c)
+	if u.key == dwell_key and dwell_t > 0.0:
+		draw_arc(u.pos, UPGRADE_R + 5.0, -PI * 0.5, -PI * 0.5 + TAU * dwell_t / UPGRADE_DWELL, 24, Color("#ffd24a"), 4.0)
+
+
 func _draw_machine() -> void:
 	if not machine.built:
 		return
@@ -1169,10 +1341,22 @@ func _draw_turret(t: Dictionary) -> void:
 		return
 	if _near(player.pos, t.pos, 120.0):
 		draw_arc(t.pos, TURRET_RANGE, PI, TAU, 64, Color(0.48, 0.95, 0.92, 0.25), 2.0)
-	draw_rect(Rect2(t.pos - Vector2(26, 26), Vector2(52, 52)), Color("#2e5d8a"))
-	draw_rect(Rect2(t.pos - Vector2(26, 26), Vector2(52, 52)), Color("#16304a"), false, 3.0)
-	draw_line(t.pos, t.pos + (t.aim as Vector2) * 36.0, Color("#16304a"), 10.0)
-	draw_circle(t.pos, 12.0, Color("#3f7cb5"))
+	var body := Color("#2e5d8a") if t.evo == "" else (EVOLUTIONS[t.evo].color as Color)
+	draw_rect(Rect2(t.pos - Vector2(26, 26), Vector2(52, 52)), body)
+	draw_rect(Rect2(t.pos - Vector2(26, 26), Vector2(52, 52)), body.darkened(0.55), false, 3.0)
+	var aim: Vector2 = t.aim
+	var side := Vector2(-aim.y, aim.x)
+	match t.evo:
+		"gatling":
+			draw_line(t.pos + side * 6.0, t.pos + side * 6.0 + aim * 38.0, body.darkened(0.55), 6.0)
+			draw_line(t.pos - side * 6.0, t.pos - side * 6.0 + aim * 38.0, body.darkened(0.55), 6.0)
+		"cannon":
+			draw_line(t.pos, t.pos + aim * 32.0, body.darkened(0.55), 18.0)
+		_:
+			draw_line(t.pos, t.pos + aim * 36.0, body.darkened(0.55), 10.0)
+	draw_circle(t.pos, 12.0, body.lightened(0.25))
+	for k in int(t.level):  # level pips
+		draw_circle(t.pos + Vector2(-14 + k * 14, -34), 4.0, Color("#ffd24a"))
 	if t.flash > 0.0:
 		draw_circle(t.pos + (t.aim as Vector2) * 40.0, 7.0, Color("#ffe08f"))
 	var max_ammo := TURRET_BOXES * SHOTS_PER_BOX
@@ -1199,6 +1383,8 @@ func _draw_monster(m: Dictionary) -> void:
 		"brute":
 			draw_rect(Rect2(p - Vector2(r, r), Vector2(r * 2, r * 2)), c)
 			draw_rect(Rect2(p - Vector2(r, r), Vector2(r * 2, r * 2)), c.darkened(0.5), false, 3.0)
+	if m.slow_t > 0.0 or freeze_t > 0.0:
+		draw_circle(p, r + 2.0, Color(0.62, 0.83, 1.0, 0.45))
 	if m.hp < m.max:
 		draw_rect(Rect2(p + Vector2(-r, -r - 9), Vector2(r * 2, 4)), Color(0, 0, 0, 0.6))
 		draw_rect(Rect2(p + Vector2(-r, -r - 9), Vector2(r * 2 * m.hp / float(m.max), 4)), Color("#ff6b5e"))
@@ -1287,10 +1473,37 @@ func _draw_power() -> void:
 	var bolt := PackedVector2Array([c + Vector2(3, -15), c + Vector2(-8, 2), c + Vector2(-1, 2), c + Vector2(-4, 15),
 		c + Vector2(8, -3), c + Vector2(1, -3)])
 	draw_colored_polygon(bolt, col if (full or active) else Color("#6b6f76"))
+	if power_menu:
+		for k in POWERS.size():
+			var b := _power_button(k)
+			var pc: Color = POWERS[k].color
+			draw_circle(b, 28.0, Color("#22262c"))
+			draw_arc(b, 28.0, 0, TAU, 32, pc, 3.0)
+			_power_icon(POWERS[k].id, b, pc)
+			_text(POWERS[k].label, b + Vector2(-60, 0), 14, pc)
+	if freeze_t > 0.0:
+		draw_arc(c, POWER_R + 6.0, -PI * 0.5, -PI * 0.5 + TAU * freeze_t / FREEZE_TIME, 40, Color("#9fd3ff"), 3.0)
 	_text("TAP!" if full and not active else ("%d" % wallet), c + Vector2(-58, 0), 15,
 		Color("#ffd24a") if full and not active else Color("#f2e4cb"))
 	if not full and not active:
 		draw_circle(c + Vector2(-80, 0), 6.0, Color("#ffd24a"))
+
+
+func _power_icon(id: String, c: Vector2, col: Color) -> void:
+	match id:
+		"rapid":
+			draw_colored_polygon(PackedVector2Array([c + Vector2(3, -13), c + Vector2(-7, 2), c + Vector2(-1, 2), c + Vector2(-3, 13),
+				c + Vector2(7, -3), c + Vector2(1, -3)]), col)
+		"freeze":
+			for k in 3:
+				var a := PI * k / 3.0
+				draw_line(c - Vector2(cos(a), sin(a)) * 12.0, c + Vector2(cos(a), sin(a)) * 12.0, col, 3.0)
+		"bomb":
+			draw_circle(c + Vector2(0, 3), 10.0, col)
+			draw_line(c + Vector2(4, -6), c + Vector2(9, -13), col, 3.0)
+		"supply":
+			_item(c + Vector2(-6, 4), "ammo", 7)
+			_item(c + Vector2(6, -2), "ammo", 7)
 
 
 func _draw_end() -> void:
