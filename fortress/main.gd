@@ -51,10 +51,14 @@ const SHOTS_PER_BOX := 10
 const TURRET_BOXES := 5
 const TURRET_RANGE := 230.0
 const TURRET_RATE := 2.0
-const RAPID_MULT := 1.8
+const RAPID_MULT := 2.0
+const POWER_MAX := 8          # monster coins to charge the power-up
+const POWER_TIME := 12.0       # seconds of rapid fire once activated
+const POWER_BTN := Vector2(W - 54, 46)
+const POWER_R := 32.0
 const LAUNCH_RANGE := 270.0
 const LAUNCH_TIME := 1.2
-const FENCE_START := 8         # monsters that can wait at the fence before it gives
+const FENCE_START := 10         # monsters that can wait at the fence before it gives
 const WAVES := 10
 const FIRST_WAVE := 30.0
 const WAVE_BREAK := 16.0
@@ -62,12 +66,12 @@ const SPAWN_GAP := 1.1
 const BOT_SPEED := 150.0
 const BOT_CARRY := 4
 const CUT_TIME := 0.6
-const SCRAP_LIFE := 30.0
+const COIN_LIFE := 30.0
 const HP_GROWTH := 0.08
 const GIVE_UP := 260.0         # a chasing monster loses interest beyond this distance
 
 const ITEM_COLOR := {
-	"wood": Color("#b07a3e"), "stone": Color("#a3a8ad"), "scrap": Color("#6fb3e0"), "ammo": Color("#f2c14e"),
+	"wood": Color("#b07a3e"), "stone": Color("#a3a8ad"), "coin": Color("#ffd24a"), "ammo": Color("#f2c14e"),
 }
 const MONSTERS := {
 	"grunt": {"hp": 3, "speed": 42.0, "r": 14.0, "notice": 90.0, "hit": 1, "drop": 1, "color": Color("#e5534b")},
@@ -106,7 +110,9 @@ var wave_t := FIRST_WAVE
 var spawn_queue: Array = []
 var spawn_t := 0.0
 var fence_max := FENCE_START
-var rapid := false
+var wallet := 0               # monster coins in hand (not on the stack)
+var power := 0                # power meter, filled by every coin you pick up
+var power_t := 0.0            # rapid fire time left
 var kills := 0
 var built_count := 0
 var log_lines: Array = []
@@ -170,12 +176,11 @@ func reset() -> void:
 		_pad("machine", "AMMO", MACHINE_POS, {"wood": 8}),
 		_pad("turret_l", "TURRET", turrets[0].pos, {"wood": 5, "stone": 5}),
 		_pad("turret_r", "TURRET", turrets[2].pos, {"wood": 5, "stone": 5}),
-		_pad("launcher_l", "LAUNCHER", Vector2(110, 960), {"stone": 6, "scrap": 4}),
+		_pad("launcher_l", "LAUNCHER", Vector2(110, 960), {"stone": 6, "coin": 3}),
 		_pad("fence", "FENCE +4", Vector2(610, 1080), {"stone": 8}),
-		_pad("rapid", "RAPID FIRE", Vector2(110, 1090), {"scrap": 10, "stone": 6}),
 		_pad("backpack", "BIGGER PACK", Vector2(380, 1100), {"wood": 10}),
-		_pad("launcher_r", "LAUNCHER", Vector2(610, 960), {"stone": 8, "scrap": 8}),
-		_pad("cutter", "WOODCUTTER", Vector2(520, 1180), {"scrap": 12, "wood": 6}),
+		_pad("launcher_r", "LAUNCHER", Vector2(610, 960), {"stone": 6, "coin": 4}),
+		_pad("cutter", "WOODCUTTER", Vector2(110, 1090), {"coin": 5, "wood": 6}),
 	]
 	bots = []
 	monsters = []
@@ -186,7 +191,9 @@ func reset() -> void:
 	spawn_queue = []
 	spawn_t = 0.0
 	fence_max = FENCE_START
-	rapid = false
+	wallet = 0
+	power = 0
+	power_t = 0.0
 	kills = 0
 	built_count = 0
 	log_lines = []
@@ -214,6 +221,10 @@ func step(dt: float) -> void:
 	act_t -= dt
 	if act_t <= 0.0:
 		act_t = ACT_TIME if _try_act() else 0.0
+	_collect_coins()
+	power_t = maxf(power_t - dt, 0.0)
+	if autoplay and power >= POWER_MAX and monsters.size() >= 6:
+		activate_power()
 	_update_player_gun(dt)
 	_update_hearts(dt)
 	_update_nodes(dt)
@@ -301,7 +312,7 @@ func _try_act() -> bool:
 	for pad in _visible_pads():
 		if _near(p, pad.pos, PAD_HALF + 10.0):
 			for kind in pad.cost:
-				if _remaining(pad, kind) > 0 and _take(kind):
+				if _remaining(pad, kind) > 0 and _take_item(kind):
 					pad.paid[kind] = int(pad.paid.get(kind, 0)) + 1
 					_fly(p, pad.pos, kind)
 					if _pad_complete(pad):
@@ -327,15 +338,30 @@ func _try_act() -> bool:
 			stack.append("ammo")
 			_fly(OUTPUT_POS, p, "ammo")
 			return true
-	if stack.size() < capacity:
-		for i in pickups.size():
-			var k: Dictionary = pickups[i]
-			if _near(p, k.pos, REACH) and _useful(k.kind):
-				stack.append(k.kind)
-				_fly(k.pos, p, k.kind)
-				pickups.remove_at(i)
-				return true
 	return false
+
+
+## Coins are scooped up as you walk over them, straight into your wallet and the power meter.
+func _collect_coins() -> void:
+	var i := 0
+	while i < pickups.size():
+		var k: Dictionary = pickups[i]
+		if _near(player.pos, k.pos, REACH):
+			wallet += 1
+			power = mini(power + 1, POWER_MAX)
+			_fly(k.pos, POWER_BTN, "coin")
+			pickups.remove_at(i)
+		else:
+			i += 1
+
+
+## Tapping the full power meter: rapid fire for every turret.
+func activate_power() -> void:
+	if power < POWER_MAX or power_t > 0.0 or state != "play":
+		return
+	power = 0
+	power_t = POWER_TIME
+	_log("power activated at %ds (wave %d)" % [int(time), wave])
 
 
 func _complete(pad: Dictionary) -> void:
@@ -354,8 +380,6 @@ func _complete(pad: Dictionary) -> void:
 			fence_max += 4
 		"launcher_l", "launcher_r":
 			launchers.append({"pos": pad.pos, "cool": 0.0})
-		"rapid":
-			rapid = true
 		"backpack":
 			capacity += 8
 		"cutter":
@@ -622,7 +646,7 @@ func _lose(reason: String) -> void:
 
 
 func _update_turrets(dt: float) -> void:
-	var rate := TURRET_RATE * (RAPID_MULT if rapid else 1.0)
+	var rate := TURRET_RATE * (RAPID_MULT if power_t > 0.0 else 1.0)
 	for t in turrets:
 		t.cool = maxf(t.cool - dt, -dt)
 		t.flash = maxf(t.flash - dt, 0.0)
@@ -653,9 +677,8 @@ func _hit(index: int) -> void:
 	if m.hp > 0:
 		return
 	kills += 1
-	if _scrap_wanted_later():
-		for k in int(MONSTERS[m.type].drop):
-			pickups.append({"kind": "scrap", "life": SCRAP_LIFE,
+	for k in int(MONSTERS[m.type].drop):
+		pickups.append({"kind": "coin", "life": COIN_LIFE,
 				"pos": m.pos + Vector2(rng.randf_range(-16, 16), rng.randf_range(-16, 16))})
 	monsters.remove_at(index)
 
@@ -816,11 +839,17 @@ func _nearest_safe_node(p: Vector2, kind: String) -> Dictionary:
 	return best
 
 
-func _scrap_wanted_later() -> bool:
-	for p in pads:
-		if not p.done and _remaining(p, "scrap") > 0:
-			return true
-	return false
+func _have(kind: String) -> int:
+	return wallet if kind == "coin" else _count(kind)
+
+
+func _take_item(kind: String) -> bool:
+	if kind == "coin":
+		if wallet <= 0:
+			return false
+		wallet -= 1
+		return true
+	return _take(kind)
 
 
 func _ammo_short() -> bool:
@@ -833,11 +862,19 @@ func _advice() -> Vector2:
 	var space := capacity - stack.size()
 	# outside and in trouble: get back in through the door
 	if not _inside(p):
-		var threat := false
+		var close := {}
 		for m in monsters:
-			if m.chase and (m.pos as Vector2).distance_to(p) < 110.0:
-				threat = true
-		if hearts <= 2 or (threat and (bag <= 0 or hearts <= 3)):
+			if m.chase and (close.is_empty() or (m.pos as Vector2).distance_to(p) < (close.pos as Vector2).distance_to(p)):
+				close = m
+		if not close.is_empty() and (close.pos as Vector2).distance_to(p) < 200.0:
+			# never lead a chaser to the door: fight it if you have shots, else run it off until it gives up
+			var away: Vector2 = (p - (close.pos as Vector2)).normalized()
+			if bag > 0 and hearts > 2:
+				return p + away * 40.0
+			var flee := p + away * 140.0
+			flee.y = minf(flee.y, FENCE_Y - 60.0)
+			return flee
+		if hearts <= 2:
 			return DOOR_IN + Vector2(0, 60)
 	if _count("ammo") > 0:
 		var t := _neediest_turret()
@@ -848,23 +885,27 @@ func _advice() -> Vector2:
 	for pad in _visible_pads():  # already at a pad that takes something you carry: finish unloading
 		if _near(p, pad.pos, PAD_HALF + 10.0):
 			for kind in pad.cost:
-				if _remaining(pad, kind) > 0 and _count(kind) > 0:
+				if _remaining(pad, kind) > 0 and _have(kind) > 0:
 					return _stand(pad.pos)
 	var want := _want_kind()
 	var can_gather := space > 0 and (not _inside(p) or _outside_ok())
-	if space == 0 or want == "" or not can_gather or _count(want) == 0 and want == "scrap":  # fill up first, then deliver
+	var coin_ready := false  # a pad that takes coins you already hold
+	for pad in _visible_pads():
+		if _remaining(pad, "coin") > 0 and wallet > 0 and _remaining(pad, "coin") <= wallet and not _stack_needed_by(pad):
+			coin_ready = true
+	if space == 0 or want == "" or not can_gather or coin_ready:  # fill up first, then deliver
 		for pad in _visible_pads():
 			for kind in pad.cost:
-				if _remaining(pad, kind) > 0 and _count(kind) > 0:
+				if _remaining(pad, kind) > 0 and _have(kind) > 0:
 					return _stand(pad.pos)
 	if machine.built and _count("wood") > 0 and machine.input < MACHINE_IN_MAX and (_ammo_short() or _need("wood") == 0) \
 			and (space == 0 or want != "wood" or not can_gather or _near(p, MACHINE_POS, REACH)):
 		return MACHINE_POS + Vector2(0, 40)
-	if can_gather:
-		if _useful("scrap"):
+	if not _inside(p) or _outside_ok():
+		if space >= 0:
 			var best := {}
 			for k in pickups:
-				if k.kind == "scrap" and _safe(k.pos) and (best.is_empty() or p.distance_to(k.pos) < p.distance_to(best.pos)):
+				if k.kind == "coin" and _safe(k.pos) and (_need("coin") > wallet or p.distance_to(k.pos) < 180.0) and (best.is_empty() or p.distance_to(k.pos) < p.distance_to(best.pos)):
 					best = k
 			if not best.is_empty():
 				return best.pos
@@ -880,6 +921,14 @@ func _stand(at: Vector2) -> Vector2:
 	if absf(at.y - (FENCE_Y + FENCE_H * 0.5)) < 30.0:
 		return at + Vector2(0, 40)
 	return at
+
+
+## Does the pad still need something from the stack (not coins)?
+func _stack_needed_by(pad: Dictionary) -> bool:
+	for kind in pad.cost:
+		if kind != "coin" and _remaining(pad, kind) > _count(kind):
+			return true
+	return false
 
 
 ## Gathering means going out: not while monsters wait at the door, unless your bag is well stocked.
@@ -916,6 +965,9 @@ func _input(event: InputEvent) -> void:
 			if state != "play":
 				reset()
 				return
+			if p.distance_to(POWER_BTN) <= POWER_R + 10.0:
+				activate_power()
+				return
 			joy_active = true
 			joy_origin = p
 			joy_vec = Vector2.ZERO
@@ -940,6 +992,11 @@ func _text(s: String, centre: Vector2, size: int, col: Color) -> void:
 
 func _item(pos: Vector2, kind: String, s: float) -> void:
 	var c: Color = ITEM_COLOR[kind]
+	if kind == "coin":
+		draw_circle(pos, s * 0.9, c)
+		draw_circle(pos, s * 0.9, c.darkened(0.45), false, 2.0)
+		draw_circle(pos, s * 0.35, c.lightened(0.4))
+		return
 	draw_rect(Rect2(pos - Vector2(s, s * 0.8), Vector2(s * 2, s * 1.6)), c)
 	draw_rect(Rect2(pos - Vector2(s, s * 0.8), Vector2(s * 2, s * 1.6)), c.darkened(0.45), false, 2.0)
 
@@ -1210,8 +1267,30 @@ func _draw_hud() -> void:
 		draw_circle(hp + Vector2(4, 0), 5.0, c)
 		draw_colored_polygon(PackedVector2Array([hp + Vector2(-9, 1), hp + Vector2(9, 1), hp + Vector2(0, 11)]), c)
 	_text("BAG %d" % bag, Vector2(W * 0.5 + 136, 64), 14, Color("#7af1eb"))
-	_text("%d/%d" % [stack.size(), capacity], Vector2(W - 50, 30), 20, Color("#f2e4cb"))
-	_text("CARRY", Vector2(W - 50, 62), 13, Color("#a9a395"))
+	_draw_power()
+
+
+## The power meter: fills with every monster coin; full, it pulses and a tap fires it.
+func _draw_power() -> void:
+	var c := POWER_BTN
+	var full := power >= POWER_MAX
+	var active := power_t > 0.0
+	var pulse := 0.5 + 0.5 * sin(time * 7.0)
+	draw_circle(c, POWER_R, Color("#22262c"))
+	var frac := power_t / POWER_TIME if active else float(power) / POWER_MAX
+	var col := Color("#7af1eb") if active else Color("#ffd24a")
+	if frac > 0.0:
+		draw_arc(c, POWER_R - 4.0, -PI * 0.5, -PI * 0.5 + TAU * frac, 48, col, 7.0)
+	if full and not active:
+		draw_circle(c, POWER_R - 9.0, Color(1.0, 0.82, 0.29, 0.25 + 0.35 * pulse))
+		draw_arc(c, POWER_R + 4.0 + pulse * 4.0, 0, TAU, 40, Color(1.0, 0.82, 0.29, 0.8), 3.0)
+	var bolt := PackedVector2Array([c + Vector2(3, -15), c + Vector2(-8, 2), c + Vector2(-1, 2), c + Vector2(-4, 15),
+		c + Vector2(8, -3), c + Vector2(1, -3)])
+	draw_colored_polygon(bolt, col if (full or active) else Color("#6b6f76"))
+	_text("TAP!" if full and not active else ("%d" % wallet), c + Vector2(-58, 0), 15,
+		Color("#ffd24a") if full and not active else Color("#f2e4cb"))
+	if not full and not active:
+		draw_circle(c + Vector2(-80, 0), 6.0, Color("#ffd24a"))
 
 
 func _draw_end() -> void:

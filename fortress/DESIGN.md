@@ -18,7 +18,7 @@ Everything is drawn with basic shapes until the gameplay is right.
   - on a build pad: the materials it still needs fly off your stack into it;
   - at the ammo machine: your wood goes in; at its output pile, boxes come out to you;
   - next to a turret (from inside): your ammo boxes load into it;
-  - over scrap on the ground: you pick it up.
+  - over monster coins on the ground: they go straight into your wallet (no stack space).
 - Your own gun fires by itself at the nearest monster in close range (130 px) while your bag has shots.
 - A small arrow next to you points at the most useful thing to do, routed through the door, and it
   won't send you out while monsters are gathered at the door.
@@ -27,16 +27,17 @@ Everything is drawn with basic shapes until the gameplay is right.
 
 | | Holds | Filled at | Used for |
 |---|---|---|---|
-| **Stack** (on your back) | 10 items (18 with Bigger pack) | Trees, rocks, scrap, machine output | Building, feeding the machine, carrying boxes to turrets |
+| **Stack** (on your back) | 10 items (18 with Bigger pack) | Trees, rocks, machine output | Building, feeding the machine, carrying boxes to turrets |
 | **Ammo bag** (your gun) | 30 shots, separate from the stack | Machine output: the bag fills first, 1 box = 10 shots | Your gun |
+| **Wallet** | unlimited, separate from the stack | Monster coins you walk over | Launchers, woodcutter |
 
 ## Materials
 
 | Item | Shape | From | For |
 |---|---|---|---|
 | Wood | brown square | Trees on the left, outside (5 per tree, regrow in 7 s) | Ammo, turrets, pack, woodcutter |
-| Stone | grey square | Rocks on the right, outside | Turrets, launchers, fence, rapid fire |
-| Scrap | blue square | Dropped by monsters in the lanes (1, or 4 from a brute); fades after 30 s | Launchers and upgrades |
+| Stone | grey square | Rocks on the right, outside | Turrets, launchers, fence |
+| Monster coin | gold circle | Dropped by monsters in the lanes (1, or 4 from a brute); fades after 30 s | Wallet: launchers and woodcutter. Every coin also charges the power meter |
 | Ammo box | yellow square | The ammo machine: 1 wood → 2 boxes | Turrets (1 box = 10 shots), your bag |
 
 You only pick up what something currently needs.
@@ -57,12 +58,17 @@ Build pads, two open at a time:
 | 1 | Ammo machine | 8 wood | Wood in, boxes out onto its pile. You still have to distribute them |
 | 2 | Left turret | 5 wood, 5 stone | Tower in the fence on the left lane |
 | 3 | Right turret | 5 wood, 5 stone | Tower on the right lane |
-| 4 | Launcher (left) | 6 stone, 4 scrap | Takes boxes from the machine pile and lobs them to turrets in its reach (left and centre) |
+| 4 | Launcher (left) | 6 stone, 3 coins | Takes boxes from the machine pile and lobs them to turrets in its reach (left and centre) |
 | 5 | Fence +4 | 8 stone | Four more monsters can wait at the fence |
-| 6 | Rapid fire | 10 scrap, 6 stone | Turrets fire 1.8× faster |
-| 7 | Bigger pack | 10 wood | Stack holds 18 |
-| 8 | Launcher (right) | 8 stone, 8 scrap | Reaches the centre and right turrets |
-| 9 | Woodcutter | 12 scrap, 6 wood | Helper: walks out through the door, chops trees, feeds the machine. Monsters ignore it |
+| 6 | Bigger pack | 10 wood | Stack holds 18 |
+| 7 | Launcher (right) | 6 stone, 4 coins | Reaches the centre and right turrets |
+| 8 | Woodcutter | 5 coins, 6 wood | Helper: walks out through the door, chops trees, feeds the machine. Monsters ignore it |
+
+## Power-up
+
+Power-ups are not buildings. The **power meter** in the top-right corner fills by one for every
+monster coin you pick up (8 to charge, coins are not spent). When it is full it pulses: **tap it** for
+**12 s of rapid fire** (all turrets fire twice as fast). The meter then empties and starts again.
 
 ## Monsters
 
@@ -71,7 +77,7 @@ Turrets and your gun can still shoot them while they wait.
 
 | Monster | Shape | HP | Speed | Notices you within | Hit | Scrap | From wave |
 |---|---|---:|---:|---:|---:|---:|---:|
-| Grunt | red circle | 3 | slow | 90 px | 1 heart | 1 | 1 |
+| Grunt | red circle | 3 | slow | 90 px | 1 heart | 1 coin | 1 |
 | Runner | orange triangle | 2 | fast | 130 px | 1 heart | 1 | 3 |
 | Brute | dark red square | 14 | very slow | 70 px | 2 hearts | 4 | 5 |
 
@@ -81,7 +87,7 @@ more HP every wave.
 
 ## How you lose
 
-1. **The fence gives way**: the number of monsters waiting at it reaches its capacity (8, 12 with
+1. **The fence gives way**: the number of monsters waiting at it reaches its capacity (10, 14 with
    the upgrade). Shown as the FENCE pips in the top bar.
 2. **You are overrun**: you lose all 6 hearts to touches. Hearts come back while you are inside
    (one every 4 s).
@@ -98,8 +104,9 @@ runners from wave 3 and brutes from wave 5, one every 1.1 s in a random lane.
 
 - Everything you need is outside, and outside is where the monsters are. Each trip is a choice:
   how full is your bag, are monsters waiting by the door, is the scrap in a lane worth the risk?
-- Ammo has to be shuttled by hand until launchers take over, and launchers cost scrap, which
-  means going into the lanes.
+- Ammo has to be shuttled by hand until launchers take over, and launchers cost coins, which
+  means going into the lanes. Coins also charge the power-up: save it for the heavy waves.
+- A chaser on your tail means you can't go home: shoot it, or lead it away until it gives up.
 - Monsters piling up at the fence are a slow clock: feed the turrets or the fence gives.
 
 ## Balance check
@@ -110,10 +117,11 @@ never moves; `seed` changes the lanes monsters spawn in. Four seeds each:
 
 | Player | Wins |
 |---|---|
-| Bot, full speed | 3 of 4 (usually 2–3 hearts left) |
-| Bot, 70% speed | 3 of 4 |
-| Bot, 50% speed | 2 of 4 |
+| Bot, full speed | 4 of 4, all hearts left, 7–8 of 8 pads built |
+| Bot, 70% speed | 2 of 4 |
+| Bot, 50% speed | 0 of 4 (overrun in waves 9–10) |
 | Does nothing | 0 of 4 (fence gives in wave 3) |
 
-The bot rarely builds past the first five pads; scrap is risky to collect. If the late game
-feels thin, scrap costs are the first lever.
+The bot never dodges, so a person should do better than its pace suggests. The bot (and the guide
+arrow) fights a close chaser if it has shots and otherwise leads it away before heading for the
+door, so it never loses by being followed in.
