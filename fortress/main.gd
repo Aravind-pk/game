@@ -11,6 +11,8 @@ extends Node2D
 ##   autoplay                the built-in bot plays (screenshots, demos)
 ##   warp=120                fast-forward this many seconds before showing anything
 ##   shot=/path.png shot_time=2
+##   look_at=x,y | player | bot  dist=12   (screenshots: aim and zoom the camera)
+##   vault_shot=/path.png    save a frame mid-climb and quit;  ko=0.5  start knocked out
 
 # ---------------------------------------------------------------- layout (design pixels)
 const W := 1200.0                # the world; the camera follows you around it
@@ -22,7 +24,7 @@ const FENCE_Y := 1100.0
 const FENCE_H := 18.0
 const LANES := [380.0, 600.0, 820.0]   # where each path meets the fence, under its turret
 const TOWER_HALF := 44.0          # you can't climb the fence within this of a tower
-const VAULT_TIME := 0.42
+const VAULT_TIME := 0.6
 const MACHINE_POS := Vector2(600, 1450)
 const OUTPUT_POS := Vector2(600, 1350)
 const PAD_HALF := 34.0
@@ -57,20 +59,27 @@ const TURRET_BOXES := 5
 const TURRET_RANGE := 230.0
 const TURRET_RATE := 2.0
 const RAPID_MULT := 2.0
-const POWER_MAX := 12          # monster coins to charge the power-up
+const POWER_MAX := 24          # energy cap: every monster coin you pick up adds one
 const POWER_TIME := 12.0       # seconds of rapid fire once activated
-const POWER_BTN := Vector2(SW - 54, 46)
-const POWER_R := 32.0
+const POWER_BTN := Vector2(SW - 50, 112)   # the energy meter (coins fly here)
+const POWER_R := 27.0
+const SPRINT_TIME := 10.0
+const SPRINT_MULT := 1.6
+const FURY_TIME := 10.0
+const RESPAWN_TIME := 6.0      # down this long after losing your last heart, then back inside
 const FREEZE_TIME := 8.0
 const FREEZE_MULT := 0.35
-const BOMB_DAMAGE := 8.0
+const BOMB_DAMAGE := 6.0
 const SUPPLY_BOXES := 2
-## Powers offered when the meter is full; tap the meter, then one of these.
+## Powers, always on the right edge: three for your hero, four for the fort. Each costs energy.
 const POWERS := [
-	{"id": "rapid", "label": "RAPID", "color": Color("#7af1eb")},
-	{"id": "freeze", "label": "FREEZE", "color": Color("#9fd3ff")},
-	{"id": "bomb", "label": "BOMB", "color": Color("#ff7b5e")},
-	{"id": "supply", "label": "SUPPLY", "color": Color("#f2c14e")},
+	{"id": "heal", "group": "hero", "label": "HEAL", "cost": 6, "color": Color("#6cf08a")},
+	{"id": "sprint", "group": "hero", "label": "SPRINT", "cost": 6, "color": Color("#ffe066")},
+	{"id": "fury", "group": "hero", "label": "FURY", "cost": 8, "color": Color("#ff7b5e")},
+	{"id": "rapid", "group": "fort", "label": "RAPID", "cost": 14, "color": Color("#7af1eb")},
+	{"id": "freeze", "group": "fort", "label": "FREEZE", "cost": 14, "color": Color("#9fd3ff")},
+	{"id": "bomb", "group": "fort", "label": "BOMB", "cost": 20, "color": Color("#ff9a4e")},
+	{"id": "supply", "group": "fort", "label": "SUPPLY", "cost": 12, "color": Color("#f2c14e")},
 ]
 const UPGRADE_DWELL := 0.6     # stand still this long on an upgrade pad to buy it
 const UPGRADE_R := 20.0
@@ -93,7 +102,7 @@ const BOT_SPEED := 150.0
 const BOT_CARRY := 4
 const CUT_TIME := 0.6
 const COIN_LIFE := 30.0
-const HP_GROWTH := 0.21
+const HP_GROWTH := 0.23
 const GIVE_UP := 260.0         # a chasing monster loses interest beyond this distance
 
 const ITEM_COLOR := {
@@ -140,7 +149,10 @@ var wallet := 0               # monster coins in hand (not on the stack)
 var power := 0                # power meter, filled by every coin you pick up
 var power_t := 0.0            # rapid fire time left
 var freeze_t := 0.0
-var power_menu := false
+var sprint_t := 0.0
+var fury_t := 0.0
+var down_t := 0.0              # knocked out: counts down to the respawn
+var power_flash := {}          # power id -> time since it was used (HUD feedback)
 var dwell_key := ""
 var dwell_t := 0.0
 var kills := 0
@@ -175,9 +187,11 @@ func _ready() -> void:
 		var t := float(args.warp)
 		while time < t and state == "play":
 			step(1.0 / 30.0)
-	if args.has("menu"):  # screenshots: the meter full and its power choice open
+	if args.has("ko"):  # screenshots: knocked out just now
+		_knock_out()
+		down_t = RESPAWN_TIME - float(args.ko)
+	if args.has("menu"):  # screenshots: a full energy meter
 		power = POWER_MAX
-		power_menu = true
 		autoplay = false
 	if args.has("shot"):
 		get_tree().create_timer(float(args.get("shot_time", "1.5"))).timeout.connect(_take_shot)
@@ -236,7 +250,10 @@ func reset() -> void:
 	power = 0
 	power_t = 0.0
 	freeze_t = 0.0
-	power_menu = false
+	sprint_t = 0.0
+	fury_t = 0.0
+	down_t = 0.0
+	power_flash = {}
 	dwell_key = ""
 	dwell_t = 0.0
 	kills = 0
@@ -261,19 +278,31 @@ func step(dt: float) -> void:
 	if state != "play":
 		return
 	time += dt
-	_move_player(dt)
-	_harvest(dt)
-	act_t -= dt
-	if act_t <= 0.0:
-		act_t = ACT_TIME if _try_act() else 0.0
-	_collect_coins()
+	for id in power_flash:
+		power_flash[id] += dt
+	if down_t > 0.0:  # knocked out: wait, then come back inside
+		down_t -= dt
+		if down_t <= 0.0:
+			down_t = 0.0
+			player.pos = Vector2(600, 1250)
+			hearts = HEARTS
+			hurt_t = 1.5
+	else:
+		_move_player(dt)
+		_harvest(dt)
+		act_t -= dt
+		if act_t <= 0.0:
+			act_t = ACT_TIME if _try_act() else 0.0
+		_collect_coins()
+		_update_upgrades(dt)
+		_update_player_gun(dt)
+		_update_hearts(dt)
 	power_t = maxf(power_t - dt, 0.0)
 	freeze_t = maxf(freeze_t - dt, 0.0)
-	_update_upgrades(dt)
-	if autoplay and power >= POWER_MAX and monsters.size() >= 6:
-		activate_power("bomb" if monsters.size() >= 12 else ("supply" if _total_free_boxes() >= 6 else "rapid"))
-	_update_player_gun(dt)
-	_update_hearts(dt)
+	sprint_t = maxf(sprint_t - dt, 0.0)
+	fury_t = maxf(fury_t - dt, 0.0)
+	if autoplay:
+		_bot_powers()
 	_update_nodes(dt)
 	_update_machine(dt)
 	_update_launchers(dt)
@@ -304,6 +333,8 @@ func _crossing_x(from: Vector2, to: Vector2) -> float:
 	var k := clampf((FENCE_Y - from.y) / (to.y - from.y), 0.0, 1.0) if absf(to.y - from.y) > 0.1 else 0.0
 	if absf(from.y - (FENCE_Y + FENCE_H * 0.5)) < 70.0:  # already at the fence: climb right here
 		k = 0.0
+	if _inside(from):  # going out: walk along the inside and climb out under where you are going
+		k = 1.0
 	var base := clampf(lerpf(from.x, to.x, k), 40.0, W - 40.0)
 	var fallback := -1.0
 	for step in 40:
@@ -412,7 +443,8 @@ func _move_player(dt: float) -> void:
 	if dir.length() > 0.05:
 		player.face = dir.normalized()
 	var pace := float(args.get("pace", "1")) if autoplay else 1.0  # slower bot = a human-like player
-	_walk(player, dir.limit_length(1.0) * PLAYER_SPEED * pace * dt, PLAYER_R, dt)
+	var speed := PLAYER_SPEED * (SPRINT_MULT if sprint_t > 0.0 else 1.0)
+	_walk(player, dir.limit_length(1.0) * speed * pace * dt, PLAYER_R, dt)
 
 
 func _harvest(dt: float) -> void:
@@ -482,13 +514,24 @@ func _collect_coins() -> void:
 			i += 1
 
 
-## Fires one of the powers once the meter is full.
-func activate_power(id: String = "rapid") -> void:
-	if power < POWER_MAX or state != "play":
+## Uses a power if there is energy for it.
+func activate_power(id: String) -> void:
+	var def := _power_def(id)
+	if def.is_empty() or power < int(def.cost) or state != "play" or (def.group == "hero" and down_t > 0.0):
 		return
-	power = 0
-	power_menu = false
+	power -= int(def.cost)
+	power_flash[id] = 0.0
 	match id:
+		"heal":
+			hearts = HEARTS
+			for k in 8:
+				var a := TAU * k / 8.0
+				fx.append({"uid": _uid(), "from": player.pos, "to": player.pos + Vector2(cos(a), sin(a)) * 50.0, "t": 0.0, "dur": 0.5, "kind": "heal"})
+		"sprint":
+			sprint_t = SPRINT_TIME
+		"fury":
+			fury_t = FURY_TIME
+			bag = maxi(bag, BAG_MAX / 2)
 		"rapid":
 			power_t = POWER_TIME
 		"freeze":
@@ -509,8 +552,42 @@ func activate_power(id: String = "rapid") -> void:
 	_log("power %s at %ds (wave %d)" % [id, int(time), wave])
 
 
+func _power_def(id: String) -> Dictionary:
+	for d in POWERS:
+		if d.id == id:
+			return d
+	return {}
+
+
+## Time left on a power's effect, and its full length (0 for instant ones).
+func power_timer(id: String) -> Vector2:
+	match id:
+		"sprint":
+			return Vector2(sprint_t, SPRINT_TIME)
+		"fury":
+			return Vector2(fury_t, FURY_TIME)
+		"rapid":
+			return Vector2(power_t, POWER_TIME)
+		"freeze":
+			return Vector2(freeze_t, FREEZE_TIME)
+	return Vector2.ZERO
+
+
+## The bot's (and demo's) use of powers.
+func _bot_powers() -> void:
+	if down_t <= 0.0 and hearts <= 2 and not _inside(player.pos) and power >= 6:
+		activate_power("heal")
+	elif monsters.size() >= 12 and power >= 20:
+		activate_power("bomb")
+	elif monsters.size() >= 6 and _total_free_boxes() >= 6 and power >= 12:
+		activate_power("supply")
+	elif monsters.size() >= 6 and power >= POWER_MAX:
+		activate_power("rapid")
+
+
+## Where power button `k` sits: hero powers first, then a gap, then the fort's.
 func _power_button(k: int) -> Vector2:
-	return POWER_BTN + Vector2(0, 78 + k * 66)
+	return Vector2(SW - 50, 236 + k * 72 + (34 if k >= 3 else 0))
 
 
 func _complete(pad: Dictionary) -> void:
@@ -554,9 +631,9 @@ func _update_player_gun(dt: float) -> void:
 	if best < 0:
 		return
 	bag -= 1
-	gun_cool += 1.0 / GUN_RATE
-	shots.append({"uid": _uid(), "a": player.pos, "b": monsters[best].pos, "t": 0.08, "player": true})
-	_hit(best)
+	gun_cool += 1.0 / (GUN_RATE * (3.0 if fury_t > 0.0 else 1.0))
+	shots.append({"uid": _uid(), "a": player.pos, "b": monsters[best].pos, "t": 0.08, "player": true, "fury": fury_t > 0.0})
+	_hit(best, 2.0 if fury_t > 0.0 else 1.0)
 
 
 ## Upgrade pads under each built turret: level 2, then a choice of three evolutions.
@@ -777,7 +854,7 @@ func _spawn(type: String) -> void:
 	var off := rng.randf_range(-20.0, 20.0)
 	monsters.append({"uid": _uid(), "type": type, "pos": _path_point(paths[lane], 0.0) + Vector2(off, 0), "lane": lane, "s": 0.0, "off": off,
 		"hp": float(hp), "max": float(hp), "slow_t": 0.0, "speed": d.speed * rng.randf_range(0.92, 1.08), "r": d.r, "chase": false,
-		"waiting": false, "hit_cool": 0.0})
+		"waiting": false, "hit_cool": 0.0, "atk": 0.0})
 
 
 func _speed_mult(m: Dictionary) -> float:
@@ -799,10 +876,11 @@ func _update_monsters(dt: float) -> void:
 		var mp: Vector2 = m.pos
 		var to_player := mp.distance_to(p)
 		# notice you when you are outside and close; lose interest once you are far away
-		if not m.chase and not _inside(p) and to_player <= d.notice:
+		m.atk = maxf(float(m.get("atk", 0.0)) - dt, 0.0)
+		if not m.chase and not _inside(p) and down_t <= 0.0 and to_player <= d.notice:
 			m.chase = true
 			m.waiting = false
-		elif m.chase and (to_player > GIVE_UP or _inside(p)):  # gave up, or you got over the fence
+		elif m.chase and (to_player > GIVE_UP or _inside(p) or down_t > 0.0):  # gave up, you got over the fence, or you are down
 			m.chase = false
 			m.s = _nearest_s(paths[m.lane], mp)
 		m.hit_cool = maxf(m.hit_cool - dt, 0.0)
@@ -810,16 +888,18 @@ func _update_monsters(dt: float) -> void:
 		if m.chase:
 			var goal := _route(mp, p)
 			m.pos = _slide(mp, (goal - mp).normalized() * minf(goal.distance_to(mp), m.speed * _speed_mult(m) * dt), m.r)
-			if (m.pos as Vector2).distance_to(p) <= m.r + PLAYER_R and m.hit_cool <= 0.0 and hurt_t <= 0.0:
+			if (m.pos as Vector2).distance_to(p) <= m.r + PLAYER_R + 4.0 and m.hit_cool <= 0.0 and hurt_t <= 0.0 \
+					and not player.has("vault"):
 				m.hit_cool = 1.0
+				m.atk = 0.3
 				hurt_t = HURT_GRACE
 				hearts -= int(d.hit)
+				player.pos = _slide(p, (p - mp).normalized() * 22.0, PLAYER_R)  # knocked back
 				for k in 5:
 					fx.append({"uid": _uid(), "from": p, "to": p + Vector2(rng.randf_range(-40, 40), rng.randf_range(-40, 10)),
 						"t": 0.0, "dur": 0.35, "kind": "hurt"})
 				if hearts <= 0:
-					hearts = 0
-					_lose("You were overrun")
+					_knock_out()
 					return
 			continue
 		# march: along the path to the fence and wait there (back onto the path first after a chase)
@@ -857,6 +937,22 @@ func _spread_waiting() -> void:
 				var push := (min_d - absf(dx)) * 0.5 * (1.0 if dx >= 0.0 else -1.0)
 				a.pos.x = clampf(a.pos.x - push, 20.0, W - 20.0)
 				b.pos.x = clampf(b.pos.x + push, 20.0, W - 20.0)
+
+
+## Your last heart is gone: you drop what you carry and are out for a few seconds.
+func _knock_out() -> void:
+	hearts = 0
+	down_t = RESPAWN_TIME
+	player.erase("vault")
+	for kind in stack:
+		fx.append({"uid": _uid(), "from": player.pos, "to": player.pos + Vector2(rng.randf_range(-60, 60), rng.randf_range(-50, 30)),
+			"t": 0.0, "dur": 0.5, "kind": kind})
+	stack.clear()
+	for m in monsters:
+		if m.chase:
+			m.chase = false
+			m.s = _nearest_s(paths[m.lane], m.pos)
+	_log("knocked out at %ds (wave %d)" % [int(time), wave])
 
 
 func _lose(reason: String) -> void:
@@ -1198,14 +1294,10 @@ func _input(event: InputEvent) -> void:
 			if state != "play":
 				reset()
 				return
-			if p.distance_to(POWER_BTN) <= POWER_R + 10.0:
-				power_menu = power >= POWER_MAX and not power_menu
-				return
-			if power_menu:
-				for k in POWERS.size():
-					if p.distance_to(_power_button(k)) <= 30.0:
-						activate_power(POWERS[k].id)
-						return
+			for k in POWERS.size():
+				if p.distance_to(_power_button(k)) <= POWER_R + 6.0:
+					activate_power(POWERS[k].id)
+					return
 			joy_active = true
 			joy_origin = p
 			joy_vec = Vector2.ZERO
@@ -1331,43 +1423,68 @@ func _heart(hp: Vector2, c: Color) -> void:
 
 
 ## The power meter: fills with every monster coin; full, it pulses and a tap fires it.
+## The energy meter and the power column on the right edge. Lit buttons can be tapped now; a ring
+## shows a power's time left while it runs.
 func _draw_power() -> void:
-	var c := POWER_BTN
-	var full := power >= POWER_MAX
-	var active := power_t > 0.0
-	var pulse := 0.5 + 0.5 * sin(time * 7.0)
-	var gold := Color("#ffc23a")
-	if full and not active:  # ready: a pulsing halo
-		draw_circle(c, POWER_R + 8.0 + pulse * 5.0, Color(1.0, 0.76, 0.23, 0.25))
-	draw_circle(c, POWER_R + 4.0, Color("#241d2c"))
-	draw_circle(c, POWER_R, Color("#3a3150"))
-	var frac := power_t / POWER_TIME if active else float(power) / POWER_MAX
-	var col := Color("#7af1eb") if active else gold
-	if frac > 0.0:
-		draw_arc(c, POWER_R - 5.0, -PI * 0.5, -PI * 0.5 + TAU * frac, 48, col, 9.0)
-	if full and not active:
-		draw_circle(c, POWER_R - 10.0, gold.lerp(Color.WHITE, 0.2 * pulse))
-	var bolt := PackedVector2Array([c + Vector2(3, -15), c + Vector2(-8, 2), c + Vector2(-1, 2), c + Vector2(-4, 15),
-		c + Vector2(8, -3), c + Vector2(1, -3)])
-	draw_colored_polygon(bolt, Color("#241d2c") if full and not active else (col if active else Color("#8a83a0")))
-	if full and not active:
-		_otext("TAP!", c + Vector2(0, POWER_R + 18), 18, gold)
-	if freeze_t > 0.0:
-		draw_arc(c, POWER_R + 8.0, -PI * 0.5, -PI * 0.5 + TAU * freeze_t / FREEZE_TIME, 40, Color("#9fd3ff"), 4.0)
-	if power_menu:
-		for k in POWERS.size():
-			var b := _power_button(k)
-			var pc: Color = POWERS[k].color
-			draw_circle(b, 31.0, Color("#241d2c"))
-			draw_circle(b, 28.0, Color("#3a3150"))
-			draw_arc(b, 28.0, 0, TAU, 32, pc, 3.0)
-			_power_icon(POWERS[k].id, b, pc)
-			_panel(Rect2(b + Vector2(-122, -16), Vector2(82, 32)), Color(0.09, 0.07, 0.14, 0.7))
-			_otext(POWERS[k].label, b + Vector2(-81, 0), 18, pc)
+	var dark := Color(0.09, 0.07, 0.14, 0.62)
+	var ink := Color("#241d2c")
+	# energy meter
+	var mc := POWER_BTN
+	var frac := float(power) / POWER_MAX
+	_panel(Rect2(mc + Vector2(-38, -40), Vector2(76, 96)), dark)
+	draw_circle(mc + Vector2(0, -6), 25.0, ink)
+	draw_arc(mc + Vector2(0, -6), 20.0, -PI * 0.5, -PI * 0.5 + TAU * frac, 40, Color("#ffc23a"), 8.0)
+	var c := mc + Vector2(0, -6)
+	draw_colored_polygon(PackedVector2Array([c + Vector2(3, -12), c + Vector2(-7, 2), c + Vector2(-1, 2), c + Vector2(-3, 12),
+		c + Vector2(7, -3), c + Vector2(1, -3)]), Color("#ffc23a"))
+	_otext("%d" % power, mc + Vector2(0, 38), 20, Color.WHITE)
+	# the buttons
+	for k in POWERS.size():
+		var def: Dictionary = POWERS[k]
+		var b := _power_button(k)
+		if k == 0 or k == 3:
+			_otext("HERO" if k == 0 else "FORT", b + Vector2(0, -42), 15, Color("#d6d0e6"))
+		var pc: Color = def.color
+		var ready: bool = power >= int(def.cost) and state == "play" and not (def.group == "hero" and down_t > 0.0)
+		var tm := power_timer(def.id)
+		var running := tm.x > 0.0
+		var pulse := 0.5 + 0.5 * sin(time * 6.0 + k)
+		if ready:
+			draw_circle(b, POWER_R + 5.0 + pulse * 3.0, Color(pc, 0.22))
+		draw_circle(b, POWER_R + 3.0, ink)
+		draw_circle(b, POWER_R, pc.darkened(0.15) if ready else Color("#3a3150"))
+		if ready:
+			draw_circle(b + Vector2(-6, -8), POWER_R * 0.45, Color(1, 1, 1, 0.18))
+		_power_icon(def.id, b, ink if ready else pc.darkened(0.35))
+		if running:
+			draw_arc(b, POWER_R + 6.0, -PI * 0.5, -PI * 0.5 + TAU * tm.x / tm.y, 40, pc, 5.0)
+			_otext("%d" % ceili(tm.x), b + Vector2(-POWER_R - 16, 0), 18, pc)
+		var fl: float = power_flash.get(def.id, 9.0)
+		if fl < 0.4:  # a burst when used
+			draw_arc(b, POWER_R + 6.0 + fl * 60.0, 0, TAU, 32, Color(pc, 1.0 - fl / 0.4), 4.0)
+		# cost chip under the button
+		_panel(Rect2(b + Vector2(-17, POWER_R - 4), Vector2(34, 18)), ink)
+		_otext("%d" % def.cost, b + Vector2(0, POWER_R + 5), 14, Color("#ffc23a") if ready else Color("#8a83a0"))
+	if down_t > 0.0:  # knocked out
+		_panel(Rect2(SW * 0.5 - 200, 100, 320, 92), Color(0.09, 0.07, 0.14, 0.8))
+		_otext("KNOCKED OUT", Vector2(SW * 0.5 - 40, 130), 32, Color("#ff8a7a"))
+		_otext("BACK INSIDE IN %d" % ceili(down_t), Vector2(SW * 0.5 - 40, 168), 21, Color.WHITE)
 
 
 func _power_icon(id: String, c: Vector2, col: Color) -> void:
 	match id:
+		"heal":
+			draw_rect(Rect2(c - Vector2(4, 12), Vector2(8, 24)), col)
+			draw_rect(Rect2(c - Vector2(12, 4), Vector2(24, 8)), col)
+		"sprint":
+			for k in 2:
+				var o := Vector2(-6 + k * 9, 0)
+				draw_colored_polygon(PackedVector2Array([c + o + Vector2(-5, -11), c + o + Vector2(5, 0), c + o + Vector2(-5, 11),
+					c + o + Vector2(-1, 0)]), col)
+		"fury":
+			draw_colored_polygon(PackedVector2Array([c + Vector2(0, -13), c + Vector2(7, -2), c + Vector2(4, 11), c + Vector2(-4, 11),
+				c + Vector2(-7, -2)]), col)
+			draw_circle(c + Vector2(0, 4), 4.0, Color(0, 0, 0, 0.35))
 		"rapid":
 			draw_colored_polygon(PackedVector2Array([c + Vector2(3, -13), c + Vector2(-7, 2), c + Vector2(-1, 2), c + Vector2(-3, 13),
 				c + Vector2(7, -3), c + Vector2(1, -3)]), col)

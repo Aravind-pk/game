@@ -5,9 +5,12 @@ except at its towers**; monsters can't climb it. Outside are the trees (left fla
 (right flank) and three **winding paths** that come in from off the map; inside is everything you
 build. Monsters follow their paths to the fence and wait there. Step out to gather and they come for you.
 
-The world is 30 m wide (1200 design px); the camera follows you. Style: Kingshot-like field (deep
-teal grass, beige dirt paths, lavender-grey faceted rock, cone trees) and a Monkey Mart-like yard
-(warm sand, pink stations, a chibi worker carrying a tall swaying stack).
+The world is 30 m wide (1200 design px); the camera follows you. Style: a Victorian British
+frontier fort in Kingshot-like low poly. Green field with cone trees, beige paths and faceted rocks;
+a thin whitewashed wall with red coping; round red-banded bastions with pennants and period guns
+(brass swivel gun, brass Gatling, iron cannon); a brick powder works; cottages in the sand yard.
+You are a chibi redcoat (white pith helmet, cross-belts, musket) who carries his load in his arms;
+the woodcutter is a redcoat pioneer (forage cap, leather apron, axe).
 
 ## The loop
 
@@ -16,7 +19,7 @@ teal grass, beige dirt paths, lavender-grey faceted rock, cone trees) and a Monk
 ## Controls
 
 - Drag anywhere to move (a virtual joystick appears under your thumb). WASD or arrows on desktop.
-- Walk into the fence (away from a tower) to **vault over it**: a 0.42 s hop either way.
+- Walk into the fence (away from a tower) to **vault over it**: a 0.6 s crouch-and-hop either way.
 - No buttons. Things happen by **standing near them**:
   - next to a tree or rock (outside): you harvest one item at a time onto the stack on your back;
   - on a build pad: the materials it still needs fly off your stack into it;
@@ -72,16 +75,19 @@ Build pads, two open at a time:
 
 ## Powers
 
-The **power meter** in the top-right corner fills by one for every monster coin you pick up (12 to
-charge; coins are not spent). When it is full it pulses: **tap it** and four powers open below it.
-Tap one:
+Every monster coin you pick up also adds one **energy** (up to 24; coins are not spent). The powers
+sit in a column on the right edge, always visible: a lit button can be tapped now, a ring and a
+number show the time left on one that is running.
 
-| Power | Effect |
-|---|---|
-| Rapid | All turrets fire twice as fast for 12 s |
-| Freeze | Every monster moves at 35% speed for 8 s |
-| Bomb | 8 damage to every monster on the field |
-| Supply | +2 boxes in every turret and a full ammo bag |
+| Group | Power | Energy | Effect |
+|---|---|---:|---|
+| Hero | Heal | 6 | All hearts back |
+| Hero | Sprint | 6 | You move 60% faster for 10 s |
+| Hero | Fury | 8 | Your musket fires 3× as fast for double damage for 10 s (and the bag is at least half full) |
+| Fort | Rapid | 14 | All turrets fire twice as fast for 12 s |
+| Fort | Freeze | 14 | Every monster moves at 35% speed for 8 s |
+| Fort | Bomb | 20 | 6 damage to every monster on the field |
+| Fort | Supply | 12 | +2 boxes in every turret and a full ammo bag |
 
 ## Turret upgrades and evolutions
 
@@ -104,7 +110,7 @@ each turret.
 They come in from off the map and follow their winding path to the fence, then **wait there**
 (they don't die on it). Turrets and your gun can still shoot them while they wait.
 
-| Monster | Shape | HP | Speed | Notices you within | Hit | Scrap | From wave |
+| Monster | Shape | HP | Speed | Notices you within | Hit | Coins | From wave |
 |---|---|---:|---:|---:|---:|---:|---:|
 | Grunt | round red blob with horns | 3 | 56 | 90 px | 1 heart | 1 coin | 1 |
 | Runner | tall orange cyclops | 2 | 112 | 130 px | 1 heart | 1 | 3 |
@@ -112,14 +118,19 @@ They come in from off the map and follow their winding path to the fence, then *
 
 A monster that notices you (a red "!" over it) chases you until you are more than 260 px away or
 back over the fence; then it returns to its path. Waiting monsters chase you if you climb out next
-to them. Monsters get 21% more HP every wave.
+to them. Monsters get 23% more HP every wave.
 
 ## How you lose
 
-1. **The fence gives way**: the number of monsters waiting at it reaches its capacity (10, 14 with
-   the upgrade). Shown as the FENCE pips in the top bar.
-2. **You are overrun**: you lose all 6 hearts to touches. Hearts come back while you are inside
-   (one every 4 s).
+Only one way: **the fence gives way**, when the number of monsters waiting at it reaches its
+capacity (10, 14 with the upgrade). Shown as the FENCE pips in the top bar.
+
+## Getting hurt
+
+A monster that reaches you lunges and knocks you back a step, taking a heart (two for a brute).
+Hearts come back while you are inside (one every 4 s). Lose the last one and you are **knocked
+out**: you drop everything you carry, monsters lose interest, and after 6 s you are back inside
+with full hearts. It costs time and your load, not the game.
 
 Survive wave 12 with the field cleared and the fortress holds.
 
@@ -131,7 +142,7 @@ runners from wave 3 and brutes from wave 5, one every 1.1 s in a random lane.
 ## The tension this creates
 
 - Everything you need is outside, and outside is where the monsters are. Each trip is a choice:
-  how full is your bag, are monsters waiting along the fence, is the scrap on a path worth the risk?
+  how full is your bag, are monsters waiting along the fence, are the coins on a path worth the risk?
 - Ammo has to be shuttled by hand until launchers take over, and launchers cost coins, which
   means going into the lanes. Coins also charge the power-up: save it for the heavy waves.
 - A chaser on your tail costs hearts while you climb: shoot it first, or hop the fence where it is clear.
@@ -146,12 +157,12 @@ never moves; `seed` changes the lanes monsters spawn in. Four seeds each:
 | Player | Wins |
 |---|---|
 | Bot, full speed | 4 of 4 |
-| Bot, 70% speed | 3 of 4 |
-| Bot, 50% speed | 2 of 4 |
+| Bot, 70% speed | 2 of 4 |
+| Bot, 50% speed | 0 of 4 |
 | Does nothing | 0 of 4 (fence gives in wave 2–3) |
 
-The bot evolves its turrets Gatling (left), Cannon (centre), Frost (right) and picks Bomb when
-the field is crowded, Supply when the turrets are low, Rapid otherwise.
+The bot evolves its turrets Gatling (left), Cannon (centre), Frost (right) and heals when it is low
+outside, and picks Bomb when the field is crowded, Supply when the turrets are low, Rapid otherwise.
 
 The bot sees the whole map and never dodges; a person only sees the camera's window, so the bot
 runs a little easier than a person at the same pace. The bot (and the guide arrow) fights a close

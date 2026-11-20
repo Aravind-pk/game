@@ -33,6 +33,12 @@ const C_BLUE := Color("#3a6fd0")
 const C_GOLD := Color("#ffc23a")
 const C_AMMO := Color("#ffc940")
 const C_OUTLINE := Color("#241d2c")
+const C_WHITEWASH := Color("#efe8d8")
+const C_REDCOAT := Color("#c8322f")
+const C_REDCOAT_DARK := Color("#9a2522")
+const C_NAVY := Color("#24304f")
+const C_BRASS := Color("#d9a441")
+const C_BRICK := Color("#a8503e")
 const C_SKIN := Color("#ffd3a8")
 
 var g: Node                         # the game (main.gd)
@@ -74,7 +80,8 @@ var player_yaw := 0.0
 var walk_phase := 0.0
 var arrow: Node3D
 var wall_mat: StandardMaterial3D
-var was_vaulting := false
+var was_down := false
+var vault_shot_done := false
 var launchers3d: Array = []
 var bots3d: Array = []
 var built_seen := {}
@@ -439,26 +446,28 @@ func _cone_tree(parent: Node3D, p: Vector3, s: float, seed_v: int) -> Node3D:
 
 func _build_fence() -> void:
 	var root := node3(self)
-	wall_mat = own_mat(C_STONE)
-	var cap := mat(C_STONE_DARK)
+	wall_mat = own_mat(C_WHITEWASH)
+	var coping := mat(C_REDCOAT_DARK)
 	var z: float = (g.FENCE_H * 0.5) * S
 	var cuts := []
 	for lx in g.LANES:
 		cuts.append((lx - 600.0) * S)
 	var a := -15.0
 	for i in cuts.size() + 1:
-		var b: float = (cuts[i] - 0.55) if i < cuts.size() else 15.0
-		add(root, box(b - a, 0.7, 0.45), wall_mat, Vector3((a + b) * 0.5, 0.35, z))
-		add(root, box(b - a, 0.09, 0.56), cap, Vector3((a + b) * 0.5, 0.73, z))
-		var mx := a + 0.25
-		while mx < b - 0.15:  # merlons
-			add(root, box(0.28, 0.24, 0.45), wall_mat, Vector3(mx, 0.89, z))
-			mx += 0.56
-		var post := a + 0.0
-		while post <= b:  # buttresses on the inside
-			add(root, box(0.22, 0.5, 0.18), cap, Vector3(post, 0.25, z + 0.3))
+		var b: float = (cuts[i] - 0.6) if i < cuts.size() else 15.0
+		add(root, box(b - a, 0.62, 0.26), wall_mat, Vector3((a + b) * 0.5, 0.31, z))                 # a thin whitewashed wall
+		add(root, box(b - a, 0.1, 0.24), mat(C_STONE_DARK), Vector3((a + b) * 0.5, 0.05, z))          # its stone footing
+		add(root, box(b - a, 0.06, 0.32), coping, Vector3((a + b) * 0.5, 0.65, z))                    # red coping
+		var mx := a + 0.22
+		while mx < b - 0.12:  # small crenellations
+			add(root, box(0.22, 0.18, 0.26), wall_mat, Vector3(mx, 0.77, z))
+			add(root, box(0.24, 0.03, 0.28), coping, Vector3(mx, 0.875, z))
+			mx += 0.5
+		var post := a + 1.4
+		while post < b - 0.4:  # slim pilasters
+			add(root, box(0.16, 0.66, 0.34), mat(C_WHITEWASH.darkened(0.06)), Vector3(post, 0.33, z))
 			post += 2.8
-		a = (cuts[i] + 0.55) if i < cuts.size() else 15.0
+		a = (cuts[i] + 0.6) if i < cuts.size() else 15.0
 
 
 
@@ -590,21 +599,37 @@ func _build_turrets() -> void:
 	for i in g.turrets.size():
 		var tr: Dictionary = g.turrets[i]
 		var root := node3(self, w(tr.pos))
-		root.scale = Vector3.ONE * 1.25
+		root.scale = Vector3.ONE * 1.2
 		var found := node3(root)  # foundation shown before it is built
-		add(found, faceted(cyl(0.62, 0.68, 0.3, 8), 0.0, 0), mat(C_STONE_DARK), Vector3(0, 0.15, 0))
+		add(found, cyl(0.6, 0.66, 0.24, 20), mat(C_STONE_DARK), Vector3(0, 0.12, 0))
 		var tower := node3(root)
-		add(tower, faceted(cyl(0.6, 0.68, 1.3, 8), 0.0, 0), wall_mat, Vector3(0, 0.65, 0))
-		add(tower, faceted(cyl(0.72, 0.72, 0.14, 8), 0.0, 0), mat(C_STONE_DARK), Vector3(0, 1.36, 0))
+		add(tower, cyl(0.56, 0.64, 1.2, 24), wall_mat, Vector3(0, 0.6, 0))                             # round bastion
+		add(tower, cyl(0.62, 0.66, 0.14, 24), mat(C_STONE_DARK), Vector3(0, 0.07, 0))
+		add(tower, cyl(0.6, 0.6, 0.12, 24), mat(C_REDCOAT), Vector3(0, 0.9, 0))                         # red band
+		add(tower, cyl(0.68, 0.68, 0.1, 24), mat(C_REDCOAT_DARK), Vector3(0, 1.24, 0))                  # parapet ledge
 		for k in 8:
 			var a := TAU * k / 8.0
-			add(tower, box(0.2, 0.22, 0.14), wall_mat, Vector3(cos(a) * 0.64, 1.52, sin(a) * 0.64), Vector3(0, -a, 0))
-		var head := node3(tower, Vector3(0, 1.45, 0))
-		turrets3d.append({"root": root, "found": found, "tower": tower, "head": head, "gun": null, "recoil": 0.0, "yaw": 0.0})
+			add(tower, box(0.2, 0.2, 0.14), wall_mat, Vector3(cos(a) * 0.6, 1.38, sin(a) * 0.6), Vector3(0, -a, 0))
+		add(tower, box(0.18, 0.28, 0.04), mat(Color("#3a2a20")), Vector3(0, 0.55, 0.62))                # arrow slit / door
+		# a pennant on a pole at the back, waving
+		var pole := node3(tower, Vector3(0.45, 1.3, 0.35))
+		add(pole, cyl(0.02, 0.025, 1.1, 8), mat(C_WOOD_DARK), Vector3(0, 0.55, 0))
+		add(pole, ball(0.04, 8, 4), mat(C_GOLD), Vector3(0, 1.12, 0))
+		var flag := node3(pole, Vector3(0, 0.95, 0))
+		add(flag, box(0.42, 0.09, 0.02), mat(C_REDCOAT), Vector3(0.21, 0.08, 0), Vector3.ZERO, Vector3.ONE, false)
+		add(flag, box(0.42, 0.07, 0.02), mat(Color("#f4f0e6")), Vector3(0.21, 0.0, 0), Vector3.ZERO, Vector3.ONE, false)
+		add(flag, box(0.42, 0.09, 0.02), mat(Color("#25407a")), Vector3(0.21, -0.08, 0), Vector3.ZERO, Vector3.ONE, false)
+		var aura := add(tower, cyl(0.95, 0.95, 0.02, 24), mat(Color("#7af1eb"), false, 0.45, true), Vector3(0, 1.31, 0), Vector3.ZERO,
+			Vector3.ONE, false)
+		aura.visible = false
+		var head := node3(tower, Vector3(0, 1.35, 0))
+		turrets3d.append({"root": root, "found": found, "tower": tower, "head": head, "gun": null, "recoil": 0.0, "yaw": 0.0,
+			"aura": aura, "flag": flag})
 		turret_keys.append("")
 
 
-## The turret's gun, rebuilt when it levels or evolves.
+## The tower's gun, rebuilt when it levels or evolves: a brass swivel gun, then a brass Gatling,
+## a heavy iron cannon or a frost gun.
 func _turret_gun(i: int) -> void:
 	var td: Dictionary = turrets3d[i]
 	var tr: Dictionary = g.turrets[i]
@@ -612,68 +637,87 @@ func _turret_gun(i: int) -> void:
 		td.gun.queue_free()
 	var gun := node3(td.head)
 	td.gun = gun
-	var body_col := C_BLUE
-	if tr.evo != "":
-		body_col = {"gatling": Color("#f39a3c"), "cannon": Color("#6b7080"), "frost": Color("#7cc8f2")}[tr.evo]
-	var bm := mat(body_col, true)
-	var dark := mat(Color("#2b3346"), true)
-	add(gun, ball(0.36, 10, 5, true), bm, Vector3(0, 0.0, 0))
-	add(gun, box(0.5, 0.18, 0.5), bm, Vector3(0, 0.12, 0.05))
+	var brass := mat(C_BRASS)
+	var iron := mat(Color("#33343c"))
+	var carriage := mat(C_REDCOAT_DARK if tr.evo == "cannon" else C_WOOD)
+	add(gun, box(0.5, 0.18, 0.62), carriage, Vector3(0, 0.08, 0.05))                                  # carriage
+	for sx in [-0.29, 0.29]:  # wheels
+		add(gun, cyl(0.2, 0.2, 0.06, 16), mat(C_WOOD_DARK), Vector3(sx, 0.1, 0.12), Vector3(0, 0, PI * 0.5))
+		add(gun, cyl(0.06, 0.06, 0.08, 10), brass, Vector3(sx, 0.1, 0.12), Vector3(0, 0, PI * 0.5))
+	var tip := -0.85
 	match tr.evo:
 		"gatling":
-			for sx in [-0.11, 0.11]:
-				add(gun, cyl(0.06, 0.06, 0.75, 6), dark, Vector3(sx, 0.2, -0.45), Vector3(PI * 0.5, 0, 0))
-			add(gun, cyl(0.14, 0.14, 0.12, 8), mat(Color("#ffd04a"), true), Vector3(0, 0.2, -0.75), Vector3(PI * 0.5, 0, 0))
+			var spin := node3(gun, Vector3(0, 0.3, -0.2))
+			spin.name = "Spin"
+			for k in 6:
+				var a := TAU * k / 6.0
+				add(spin, cyl(0.03, 0.03, 0.72, 8), brass, Vector3(cos(a) * 0.08, sin(a) * 0.08, -0.3), Vector3(PI * 0.5, 0, 0))
+			add(spin, cyl(0.13, 0.13, 0.06, 12), brass, Vector3(0, 0, -0.6), Vector3(PI * 0.5, 0, 0))
+			add(gun, box(0.22, 0.2, 0.3), brass, Vector3(0, 0.3, 0.12))                                  # breech
+			add(gun, box(0.1, 0.18, 0.12), mat(C_WOOD_DARK), Vector3(0, 0.46, 0.1))                    # magazine
+			tip = -0.95
 		"cannon":
-			add(gun, cyl(0.16, 0.2, 0.7, 8), dark, Vector3(0, 0.22, -0.42), Vector3(PI * 0.5, 0, 0))
-			add(gun, cyl(0.22, 0.22, 0.1, 8), dark, Vector3(0, 0.22, -0.78), Vector3(PI * 0.5, 0, 0))
+			add(gun, cyl(0.14, 0.2, 0.85, 16), iron, Vector3(0, 0.3, -0.3), Vector3(PI * 0.5, 0, 0))
+			add(gun, cyl(0.2, 0.2, 0.06, 16), iron, Vector3(0, 0.3, -0.72), Vector3(PI * 0.5, 0, 0))
+			add(gun, ball(0.12, 12, 6), iron, Vector3(0, 0.3, 0.16))
+			tip = -0.95
 		"frost":
-			add(gun, cyl(0.07, 0.09, 0.6, 6), dark, Vector3(0, 0.22, -0.38), Vector3(PI * 0.5, 0, 0))
-			add(gun, faceted(ball(0.16, 6, 3), 0.0, 1), mat(Color("#c9f1ff"), true), Vector3(0, 0.22, -0.72), Vector3.ZERO,
-				Vector3(1, 1, 1.4))
-			add(gun, faceted(cyl(0.0, 0.12, 0.35, 5), 0.0, 2), mat(Color("#c9f1ff")), Vector3(0, 0.45, 0.05))
+			add(gun, cyl(0.07, 0.1, 0.62, 12), mat(Color("#9fb7c8")), Vector3(0, 0.28, -0.3), Vector3(PI * 0.5, 0, 0))
+			add(gun, faceted(ball(0.16, 6, 3), 0.0, 1), mat(Color("#c9f1ff")), Vector3(0, 0.28, -0.66), Vector3.ZERO, Vector3(1, 1, 1.4))
+			add(gun, faceted(cyl(0.0, 0.12, 0.35, 5), 0.0, 2), mat(Color("#c9f1ff")), Vector3(0, 0.45, 0.1))
+			tip = -0.8
 		_:
-			add(gun, cyl(0.08, 0.1, 0.65, 8), dark, Vector3(0, 0.22, -0.4), Vector3(PI * 0.5, 0, 0))
-	if int(tr.level) >= 2:  # gold band for level 2+
-		add(gun, cyl(0.38, 0.38, 0.06, 10), mat(C_GOLD, true), Vector3(0, 0.02, 0))
-	var flash := add(gun, ball(0.16, 8, 4), mat(Color("#fff2b0"), false, 1.0, true), Vector3(0, 0.22, -0.95), Vector3.ZERO,
+			add(gun, cyl(0.06, 0.09, 0.7, 14), brass, Vector3(0, 0.27, -0.25), Vector3(PI * 0.5, 0, 0))
+			add(gun, ball(0.1, 12, 6), brass, Vector3(0, 0.27, 0.12))
+	if int(tr.level) >= 2:  # gold band on the carriage for level 2+
+		add(gun, box(0.52, 0.04, 0.1), mat(C_GOLD), Vector3(0, 0.18, 0.32), Vector3.ZERO, Vector3.ONE, false)
+	var flash := add(gun, ball(0.16, 8, 4), mat(Color("#fff2b0"), false, 1.0, true), Vector3(0, 0.28, tip), Vector3.ZERO,
 		Vector3.ONE, false)
 	flash.visible = false
 	flash.name = "Flash"
 	pop_in(gun)
 
 
+
 func _build_machine() -> void:
 	machine3d = node3(self, w(g.MACHINE_POS))
 	var m := machine3d
-	add(m, box(1.7, 0.9, 1.3), mat(C_PINK, true), Vector3(0, 0.45, 0))
-	add(m, box(1.8, 0.12, 1.4), mat(C_PINK_DARK, true), Vector3(0, 0.95, 0))
-	add(m, cyl(0.45, 0.3, 0.55, 8), mat(C_TEAL, true), Vector3(-0.35, 1.28, 0.1))  # hopper
-	add(m, cyl(0.12, 0.12, 0.5, 6), mat(Color("#8b93a8")), Vector3(0.45, 1.2, 0.2))  # chimney
+	add(m, box(1.7, 0.85, 1.3), mat(C_BRICK), Vector3(0, 0.43, 0))                                      # the powder works
+	for k in 4:  # brick courses
+		add(m, box(1.71, 0.02, 1.31), mat(C_BRICK.darkened(0.15)), Vector3(0, 0.2 + k * 0.2, 0), Vector3.ZERO, Vector3.ONE, false)
+	add(m, box(1.82, 0.12, 1.42), mat(C_WOOD_DARK), Vector3(0, 0.9, 0))
+	add(m, prism(1.3, 0.45, 1.86), mat(Color("#3f5a7a")), Vector3(0, 1.18, 0.05), Vector3(0, PI * 0.5, 0))   # slate roof
+	add(m, cyl(0.3, 0.22, 0.45, 14), mat(C_BRASS), Vector3(-0.55, 1.2, -0.2))                           # copper hopper
+	add(m, box(0.26, 0.9, 0.26), mat(C_BRICK.darkened(0.1)), Vector3(0.55, 1.35, -0.25))               # chimney
+	add(m, box(0.32, 0.06, 0.32), mat(C_STONE_DARK), Vector3(0.55, 1.82, -0.25))
+	machine3d.set_meta("stack_top", Vector3(0.55, 1.9, -0.25))
+	add(m, box(0.42, 0.55, 0.05), mat(C_WOOD_DARK), Vector3(-0.4, 0.3, 0.66))                          # door
 	gear = node3(m, Vector3(0.45, 0.5, 0.67))
-	add(gear, cyl(0.3, 0.3, 0.08, 8), mat(C_GOLD, true), Vector3.ZERO, Vector3(PI * 0.5, 0, 0))
+	add(gear, cyl(0.28, 0.28, 0.06, 16), mat(C_BRASS), Vector3.ZERO, Vector3(PI * 0.5, 0, 0))
 	for k in 4:
-		add(gear, box(0.72, 0.1, 0.1), mat(C_GOLD.darkened(0.15)), Vector3.ZERO, Vector3(0, 0, k * PI * 0.25))
-	add(m, box(0.5, 0.12, 0.9), mat(Color("#8b93a8")), Vector3(-0.35, 0.75, -0.9), Vector3(0.5, 0, 0))  # chute to the pile
-	# the input pile of logs beside it
-	for k in 8:
+		add(gear, box(0.66, 0.08, 0.08), mat(C_BRASS.darkened(0.2)), Vector3(0, 0, 0.03), Vector3(0, 0, k * PI * 0.25))
+	add(m, box(0.5, 0.1, 0.9), mat(C_WOOD), Vector3(-0.35, 0.72, -0.9), Vector3(0.5, 0, 0))            # chute to the pile
+	for k in 8:  # the input pile of logs beside it
 		var lg := add(m, item_mesh("wood"), item_mat("wood"), Vector3(1.15 + (k % 2) * 0.22, 0.08 + (k / 2) * 0.17, 0.2),
-			Vector3(0, PI * 0.5, 0))
+			Vector3(0, PI * 0.5, PI * 0.5))
 		in_logs.append(lg)
-	# output: a counter with a grid of ammo boxes
-	var out := node3(self, w(g.OUTPUT_POS))
-	add(out, box(1.7, 0.45, 1.0), mat(C_PINK, true), Vector3(0, 0.22, 0))
-	add(out, box(1.78, 0.08, 1.08), mat(C_PINK_DARK, true), Vector3(0, 0.48, 0))
+	var out := node3(self, w(g.OUTPUT_POS))  # a wooden trestle for the crates
+	add(out, box(1.7, 0.08, 1.0), mat(C_WOOD), Vector3(0, 0.42, 0))
+	for sx in [-0.7, 0.7]:
+		for sz in [-0.4, 0.4]:
+			add(out, box(0.08, 0.42, 0.08), mat(C_WOOD_DARK), Vector3(sx, 0.21, sz))
 	for i in g.MACHINE_OUT_MAX:
 		var col: int = i % 4
 		var row: int = (i / 4) % 2
 		var lay: int = i / 8
-		var b := add(out, item_mesh("ammo"), item_mat("ammo"), Vector3(-0.54 + col * 0.36, 0.63 + lay * 0.2, -0.18 + row * 0.36))
+		var b := item_node(out, "ammo")
+		b.position = Vector3(-0.54 + col * 0.36, 0.56 + lay * 0.2, -0.18 + row * 0.36)
 		b.visible = false
 		out_boxes.append(b)
 	machine3d.set_meta("out", out)
 	machine3d.visible = false
 	out.visible = false
+
 
 
 func item_mesh(kind: String) -> Mesh:
@@ -700,19 +744,21 @@ func item_mat(kind: String) -> Material:
 			return mat(C_AMMO, true)
 
 
-## One item as it is held: logs lie sideways, ammo boxes have a red band.
+## One item as it is held: logs lie sideways, ammo is a red cartridge box with a brass band.
 func item_node(parent: Node, kind: String) -> Node3D:
 	var n := node3(parent)
 	if kind == "wood":
 		add(n, item_mesh(kind), item_mat(kind), Vector3.ZERO, Vector3(0, 0, PI * 0.5))
+		add(n, cyl(0.07, 0.07, 0.43, 10), mat(Color("#e9c48a")), Vector3.ZERO, Vector3(0, 0, PI * 0.5), Vector3.ONE, false)
 	elif kind == "ammo":
-		add(n, item_mesh(kind), item_mat(kind))
-		add(n, box(0.34, 0.05, 0.28), mat(Color("#e8584f")), Vector3(0, 0.0, 0))
+		add(n, box(0.32, 0.19, 0.26), mat(C_REDCOAT))
+		add(n, box(0.33, 0.05, 0.27), mat(C_BRASS), Vector3(0, 0.03, 0), Vector3.ZERO, Vector3.ONE, false)
 	elif kind == "coin":
 		add(n, item_mesh(kind), item_mat(kind))
 	else:
 		add(n, item_mesh(kind), item_mat(kind), Vector3(0, 0.02, 0), Vector3(0, 0, 0), Vector3(1.2, 0.8, 1.0))
 	return n
+
 
 
 func _build_pads() -> void:
@@ -759,89 +805,105 @@ func _ghost_model(n: Node3D, id: String) -> void:
 
 func _launcher(pos: Vector2) -> Node3D:
 	var root := node3(self, w(pos))
-	add(root, box(1.0, 0.4, 1.0), mat(Color("#8e6bd1"), true), Vector3(0, 0.2, 0))
-	add(root, box(1.08, 0.08, 1.08), mat(Color("#6a4aa8"), true), Vector3(0, 0.42, 0))
+	add(root, box(1.0, 0.36, 1.0), mat(C_WOOD), Vector3(0, 0.18, 0))
+	add(root, box(1.06, 0.07, 1.06), mat(C_REDCOAT_DARK), Vector3(0, 0.38, 0))
 	for sx in [-0.35, 0.35]:
 		add(root, box(0.1, 0.5, 0.1), mat(C_WOOD_DARK), Vector3(sx, 0.65, 0))
+	add(root, cyl(0.04, 0.04, 0.8, 8), mat(C_BRASS), Vector3(0, 0.85, 0), Vector3(0, 0, PI * 0.5))
 	var arm := node3(root, Vector3(0, 0.75, 0))
-	add(arm, box(0.12, 0.1, 1.1), mat(C_WOOD, true), Vector3(0, 0, 0.3))
-	add(arm, cyl(0.2, 0.14, 0.14, 8), mat(C_WOOD_DARK, true), Vector3(0, 0.07, 0.85))
+	add(arm, box(0.12, 0.1, 1.1), mat(C_WOOD), Vector3(0, 0, 0.3))
+	add(arm, cyl(0.2, 0.14, 0.14, 12), mat(C_WOOD_DARK), Vector3(0, 0.07, 0.85))
 	root.set_meta("arm", arm)
 	pop_in(root)
 	return root
 
 
-## The chibi worker: big head, hard hat, tiny body. `hat` and `suit` colour the player and helpers apart.
-## A chibi character: big head, small body. `soldier` is the player (helmet, tunic, rifle);
-## otherwise a builder (hard hat, overalls) for the helpers.
+## A chibi redcoat: big head, small body, red coat with white cross-belts and brass buttons.
+## `soldier` is the hero (white pith helmet, musket); otherwise a pioneer (forage cap, leather apron,
+## axe), the woodcutter.
 func _worker(parent: Node, suit: Color, hat: Color, axe: bool = false, soldier: bool = false) -> Dictionary:
 	var root := node3(parent)
 	var body := node3(root)
 	var parts := {"root": root, "body": body}
-	var suit_m := mat(suit)
-	var pants := mat(Color("#3b3552") if soldier else suit.darkened(0.3))
-	var boot := mat(Color("#4a3428"))
+	var coat := mat(C_REDCOAT)
+	var white := mat(Color("#f4f0e6"))
 	for sx in [-0.1, 0.1]:
 		var hip := node3(body, Vector3(sx, 0.3, 0))
-		add(hip, cyl(0.075, 0.065, 0.24, 12), pants, Vector3(0, -0.12, 0))
-		add(hip, box(0.14, 0.1, 0.2), boot, Vector3(0, -0.26, -0.03))
+		add(hip, cyl(0.075, 0.068, 0.24, 12), mat(C_NAVY), Vector3(0, -0.12, 0))
+		add(hip, box(0.02, 0.22, 0.02), mat(C_REDCOAT), Vector3(sx * 0.7, -0.12, 0), Vector3.ZERO, Vector3.ONE, false)  # trouser stripe
+		add(hip, box(0.14, 0.11, 0.21), mat(Color("#1f1c22")), Vector3(0, -0.26, -0.03))
 		parts["leg%s" % ("l" if sx < 0 else "r")] = hip
-	add(body, cyl(0.17, 0.22, 0.38, 16), suit_m, Vector3(0, 0.47, 0))
-	if soldier:
-		add(body, cyl(0.225, 0.225, 0.07, 16), mat(Color("#6b4428")), Vector3(0, 0.33, 0))            # belt
-		add(body, box(0.09, 0.07, 0.04), mat(C_GOLD), Vector3(0, 0.33, -0.225))                        # buckle
-		add(body, box(0.05, 0.36, 0.03), mat(C_GOLD), Vector3(0, 0.5, -0.19), Vector3(0.12, 0, 0))   # tunic trim
-		for sx in [-0.2, 0.2]:
-			add(body, ball(0.1, 12, 6), mat(Color("#a8b0c2")), Vector3(sx, 0.62, 0))                  # pauldrons
+	add(body, cyl(0.17, 0.22, 0.4, 16), coat, Vector3(0, 0.48, 0))
+	add(body, cyl(0.23, 0.25, 0.1, 16), coat, Vector3(0, 0.3, 0))                                      # coat skirt
+	add(body, cyl(0.218, 0.218, 0.05, 16), white, Vector3(0, 0.36, 0))                                 # white belt
+	for sgn in [-1.0, 1.0]:  # cross-belts
+		add(body, box(0.05, 0.42, 0.02), white, Vector3(0, 0.5, -0.2), Vector3(0.1, 0, sgn * 0.62), Vector3.ONE, false)
+		add(body, box(0.05, 0.42, 0.02), white, Vector3(0, 0.5, 0.2), Vector3(-0.1, 0, sgn * 0.62), Vector3.ONE, false)
+	for k in 3:  # brass buttons
+		add(body, ball(0.02, 6, 3), mat(C_BRASS), Vector3(0.08, 0.42 + k * 0.08, -0.205), Vector3.ZERO, Vector3.ONE, false)
+	add(body, box(0.24, 0.07, 0.16), mat(C_NAVY), Vector3(0, 0.66, 0))                                  # collar
+	if not soldier:  # pioneer's leather apron
+		add(body, box(0.3, 0.34, 0.03), mat(Color("#9a6a3e")), Vector3(0, 0.4, -0.22), Vector3(0.1, 0, 0))
 	for sx in [-0.24, 0.24]:
 		var sh := node3(body, Vector3(sx, 0.6, 0))
-		add(sh, cyl(0.06, 0.055, 0.24, 12), suit_m if soldier else mat(C_SKIN), Vector3(0, -0.11, 0))
-		add(sh, ball(0.065, 10, 5), mat(C_SKIN), Vector3(0, -0.25, 0))                                # hand
+		add(sh, ball(0.075, 10, 5), mat(C_BRASS if soldier else C_REDCOAT), Vector3(0, 0.02, 0), Vector3.ZERO, Vector3(1.2, 0.6, 1.2))  # epaulette
+		add(sh, cyl(0.06, 0.055, 0.24, 12), coat, Vector3(0, -0.11, 0))
+		add(sh, cyl(0.062, 0.062, 0.05, 12), white, Vector3(0, -0.21, 0))                              # cuff
+		add(sh, ball(0.06, 10, 5), mat(C_SKIN), Vector3(0, -0.26, 0))
 		parts["arm%s" % ("l" if sx < 0 else "r")] = sh
-	var head := node3(body, Vector3(0, 0.9, 0))
+	var head := node3(body, Vector3(0, 0.92, 0))
 	parts["head"] = head
 	add(head, ball(0.27, 20, 10), mat(C_SKIN))
 	for sx in [-0.1, 0.1]:
 		add(head, ball(0.05, 10, 5), mat(Color("#1d1a24")), Vector3(sx, 0.0, -0.245), Vector3.ZERO, Vector3(1, 1.3, 0.6), false)
-		add(head, ball(0.016, 6, 3), mat(Color.WHITE, false, 1.0, true), Vector3(sx + 0.015, 0.025, -0.275), Vector3.ZERO,
-			Vector3.ONE, false)
+		add(head, ball(0.016, 6, 3), mat(Color.WHITE, false, 1.0, true), Vector3(sx + 0.015, 0.025, -0.275), Vector3.ZERO, Vector3.ONE, false)
 		add(head, ball(0.045, 8, 4), mat(Color("#ff9e9e")), Vector3(sx * 1.6, -0.08, -0.215), Vector3.ZERO, Vector3(1, 0.6, 0.4), false)
-		if soldier:  # determined brows
-			add(head, box(0.1, 0.025, 0.03), mat(Color("#4a3428")), Vector3(sx, 0.085, -0.25), Vector3(0, 0, -sx * 2.5), Vector3.ONE, false)
-	if soldier:
-		var steel := mat(Color("#a8b0c2"))
-		add(head, ball(0.295, 20, 10, true), steel, Vector3(0, 0.05, 0))                                  # helmet
-		add(head, cyl(0.31, 0.31, 0.06, 20), mat(Color("#8a93a8")), Vector3(0, 0.07, 0))                # rim
-		add(head, box(0.07, 0.07, 0.42), mat(hat), Vector3(0, 0.36, 0.02))                               # crest
-		add(head, box(0.06, 0.14, 0.08), mat(hat), Vector3(0, 0.3, 0.22))
-	else:
-		add(head, ball(0.29, 18, 9, true), mat(hat), Vector3(0, 0.06, 0))
-		add(head, cyl(0.33, 0.33, 0.035, 18), mat(hat.darkened(0.1)), Vector3(0, 0.07, -0.04))
+		add(head, box(0.1, 0.025, 0.03), mat(Color("#5a3a24")), Vector3(sx, 0.085, -0.25), Vector3(0, 0, -sx * 2.5), Vector3.ONE, false)
+		add(head, box(0.09, 0.035, 0.04), mat(Color("#6a4428")), Vector3(sx * 0.6, -0.09, -0.255), Vector3(0, 0, sx * 2.0), Vector3.ONE, false)  # moustache
+	if soldier:  # white pith helmet with a brass spike
+		add(head, ball(0.25, 20, 10, true), white, Vector3(0, 0.1, 0.01), Vector3.ZERO, Vector3(1.0, 1.15, 1.08))
+		add(head, cyl(0.29, 0.29, 0.025, 24), white, Vector3(0, 0.11, 0.01), Vector3.ZERO, Vector3(1.0, 1.0, 1.12))
+		add(head, cyl(0.26, 0.26, 0.05, 20), mat(Color("#d9cfb5")), Vector3(0, 0.15, 0.01), Vector3.ZERO, Vector3(1.0, 1.0, 1.08))  # puggaree band
+		add(head, cyl(0.0, 0.035, 0.1, 8), mat(C_BRASS), Vector3(0, 0.42, 0.01))
+		add(head, ball(0.255, 18, 9, true), mat(Color("#5a3a24")), Vector3(0, 0.0, 0.04), Vector3.ZERO, Vector3(1, 0.45, 1))  # hair under it
+	else:  # navy forage cap with a red band
+		add(head, cyl(0.24, 0.24, 0.14, 18), mat(C_NAVY), Vector3(0, 0.27, 0.0), Vector3(-0.15, 0, 0.2))
+		add(head, cyl(0.245, 0.245, 0.04, 18), mat(C_REDCOAT), Vector3(0, 0.22, 0.0), Vector3(-0.15, 0, 0.2))
+		add(head, ball(0.255, 18, 9, true), mat(Color("#5a3a24")), Vector3(0, 0.04, 0.03), Vector3.ZERO, Vector3(1, 0.5, 1))  # hair
 	if axe:
 		var handle := node3(parts.armr, Vector3(0, -0.24, -0.05))
-		add(handle, cyl(0.025, 0.025, 0.45, 8), mat(C_WOOD_DARK), Vector3(0, 0.1, -0.1), Vector3(-0.6, 0, 0))
-		add(handle, box(0.05, 0.16, 0.14), mat(Color("#c9d2e0")), Vector3(0, 0.26, -0.22))
+		add(handle, cyl(0.025, 0.025, 0.5, 8), mat(C_WOOD_DARK), Vector3(0, 0.12, -0.1), Vector3(-0.6, 0, 0))
+		add(handle, box(0.05, 0.16, 0.16), mat(Color("#c9d2e0")), Vector3(0, 0.3, -0.24))
 		parts["axe"] = handle
 	return parts
 
 
 
 func _build_player() -> void:
-	player_parts = _worker(self, C_BLUE, Color("#e84a3c"), false, true)
+	player_parts = _worker(self, C_REDCOAT, Color.WHITE, false, true)
 	player3d = player_parts.root
 	player3d.scale = Vector3.ONE * PLAYER_SCALE
-	# the rifle: in both hands when free, slung on the back while carrying
+	# the musket: held ready when his hands are free, slung on the back while carrying
 	var rifle := node3(player_parts.body, Vector3(0.1, 0.42, -0.24))
-	add(rifle, box(0.07, 0.09, 0.42), mat(Color("#6b4428")), Vector3(0, 0, 0.02))
-	add(rifle, cyl(0.025, 0.025, 0.34, 10), mat(Color("#3a3f4c")), Vector3(0, 0.03, -0.32), Vector3(PI * 0.5, 0, 0))
-	add(rifle, box(0.05, 0.1, 0.06), mat(Color("#3a3f4c")), Vector3(0, -0.06, -0.04))
-	var fl := add(rifle, ball(0.08, 8, 4), mat(Color("#fff2b0"), false, 1.0, true), Vector3(0, 0.03, -0.52), Vector3.ZERO, Vector3.ONE,
-		false)
+	add(rifle, box(0.06, 0.08, 0.5), mat(C_WOOD), Vector3(0, 0, 0.05))                                 # stock
+	add(rifle, cyl(0.022, 0.022, 0.5, 8), mat(Color("#4a4d58")), Vector3(0, 0.04, -0.3), Vector3(PI * 0.5, 0, 0))
+	add(rifle, cyl(0.006, 0.014, 0.18, 6), mat(Color("#d9dde4")), Vector3(0, 0.04, -0.63), Vector3(PI * 0.5, 0, 0))  # bayonet
+	add(rifle, box(0.065, 0.03, 0.08), mat(C_BRASS), Vector3(0, -0.03, 0.22), Vector3.ZERO, Vector3.ONE, false)
+	var fl := add(rifle, ball(0.08, 8, 4), mat(Color("#fff2b0"), false, 1.0, true), Vector3(0, 0.04, -0.58), Vector3.ZERO, Vector3.ONE, false)
 	fl.visible = false
 	player_parts["flash"] = fl
 	player_parts["rifle"] = rifle
-	# the carried stack rises from his arms, in front of his chest
-	stack_root = node3(player_parts.body, Vector3(0, 0.56, -0.36))
+	stack_root = node3(player_parts.body, Vector3(0, 0.56, -0.36))  # the carried stack rises from his arms
+	var aura := add(player3d, cyl(0.62, 0.62, 0.02, 28), mat(Color.WHITE, false, 0.4, true), Vector3(0, 0.03, 0), Vector3.ZERO,
+		Vector3.ONE, false)
+	aura.visible = false
+	player_parts["aura"] = aura
+	var stars := node3(player3d, Vector3(0, 1.35, 0))
+	for k in 3:
+		var a := TAU * k / 3.0
+		add(stars, prism(0.12, 0.12, 0.04), mat(C_GOLD, false, 1.0, true), Vector3(cos(a) * 0.3, 0, sin(a) * 0.3), Vector3.ZERO, Vector3.ONE, false)
+	stars.visible = false
+	player_parts["stars"] = stars
 	player_prev = g.player.pos
 
 
@@ -918,6 +980,13 @@ func _process(delta: float) -> void:
 	_update_arrow()
 	_update_camera(delta)
 	ui.queue_redraw()
+	if g.args.has("vault_shot") and not vault_shot_done:  # screenshots: catch the climb mid-air
+		var vd: Dictionary = g.player.get("vault", {})
+		if not vd.is_empty() and float(vd.t) > g.VAULT_TIME * 0.5:
+			vault_shot_done = true
+			await RenderingServer.frame_post_draw
+			get_viewport().get_texture().get_image().save_png(str(g.args.vault_shot))
+			get_tree().quit()
 
 
 func _on_reset() -> void:
@@ -975,14 +1044,22 @@ func _update_turrets(delta: float) -> void:
 		if key != turret_keys[i]:
 			turret_keys[i] = key
 			_turret_gun(i)
+		td.aura.visible = g.power_t > 0.0
+		if td.aura.visible:
+			td.aura.scale = Vector3.ONE * (1.0 + 0.1 * sin(t * 12.0))
 		var target_yaw := yaw_of(tr.aim)
 		td.yaw = lerp_angle(td.yaw, target_yaw, minf(1.0, delta * 12.0))
+		td.flag.rotation.y = sin(t * 3.0 + i) * 0.35  # the pennant waves
+		td.flag.scale.x = 1.0 + 0.08 * sin(t * 6.0 + i)
 		td.head.rotation.y = td.yaw
 		if tr.flash > 0.0:
 			td.recoil = 1.0
 		td.recoil = maxf(td.recoil - delta * 6.0, 0.0)
 		if td.gun != null:
 			td.gun.position.z = 0.12 * td.recoil
+			var spin: Node3D = td.gun.get_node_or_null("Spin")
+			if spin and tr.flash > 0.0:
+				spin.rotation.z += delta * 30.0
 			var f: Node3D = td.gun.get_node_or_null("Flash")
 			if f:
 				f.visible = tr.flash > 0.0
@@ -1002,6 +1079,13 @@ func _update_machine(delta: float) -> void:
 		out.visible = false
 		return
 	var working: bool = int(g.machine.input) > 0 and int(g.machine.out) < g.MACHINE_OUT_MAX
+	if working and fmod(t, 0.35) < delta:  # chimney smoke
+		var sp_at: Vector3 = machine3d.position + machine3d.get_meta("stack_top")
+		var puff := add(self, ball(0.14, 8, 4), mat(Color("#dfe3e8"), false, 0.7), sp_at, Vector3.ZERO, Vector3.ONE, false)
+		var tw := create_tween().set_parallel(true)
+		tw.tween_property(puff, "position", sp_at + Vector3(0.3, 1.0, -0.2), 1.0)
+		tw.tween_property(puff, "scale", Vector3.ONE * 2.2, 1.0)
+		tw.chain().tween_callback(puff.queue_free)
 	if working:
 		gear.rotation.z -= delta * 5.0
 		machine3d.scale = Vector3(1.0 + 0.03 * sin(t * 18.0), 1.0 - 0.03 * sin(t * 18.0), 1.0)
@@ -1064,7 +1148,7 @@ func _update_launchers() -> void:
 
 func _update_bots(delta: float) -> void:
 	while bots3d.size() < g.bots.size():
-		var parts := _worker(self, Color("#4fb868"), Color("#ff8a3d"), true)
+		var parts := _worker(self, Color("#3d5a8a"), Color("#ffcf2e"), true)
 		parts["prev"] = g.bots[bots3d.size()].pos
 		parts["logs"] = []
 		parts["yaw"] = 0.0
@@ -1078,16 +1162,25 @@ func _update_bots(delta: float) -> void:
 		p.prev = pos
 		p.root.position = w(pos)
 		p.root.scale = Vector3.ONE * 1.25
-		_animate_worker(p, v, delta, false)
+		var vault: Dictionary = b.get("vault", {})
+		if not vault.is_empty():
+			v = ((vault.to as Vector2) - (vault.from as Vector2)).normalized() * 200.0
+		var carrying: bool = int(b.carry) > 0
+		_animate_worker(p, v, delta, carrying)
+		_vault_pose(p, vault, carrying)
 		var chopping: bool = float(b.t) > 0.0
-		p.armr.rotation.x = 1.6 + sin(t * 18.0) * 0.9 if chopping else p.armr.rotation.x
+		if chopping:  # chainsaw into the trunk, buzzing
+			p.armr.rotation.x = 1.3 + sin(t * 40.0) * 0.06
+			p.body.position.x = sin(t * 50.0) * 0.01
 		var logs: Array = p.logs
 		while logs.size() < int(b.carry):
 			var it := item_node(p.body, "wood")
-			it.position = Vector3(0, 1.3 + logs.size() * ITEM_H, 0)
+			it.position = Vector3(0, 0.56 + logs.size() * ITEM_H, -0.36)
 			logs.append(it)
+			pop_in(it)
 		while logs.size() > int(b.carry):
 			logs.pop_back().queue_free()
+
 
 
 func _animate_worker(p: Dictionary, v: Vector2, delta: float, carrying: bool) -> void:
@@ -1126,49 +1219,64 @@ func _update_player(delta: float) -> void:
 	player_prev = pos
 	player_speed = lerpf(player_speed, v.length(), 0.3)
 	player3d.position = w(pos)
+	var down: bool = g.down_t > 0.0
+	var stars: Node3D = player_parts.stars
+	if down:  # knocked out: flat on his back, stars circling
+		if not was_down:
+			was_down = true
+			_poof(player3d.position, 8, Color("#ff6b5e"))
+		player_parts.body.rotation.x = lerpf(player_parts.body.rotation.x, PI * 0.5, 0.2)
+		player_parts.body.position.y = lerpf(player_parts.body.position.y, 0.12, 0.2)
+		stars.visible = true
+		stars.rotation.y += delta * 5.0
+		player3d.visible = g.down_t > 1.0 or fmod(g.down_t, 0.2) < 0.12
+		player_parts.aura.visible = false
+		_clear_stack()
+		return
+	stars.visible = false
+	if was_down:  # back: dropped in from above with a bounce
+		was_down = false
+		player_parts.body.rotation.x = 0.0
+		player_parts.body.position.y = 0.0
+		player3d.position.y = 6.0
+		var tw := create_tween()
+		tw.tween_property(player3d, "position:y", 0.0, 0.45).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+		tw.tween_callback(func() -> void: _dust(player3d.position))
 	var carrying: bool = g.stack.size() > 0
-	if v.length() < 5.0 and g.state == "play":  # face where the arrow-joystick points when standing
+	if v.length() < 5.0 and g.state == "play":
 		v = Vector2.ZERO
 	var vault: Dictionary = g.player.get("vault", {})
 	if not vault.is_empty():
-		v = (vault.to as Vector2) - (vault.from as Vector2)
-		v = v.normalized() * 300.0
+		v = ((vault.to as Vector2) - (vault.from as Vector2)).normalized() * 300.0
 	_animate_worker(player_parts, v, delta, carrying)
-	if not vault.is_empty():  # a hop over the wall: up, tucked, a little forward roll, then down
-		var k := clampf(float(vault.t) / g.VAULT_TIME, 0.0, 1.0)
-		var arc := sin(k * PI)
-		player_parts.body.position.y = arc * 0.95
-		player_parts.body.rotation.x = -sin(k * TAU) * 0.35
-		player_parts.legl.rotation.x = -1.3 * arc
-		player_parts.legr.rotation.x = -1.1 * arc
-		if not carrying:
-			player_parts.arml.rotation.x = 1.0 + 1.2 * arc
-			player_parts.armr.rotation.x = 0.8 + 1.2 * arc
-		player_parts.body.scale = Vector3(1.0 - 0.08 * arc, 1.0 + 0.1 * arc, 1.0 - 0.08 * arc)
-		was_vaulting = true
-	else:
-		player_parts.body.rotation.x = lerpf(player_parts.body.rotation.x, 0.0, 0.3)
-		if was_vaulting:  # landing: squash and a puff of dust
-			was_vaulting = false
-			player_parts.body.scale = Vector3(1.18, 0.8, 1.18)
-			create_tween().tween_property(player_parts.body, "scale", Vector3.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-			_dust(player3d.position)
-	# hurt blink
+	_vault_pose(player_parts, vault, carrying)
+	# hit: flinch back and blink
+	if g.hurt_t > g.HURT_GRACE - 0.15 and g.hearts < g.HEARTS:
+		player_parts.body.rotation.x = 0.35
 	var blink: bool = g.hurt_t > 0.0 and fmod(g.hurt_t, 0.16) < 0.08
 	player3d.visible = not blink
-	# gun flash: the latest player shot this frame
+	# power auras: sprint (yellow), fury (red)
+	var aura: MeshInstance3D = player_parts.aura
+	aura.visible = g.sprint_t > 0.0 or g.fury_t > 0.0
+	if aura.visible:
+		aura.material_override = mat(Color("#ff5a4e") if g.fury_t > 0.0 else Color("#ffe066"), false, 0.45, true)
+		aura.scale = Vector3.ONE * (1.0 + 0.12 * sin(t * 10.0))
+		if g.sprint_t > 0.0 and player_speed > 60.0 and fmod(t, 0.12) < delta:
+			_dust(player3d.position)
 	var shooting := false
 	for s in g.shots:
 		if s.player and s.t > 0.05:
 			shooting = true
 	player_parts.flash.visible = shooting
 	var rifle: Node3D = player_parts.rifle
-	if carrying:  # slung across the back
-		rifle.position = rifle.position.lerp(Vector3(0.0, 0.55, 0.24), 0.3)
+	if carrying:
+		rifle.position = rifle.position.lerp(Vector3(0.0, 0.6, 0.24), 0.3)
 		rifle.rotation = Vector3(0, 0, 0.9)
 	else:
 		rifle.position = rifle.position.lerp(Vector3(0.1, 0.42, -0.24), 0.3)
 		rifle.rotation = Vector3(-0.05 if not shooting else -0.12, 0, 0)
+		if shooting:
+			player_parts.body.position.z = 0.03  # recoil
 	# the carried tower: rebuild the changed part, then sway it with the walk
 	var kinds: Array = g.stack
 	var same := 0
@@ -1188,6 +1296,7 @@ func _update_player(delta: float) -> void:
 		var n: Node3D = stack_nodes[i]
 		var lag := sin(t * 7.0 - i * 0.35) * 0.012 * i * (0.3 + lean)
 		n.position = Vector3(lag, i * ITEM_H, lean * 0.02 * i)
+
 
 
 func _sync(cat: String, items: Array, make: Callable, update: Callable, gone: Callable = Callable()) -> void:
@@ -1242,6 +1351,14 @@ func _sync_monsters(delta: float) -> void:
 			body.rotation.x = -absf(sin(t * 6.0 + l.ph)) * 0.25
 		else:
 			body.rotation.x = 0.0
+		var atk: float = float(m.get("atk", 0.0))
+		if atk > 0.0:  # the lunge when it hits you
+			var a := sin((1.0 - atk / 0.3) * PI)
+			body.position.z = -a * 0.9
+			body.rotation.x = -a * 0.5
+			body.scale = Vector3(1.0 + 0.15 * a, 1.0 - 0.1 * a, 1.0 + 0.25 * a)
+		else:
+			body.position.z = 0.0
 		if float(m.hp) < float(l.hp):
 			l.flash = 0.1
 		l.hp = m.hp
@@ -1310,7 +1427,7 @@ func _sync_lobs() -> void:
 
 func _sync_shots() -> void:
 	_sync("shot", g.shots, func(s: Dictionary) -> Node3D:
-		var col := Color("#bff8ff") if s.player else Color("#fff0a0")
+		var col := (Color("#ff7b5e") if s.get("fury", false) else Color("#bff8ff")) if s.player else Color("#fff0a0")
 		if s.get("evo", "") == "frost":
 			col = Color("#a8e4ff")
 		elif s.get("evo", "") == "cannon":
@@ -1342,6 +1459,10 @@ func _sync_fx() -> void:
 			"hurt":
 				n = node3(self)
 				add(n, ball(0.09, 6, 3), mat(Color("#ff5e5e"), false, 1.0, true), Vector3.ZERO, Vector3.ZERO, Vector3.ONE, false)
+			"heal":
+				n = node3(self)
+				add(n, box(0.08, 0.26, 0.08), mat(Color("#6cf08a"), false, 1.0, true), Vector3.ZERO, Vector3.ZERO, Vector3.ONE, false)
+				add(n, box(0.26, 0.08, 0.08), mat(Color("#6cf08a"), false, 1.0, true), Vector3.ZERO, Vector3.ZERO, Vector3.ONE, false)
 			_:
 				n = item_node(self, f.kind)
 		return n,
@@ -1358,7 +1479,9 @@ func _sync_fx() -> void:
 			n.scale = Vector3.ONE * (1.0 - k * 0.8)
 			return
 		n.position = _arc(f.from, to, k, 1.2 if f.kind in ["wood", "stone", "ammo"] else 0.4, h1, 1.0)
-		if f.kind in ["spark", "hurt"]:
+		if f.kind == "heal":
+			n.position = w((f.from as Vector2).lerp(f.to, k), 0.6 + k * 1.6)
+		if f.kind in ["spark", "hurt", "heal"]:
 			n.scale = Vector3.ONE * (1.0 - k))
 
 
@@ -1414,6 +1537,11 @@ func _update_camera(delta: float) -> void:
 ## Where the camera looks: ahead of you, kept inside the map.
 func _cam_target() -> Vector3:
 	var p := w(g.player.pos)
+	if g.args.get("look_at", "") == "player":
+		return Vector3(p.x, 0, p.z)
+	if g.args.get("look_at", "") == "bot" and g.bots.size() > 0:
+		var bp := w(g.bots[0].pos)
+		return Vector3(bp.x, 0, bp.z)
 	if g.args.has("look_at"):  # screenshots: aim at a design-pixel spot
 		var xy: PackedStringArray = str(g.args.look_at).split(",")
 		var q := w(Vector2(float(xy[0]), float(xy[1])))
@@ -1582,8 +1710,18 @@ func _draw_ui() -> void:
 	_pill(pc + Vector2(0, 18), Vector2(52, 12), Color(0.1, 0.08, 0.15, 0.6))
 	if bf > 0.0:
 		ui.draw_rect(Rect2(pc + Vector2(-24, 15), Vector2(48.0 * bf, 6)), Color("#7af1eb"))
+	var head_h: float = maxf(1.35, 0.56 + g.stack.size() * ITEM_H) * PLAYER_SCALE
+	if g.down_t <= 0.0 and (not g._inside(g.player.pos) or g.hearts < g.HEARTS):  # your health, over your head
+		var hc := sp(w(g.player.pos, head_h + 0.35))
+		var seg := 11.0
+		var total: float = g.HEARTS * seg
+		ui.draw_rect(Rect2(hc + Vector2(-total * 0.5 - 3, -5), Vector2(total + 6, 12)), C_OUTLINE)
+		for k in g.HEARTS:
+			var on: bool = k < g.hearts
+			ui.draw_rect(Rect2(hc + Vector2(-total * 0.5 + k * seg + 1, -3), Vector2(seg - 2, 8)),
+				Color("#6cf08a") if on and g.hearts > 2 else (Color("#ff5a4e") if on else Color(0.3, 0.25, 0.35)))
 	if g.stack.size() >= g.capacity:
-		var top2 := sp(w(g.player.pos, (1.45 + g.stack.size() * ITEM_H) * PLAYER_SCALE + 0.3))
+		var top2 := sp(w(g.player.pos, head_h + 0.9))
 		_pill(top2, Vector2(64, 26), Color("#ff9a3c"), Color.WHITE)
 		_txt("FULL", top2, 19, Color.WHITE, false)
 
@@ -1596,3 +1734,43 @@ func _star(c: Vector2, r: float) -> void:
 	ui.draw_colored_polygon(pts, C_GOLD)
 	pts.append(pts[0])
 	ui.draw_polyline(pts, C_OUTLINE, 1.5)
+
+
+## The climb over the wall: a crouch, a hop with knees tucked and hands on the wall, then down.
+## Returns true while it runs.
+func _vault_pose(p: Dictionary, vault: Dictionary, carrying: bool) -> bool:
+	if vault.is_empty():
+		p.body.rotation.x = lerpf(p.body.rotation.x, 0.0, 0.3)
+		if p.get("vaulting", false):  # landing: squash and a puff of dust
+			p.vaulting = false
+			p.body.scale = Vector3(1.2, 0.78, 1.2)
+			create_tween().tween_property(p.body, "scale", Vector3.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			_dust(p.root.position)
+		return false
+	p.vaulting = true
+	var k := clampf(float(vault.t) / g.VAULT_TIME, 0.0, 1.0)
+	if k < 0.18:  # crouch
+		var c := k / 0.18
+		p.body.position.y = -0.08 * c
+		p.body.scale = Vector3(1.0 + 0.12 * c, 1.0 - 0.15 * c, 1.0 + 0.12 * c)
+		p.legl.rotation.x = 0.4 * c
+		p.legr.rotation.x = 0.4 * c
+		return true
+	var j := (k - 0.18) / 0.82
+	var arc := sin(j * PI)
+	p.body.position.y = arc * 1.3
+	p.body.rotation.x = -sin(j * TAU) * 0.3
+	p.legl.rotation.x = -1.4 * arc
+	p.legr.rotation.x = -1.2 * arc
+	if not carrying:  # hands reach down to the wall at the top
+		p.arml.rotation.x = 0.9 + 0.8 * arc
+		p.armr.rotation.x = 0.9 + 0.8 * arc
+	p.body.scale = Vector3(1.0 - 0.06 * arc, 1.0 + 0.1 * arc, 1.0 - 0.06 * arc)
+	return true
+
+
+func _clear_stack() -> void:
+	for n in stack_nodes:
+		n.queue_free()
+	stack_nodes.clear()
+	stack_kinds.clear()
