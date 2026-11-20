@@ -8,9 +8,29 @@ build. Monsters follow their paths to the fence and wait there. Step out to gath
 The world is 30 m wide (1200 design px); the camera follows you. Style: a Victorian British
 frontier fort in Kingshot-like low poly. Green field with cone trees, beige paths and faceted rocks;
 a thin whitewashed wall with red coping; round red-banded bastions with pennants and period guns
-(brass swivel gun, brass Gatling, iron cannon); a brick powder works; cottages in the sand yard.
+(brass swivel gun, brass Gatling, iron cannon); a brick powder works; colonial buildings in the sand
+yard (verandah bungalows with terracotta hipped roofs, red-brick Georgian houses, a long barracks,
+the governor's house with a portico).
 You are a chibi redcoat (white pith helmet, cross-belts, musket) who carries his load in his arms;
 the woodcutter is a redcoat pioneer (forage cap, leather apron, axe).
+
+## Training
+
+The first game starts with a training round and no monsters. A sergeant major (bicorne, crimson
+sash, sword) stands in the yard with a speech bubble; his orders appear in a panel under the top
+bar, typed out, and he turns to point at each objective while the guide arrow leads the way:
+
+1. Walk to him (drag to move).
+2. Climb out over the wall.
+3. Chop 8 logs on the left flank.
+4. Climb back in and stand on the AMMO pad: the powder works is built.
+5. Fetch more logs and feed the works.
+6. Pick up cartridges at the table and load the tower.
+7. Tap HEAL (he gives you the energy for it).
+8. "Tap to begin": the real defence starts.
+
+"Tap here to skip" (top left) ends it at any time. `-- tutorial` forces it, `-- notut` skips it;
+bot runs and screenshots with `warp` skip it.
 
 ## The loop
 
@@ -167,6 +187,11 @@ outside, and picks Bomb when the field is crowded, Supply when the turrets are l
 The bot sees the whole map and never dodges; a person only sees the camera's window, so the bot
 runs a little easier than a person at the same pace. The bot (and the guide arrow) fights a close
 chaser if it has shots and otherwise climbs back over the fence, where it can't follow.
+
+## Asset review
+
+`godot --path fortress -- notut gallery=/some/dir` renders every model on its own (one PNG each, plus
+`assets.json` with names and groups). These images feed the asset review page.
 
 ## Code layout
 

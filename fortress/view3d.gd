@@ -81,6 +81,8 @@ var walk_phase := 0.0
 var arrow: Node3D
 var wall_mat: StandardMaterial3D
 var was_down := false
+var officer3d := {}
+var officer_step := -1
 var vault_shot_done := false
 var launchers3d: Array = []
 var bots3d: Array = []
@@ -107,6 +109,8 @@ func _ready() -> void:
 	_build_pads()
 	_build_player()
 	_build_arrow()
+	if g.args.has("gallery"):
+		_gallery.call_deferred()
 
 
 # ================================================================== helpers
@@ -504,74 +508,23 @@ func _build_yard() -> void:
 
 
 
+## The fort's buildings, one more for every pad you finish: verandah bungalows, red-brick Georgian
+## houses, a long barracks and the governor's house with its portico.
 func _house(i: int) -> Node3D:
-	var slots := [Vector2(140, 1585), Vector2(1060, 1585), Vector2(270, 1590), Vector2(930, 1590), Vector2(400, 1595),
-		Vector2(800, 1595), Vector2(80, 1490), Vector2(1120, 1490), Vector2(100, 1385), Vector2(1100, 1385)]
+	var slots := [Vector2(150, 1585), Vector2(1050, 1585), Vector2(300, 1592), Vector2(900, 1592), Vector2(450, 1598),
+		Vector2(750, 1598), Vector2(85, 1480), Vector2(1115, 1480), Vector2(100, 1370), Vector2(1100, 1370)]
 	var at: Vector2 = slots[i % slots.size()]
 	var h := node3(house_root, w(at))
-	h.scale = Vector3.ONE * 1.0
-	h.rotation.y = [0.08, -0.1, 0.0, 0.12, -0.05][i % 5]
-	var roof_col: Color = [Color("#9a5a35"), Color("#3f6db8"), Color("#b5473a"), Color("#8a5232"), Color("#2f8a80")][i % 5]
-	var plaster := i % 2 == 0
-	var wall_col := Color("#efe0c0") if plaster else Color("#b98352")
-	var beam := mat(C_WOOD_DARK)
-	var wl := 1.5
-	var wd := 1.05
-	var wh := 0.95
-	add(h, box(wl + 0.16, 0.16, wd + 0.16), mat(C_STONE_DARK), Vector3(0, 0.08, 0))          # stone footing
-	add(h, box(wl, wh, wd), mat(wall_col), Vector3(0, 0.16 + wh * 0.5, 0))
-	for cx in [-wl * 0.5, wl * 0.5]:                                                            # corner posts
-		for cz in [-wd * 0.5, wd * 0.5]:
-			add(h, box(0.11, wh, 0.11), beam, Vector3(cx, 0.16 + wh * 0.5, cz))
-	add(h, box(wl + 0.04, 0.09, 0.06), beam, Vector3(0, 0.16 + wh - 0.05, wd * 0.5 + 0.01))  # lintel beam
-	if not plaster:  # plank lines
-		for k in 3:
-			add(h, box(wl - 0.1, 0.02, 0.02), mat(wall_col.darkened(0.2)), Vector3(0, 0.36 + k * 0.2, wd * 0.5 + 0.005),
-				Vector3.ZERO, Vector3.ONE, false)
-	# door with frame and a step, windows with frames and shutters
-	add(h, box(0.4, 0.58, 0.05), beam, Vector3(-0.32, 0.16 + 0.29, wd * 0.5 + 0.02))
-	add(h, box(0.3, 0.5, 0.05), mat(Color("#7a4a2a")), Vector3(-0.32, 0.16 + 0.26, wd * 0.5 + 0.04))
-	add(h, box(0.5, 0.06, 0.18), mat(C_STONE_DARK), Vector3(-0.32, 0.03, wd * 0.5 + 0.12))
-	for wx in [0.32]:
-		add(h, box(0.36, 0.32, 0.05), beam, Vector3(wx, 0.62, wd * 0.5 + 0.02))
-		add(h, box(0.26, 0.22, 0.05), mat(Color("#8fd0e6")), Vector3(wx, 0.62, wd * 0.5 + 0.04))
-		add(h, box(0.3, 0.07, 0.12), mat(Color("#7a4a2a")), Vector3(wx, 0.45, wd * 0.5 + 0.07))       # flower box
-		for fx in [-0.08, 0.0, 0.08]:
-			add(h, ball(0.04, 6, 3), mat(Color("#ff7a9a") if fx != 0.0 else Color("#ffd84a")), Vector3(wx + fx, 0.51, wd * 0.5 + 0.08),
-				Vector3.ZERO, Vector3.ONE, false)
-	add(h, box(0.05, 0.22, 0.24), beam, Vector3(wl * 0.5 + 0.02, 0.62, 0))                    # side window
-	add(h, box(0.05, 0.16, 0.16), mat(Color("#8fd0e6")), Vector3(wl * 0.5 + 0.04, 0.62, 0))
-	# roof: steep, with short eaves so the front wall shows. Gable-front and ridge-across alternate.
-	var top := 0.16 + wh
-	var roof_m := mat(roof_col)
-	var rh := 0.95
-	if i % 2 == 0:  # gable facing the camera
-		add(h, prism(wl + 0.26, rh, wd + 0.22), roof_m, Vector3(0, top + rh * 0.5, 0))
-		add(h, prism(wl + 0.02, rh - 0.12, 0.04), mat(wall_col), Vector3(0, top + (rh - 0.12) * 0.5, (wd + 0.22) * 0.5 + 0.01), Vector3.ZERO,
-			Vector3.ONE, false)
-		add(h, cyl(0.11, 0.11, 0.05, 14), beam, Vector3(0, top + 0.3, (wd + 0.22) * 0.5 + 0.035), Vector3(PI * 0.5, 0, 0), Vector3.ONE, false)
-		add(h, cyl(0.075, 0.075, 0.05, 14), mat(Color("#8fd0e6")), Vector3(0, top + 0.3, (wd + 0.22) * 0.5 + 0.05), Vector3(PI * 0.5, 0, 0),
-			Vector3.ONE, false)
-		var slope := atan2(rh, (wl + 0.26) * 0.5)
-		for sx in [-1.0, 1.0]:  # barge boards along the gable edges
-			add(h, box(sqrt(rh * rh + pow((wl + 0.26) * 0.5, 2)) + 0.06, 0.07, 0.07), mat(roof_col.darkened(0.35)),
-				Vector3(sx * (wl + 0.26) * 0.25, top + rh * 0.5, (wd + 0.22) * 0.5 + 0.03), Vector3(0, 0, sx * -slope + (0.0 if sx > 0 else 0.0)) * Vector3(1, 1, 1),
-				Vector3.ONE, false)
-	else:  # ridge running across, front slope towards the camera
-		add(h, prism(wd + 0.24, rh, wl + 0.26), roof_m, Vector3(0, top + rh * 0.5, 0), Vector3(0, PI * 0.5, 0))
-		add(h, box(wl + 0.32, 0.08, 0.1), mat(roof_col.darkened(0.3)), Vector3(0, top + rh, 0))
-		var run := (wd + 0.24) * 0.5
-		var ang := atan2(rh, run)
-		for k in 3:  # shingle rows on the front slope
-			var f := (k + 1) / 4.0
-			add(h, box(wl + 0.27, 0.025, 0.035), mat(roof_col.darkened(0.15)), Vector3(0, top + rh * f, run * (1.0 - f) + 0.015),
-				Vector3(-ang, 0, 0), Vector3.ONE, false)
-		add(h, box(0.3, 0.26, 0.05), beam, Vector3(0, top + 0.18, wd * 0.5 + 0.02))                      # dormer-ish window
-	var cx := 0.45 * (1 if i % 4 < 2 else -1)
-	add(h, box(0.2, 0.55, 0.2), mat(C_STONE), Vector3(cx, top + 0.65, -0.2))                            # chimney
-	add(h, box(0.25, 0.06, 0.25), mat(C_STONE_DARK), Vector3(cx, top + 0.94, -0.2))
-	if i % 3 == 0:  # a barrel by the door
-		add(h, cyl(0.13, 0.13, 0.3, 12), mat(C_WOOD), Vector3(-0.68, 0.15, wd * 0.5 + 0.2))
+	h.rotation.y = [0.05, -0.06, 0.0, 0.08, -0.03][i % 5]
+	match ["bungalow", "brick", "barracks", "bungalow", "governor", "brick", "bungalow", "barracks", "brick", "bungalow"][i % 10]:
+		"bungalow":
+			_bungalow(h, i)
+		"brick":
+			_brick_house(h, i)
+		"barracks":
+			_barracks_block(h)
+		"governor":
+			_governor(h)
 	return h
 
 
@@ -600,52 +553,58 @@ func _build_turrets() -> void:
 		var tr: Dictionary = g.turrets[i]
 		var root := node3(self, w(tr.pos))
 		root.scale = Vector3.ONE * 1.2
-		var found := node3(root)  # foundation shown before it is built
-		add(found, cyl(0.6, 0.66, 0.24, 20), mat(C_STONE_DARK), Vector3(0, 0.12, 0))
-		var tower := node3(root)
-		add(tower, cyl(0.56, 0.64, 1.2, 24), wall_mat, Vector3(0, 0.6, 0))                             # round bastion
-		add(tower, cyl(0.62, 0.66, 0.14, 24), mat(C_STONE_DARK), Vector3(0, 0.07, 0))
-		add(tower, cyl(0.6, 0.6, 0.12, 24), mat(C_REDCOAT), Vector3(0, 0.9, 0))                         # red band
-		add(tower, cyl(0.68, 0.68, 0.1, 24), mat(C_REDCOAT_DARK), Vector3(0, 1.24, 0))                  # parapet ledge
-		for k in 8:
-			var a := TAU * k / 8.0
-			add(tower, box(0.2, 0.2, 0.14), wall_mat, Vector3(cos(a) * 0.6, 1.38, sin(a) * 0.6), Vector3(0, -a, 0))
-		add(tower, box(0.18, 0.28, 0.04), mat(Color("#3a2a20")), Vector3(0, 0.55, 0.62))                # arrow slit / door
-		# a pennant on a pole at the back, waving
-		var pole := node3(tower, Vector3(0.45, 1.3, 0.35))
-		add(pole, cyl(0.02, 0.025, 1.1, 8), mat(C_WOOD_DARK), Vector3(0, 0.55, 0))
-		add(pole, ball(0.04, 8, 4), mat(C_GOLD), Vector3(0, 1.12, 0))
-		var flag := node3(pole, Vector3(0, 0.95, 0))
-		add(flag, box(0.42, 0.09, 0.02), mat(C_REDCOAT), Vector3(0.21, 0.08, 0), Vector3.ZERO, Vector3.ONE, false)
-		add(flag, box(0.42, 0.07, 0.02), mat(Color("#f4f0e6")), Vector3(0.21, 0.0, 0), Vector3.ZERO, Vector3.ONE, false)
-		add(flag, box(0.42, 0.09, 0.02), mat(Color("#25407a")), Vector3(0.21, -0.08, 0), Vector3.ZERO, Vector3.ONE, false)
-		var aura := add(tower, cyl(0.95, 0.95, 0.02, 24), mat(Color("#7af1eb"), false, 0.45, true), Vector3(0, 1.31, 0), Vector3.ZERO,
-			Vector3.ONE, false)
-		aura.visible = false
-		var head := node3(tower, Vector3(0, 1.35, 0))
-		turrets3d.append({"root": root, "found": found, "tower": tower, "head": head, "gun": null, "recoil": 0.0, "yaw": 0.0,
-			"aura": aura, "flag": flag})
+		var tm := _tower_model(root)
+		turrets3d.append({"root": root, "found": tm.found, "tower": tm.tower, "head": tm.head, "gun": null, "recoil": 0.0, "yaw": 0.0,
+			"aura": tm.aura, "flag": tm.flag})
 		turret_keys.append("")
 
 
-## The tower's gun, rebuilt when it levels or evolves: a brass swivel gun, then a brass Gatling,
-## a heavy iron cannon or a frost gun.
+func _tower_model(root: Node3D) -> Dictionary:
+	var found := node3(root)  # foundation shown before it is built
+	add(found, cyl(0.6, 0.66, 0.24, 20), mat(C_STONE_DARK), Vector3(0, 0.12, 0))
+	var tower := node3(root)
+	add(tower, cyl(0.56, 0.64, 1.2, 24), wall_mat, Vector3(0, 0.6, 0))                             # round bastion
+	add(tower, cyl(0.62, 0.66, 0.14, 24), mat(C_STONE_DARK), Vector3(0, 0.07, 0))
+	add(tower, cyl(0.6, 0.6, 0.12, 24), mat(C_REDCOAT), Vector3(0, 0.9, 0))                         # red band
+	add(tower, cyl(0.68, 0.68, 0.1, 24), mat(C_REDCOAT_DARK), Vector3(0, 1.24, 0))                  # parapet ledge
+	for k in 8:
+		var a := TAU * k / 8.0
+		add(tower, box(0.2, 0.2, 0.14), wall_mat, Vector3(cos(a) * 0.6, 1.38, sin(a) * 0.6), Vector3(0, -a, 0))
+	add(tower, box(0.18, 0.28, 0.04), mat(Color("#3a2a20")), Vector3(0, 0.55, 0.62))                # arrow slit / door
+	# a pennant on a pole at the back, waving
+	var pole := node3(tower, Vector3(0.45, 1.3, 0.35))
+	add(pole, cyl(0.02, 0.025, 1.1, 8), mat(C_WOOD_DARK), Vector3(0, 0.55, 0))
+	add(pole, ball(0.04, 8, 4), mat(C_GOLD), Vector3(0, 1.12, 0))
+	var flag := node3(pole, Vector3(0, 0.95, 0))
+	add(flag, box(0.42, 0.09, 0.02), mat(C_REDCOAT), Vector3(0.21, 0.08, 0), Vector3.ZERO, Vector3.ONE, false)
+	add(flag, box(0.42, 0.07, 0.02), mat(Color("#f4f0e6")), Vector3(0.21, 0.0, 0), Vector3.ZERO, Vector3.ONE, false)
+	add(flag, box(0.42, 0.09, 0.02), mat(Color("#25407a")), Vector3(0.21, -0.08, 0), Vector3.ZERO, Vector3.ONE, false)
+	var aura := add(tower, cyl(0.95, 0.95, 0.02, 24), mat(Color("#7af1eb"), false, 0.45, true), Vector3(0, 1.31, 0), Vector3.ZERO,
+		Vector3.ONE, false)
+	aura.visible = false
+	var head := node3(tower, Vector3(0, 1.35, 0))
+	return {"found": found, "tower": tower, "head": head, "aura": aura, "flag": flag}
+
 func _turret_gun(i: int) -> void:
 	var td: Dictionary = turrets3d[i]
 	var tr: Dictionary = g.turrets[i]
 	if td.gun != null:
 		td.gun.queue_free()
-	var gun := node3(td.head)
-	td.gun = gun
+	td.gun = _gun_model(td.head, int(tr.level), tr.evo)
+	pop_in(td.gun)
+
+
+func _gun_model(head: Node3D, level: int, evo: String) -> Node3D:
+	var gun := node3(head)
 	var brass := mat(C_BRASS)
 	var iron := mat(Color("#33343c"))
-	var carriage := mat(C_REDCOAT_DARK if tr.evo == "cannon" else C_WOOD)
+	var carriage := mat(C_REDCOAT_DARK if evo == "cannon" else C_WOOD)
 	add(gun, box(0.5, 0.18, 0.62), carriage, Vector3(0, 0.08, 0.05))                                  # carriage
 	for sx in [-0.29, 0.29]:  # wheels
 		add(gun, cyl(0.2, 0.2, 0.06, 16), mat(C_WOOD_DARK), Vector3(sx, 0.1, 0.12), Vector3(0, 0, PI * 0.5))
 		add(gun, cyl(0.06, 0.06, 0.08, 10), brass, Vector3(sx, 0.1, 0.12), Vector3(0, 0, PI * 0.5))
 	var tip := -0.85
-	match tr.evo:
+	match evo:
 		"gatling":
 			var spin := node3(gun, Vector3(0, 0.3, -0.2))
 			spin.name = "Spin"
@@ -669,14 +628,13 @@ func _turret_gun(i: int) -> void:
 		_:
 			add(gun, cyl(0.06, 0.09, 0.7, 14), brass, Vector3(0, 0.27, -0.25), Vector3(PI * 0.5, 0, 0))
 			add(gun, ball(0.1, 12, 6), brass, Vector3(0, 0.27, 0.12))
-	if int(tr.level) >= 2:  # gold band on the carriage for level 2+
+	if level >= 2:  # gold band on the carriage for level 2+
 		add(gun, box(0.52, 0.04, 0.1), mat(C_GOLD), Vector3(0, 0.18, 0.32), Vector3.ZERO, Vector3.ONE, false)
 	var flash := add(gun, ball(0.16, 8, 4), mat(Color("#fff2b0"), false, 1.0, true), Vector3(0, 0.28, tip), Vector3.ZERO,
 		Vector3.ONE, false)
 	flash.visible = false
 	flash.name = "Flash"
-	pop_in(gun)
-
+	return gun
 
 
 func _build_machine() -> void:
@@ -821,7 +779,7 @@ func _launcher(pos: Vector2) -> Node3D:
 ## A chibi redcoat: big head, small body, red coat with white cross-belts and brass buttons.
 ## `soldier` is the hero (white pith helmet, musket); otherwise a pioneer (forage cap, leather apron,
 ## axe), the woodcutter.
-func _worker(parent: Node, suit: Color, hat: Color, axe: bool = false, soldier: bool = false) -> Dictionary:
+func _worker(parent: Node, suit: Color, hat: Color, axe: bool = false, soldier: bool = false, officer: bool = false) -> Dictionary:
 	var root := node3(parent)
 	var body := node3(root)
 	var parts := {"root": root, "body": body}
@@ -842,11 +800,16 @@ func _worker(parent: Node, suit: Color, hat: Color, axe: bool = false, soldier: 
 	for k in 3:  # brass buttons
 		add(body, ball(0.02, 6, 3), mat(C_BRASS), Vector3(0.08, 0.42 + k * 0.08, -0.205), Vector3.ZERO, Vector3.ONE, false)
 	add(body, box(0.24, 0.07, 0.16), mat(C_NAVY), Vector3(0, 0.66, 0))                                  # collar
-	if not soldier:  # pioneer's leather apron
+	if officer:  # crimson sash and a sword
+		add(body, box(0.06, 0.5, 0.02), mat(Color("#8a1a2e")), Vector3(0, 0.5, -0.215), Vector3(0, 0, 0.7), Vector3.ONE, false)
+		add(body, box(0.06, 0.5, 0.02), mat(Color("#8a1a2e")), Vector3(0, 0.5, 0.215), Vector3(0, 0, -0.7), Vector3.ONE, false)
+		add(body, cyl(0.012, 0.012, 0.5, 6), mat(Color("#d9dde4")), Vector3(-0.24, 0.2, 0.05), Vector3(0.3, 0, 0.25))
+		add(body, box(0.08, 0.03, 0.05), mat(C_GOLD), Vector3(-0.2, 0.4, 0.0))
+	elif not soldier:  # pioneer's leather apron
 		add(body, box(0.3, 0.34, 0.03), mat(Color("#9a6a3e")), Vector3(0, 0.4, -0.22), Vector3(0.1, 0, 0))
 	for sx in [-0.24, 0.24]:
 		var sh := node3(body, Vector3(sx, 0.6, 0))
-		add(sh, ball(0.075, 10, 5), mat(C_BRASS if soldier else C_REDCOAT), Vector3(0, 0.02, 0), Vector3.ZERO, Vector3(1.2, 0.6, 1.2))  # epaulette
+		add(sh, ball(0.075, 10, 5), mat(C_GOLD if officer else (C_BRASS if soldier else C_REDCOAT)), Vector3(0, 0.02, 0), Vector3.ZERO, Vector3(1.2, 0.6, 1.2))  # epaulette
 		add(sh, cyl(0.06, 0.055, 0.24, 12), coat, Vector3(0, -0.11, 0))
 		add(sh, cyl(0.062, 0.062, 0.05, 12), white, Vector3(0, -0.21, 0))                              # cuff
 		add(sh, ball(0.06, 10, 5), mat(C_SKIN), Vector3(0, -0.26, 0))
@@ -860,13 +823,20 @@ func _worker(parent: Node, suit: Color, hat: Color, axe: bool = false, soldier: 
 		add(head, ball(0.045, 8, 4), mat(Color("#ff9e9e")), Vector3(sx * 1.6, -0.08, -0.215), Vector3.ZERO, Vector3(1, 0.6, 0.4), false)
 		add(head, box(0.1, 0.025, 0.03), mat(Color("#5a3a24")), Vector3(sx, 0.085, -0.25), Vector3(0, 0, -sx * 2.5), Vector3.ONE, false)
 		add(head, box(0.09, 0.035, 0.04), mat(Color("#6a4428")), Vector3(sx * 0.6, -0.09, -0.255), Vector3(0, 0, sx * 2.0), Vector3.ONE, false)  # moustache
-	if soldier:  # white pith helmet with a brass spike
+	if officer:  # black bicorne worn side to side, gold trim and a red cockade; white whiskers
+		add(head, prism(0.72, 0.3, 0.2), mat(Color("#1d1a24")), Vector3(0, 0.3, 0.0))
+		add(head, box(0.7, 0.03, 0.21), mat(C_GOLD), Vector3(0, 0.16, 0.0), Vector3.ZERO, Vector3.ONE, false)
+		add(head, cyl(0.05, 0.05, 0.02, 12), mat(C_REDCOAT), Vector3(0.12, 0.26, -0.11), Vector3(PI * 0.5, 0, 0), Vector3.ONE, false)
+		add(head, ball(0.255, 18, 9, true), mat(Color("#cfc8c0")), Vector3(0, 0.0, 0.04), Vector3.ZERO, Vector3(1, 0.5, 1))
+		for sx in [-0.1, 0.1]:
+			add(head, box(0.14, 0.05, 0.05), mat(Color("#f4f0e6")), Vector3(sx * 0.8, -0.09, -0.26), Vector3(0, 0, sx * 3.0), Vector3.ONE, false)
+	elif soldier:  # white pith helmet with a brass spike
 		add(head, ball(0.25, 20, 10, true), white, Vector3(0, 0.1, 0.01), Vector3.ZERO, Vector3(1.0, 1.15, 1.08))
 		add(head, cyl(0.29, 0.29, 0.025, 24), white, Vector3(0, 0.11, 0.01), Vector3.ZERO, Vector3(1.0, 1.0, 1.12))
 		add(head, cyl(0.26, 0.26, 0.05, 20), mat(Color("#d9cfb5")), Vector3(0, 0.15, 0.01), Vector3.ZERO, Vector3(1.0, 1.0, 1.08))  # puggaree band
 		add(head, cyl(0.0, 0.035, 0.1, 8), mat(C_BRASS), Vector3(0, 0.42, 0.01))
 		add(head, ball(0.255, 18, 9, true), mat(Color("#5a3a24")), Vector3(0, 0.0, 0.04), Vector3.ZERO, Vector3(1, 0.45, 1))  # hair under it
-	else:  # navy forage cap with a red band
+	elif not officer:  # navy forage cap with a red band
 		add(head, cyl(0.24, 0.24, 0.14, 18), mat(C_NAVY), Vector3(0, 0.27, 0.0), Vector3(-0.15, 0, 0.2))
 		add(head, cyl(0.245, 0.245, 0.04, 18), mat(C_REDCOAT), Vector3(0, 0.22, 0.0), Vector3(-0.15, 0, 0.2))
 		add(head, ball(0.255, 18, 9, true), mat(Color("#5a3a24")), Vector3(0, 0.04, 0.03), Vector3.ZERO, Vector3(1, 0.5, 1))  # hair
@@ -970,6 +940,7 @@ func _process(delta: float) -> void:
 	_update_launchers()
 	_update_bots(delta)
 	_update_player(delta)
+	_update_officer(delta)
 	_sync_monsters(delta)
 	_sync_pickups()
 	_sync_lobs()
@@ -1692,6 +1663,12 @@ func _draw_ui() -> void:
 		if m.chase:
 			_pill(c5 + Vector2(0, -24), Vector2(24, 24), Color.WHITE, Color("#ff5a4e"))
 			_txt("!", c5 + Vector2(0, -24), 20, Color("#ff5a4e"), false)
+	if g.tutorial:  # a speech bubble over the sergeant major ties him to the orders panel
+		var oc := sp(w(g.OFFICER_POS, 2.6))
+		var bob := sin(t * 4.0) * 4.0
+		_pill(oc + Vector2(0, bob), Vector2(46, 34), Color.WHITE, C_REDCOAT_DARK)
+		ui.draw_colored_polygon(PackedVector2Array([oc + Vector2(-6, 15 + bob), oc + Vector2(6, 15 + bob), oc + Vector2(0, 26 + bob)]), Color.WHITE)
+		_txt("...", oc + Vector2(0, bob - 4), 24, C_REDCOAT_DARK, false)
 	# monsters still off screen: red markers on the edge they will come from
 	var vr := Rect2(Vector2(14, g.HUD_H + 18), Vector2(720 - 28, 1280 - g.HUD_H - 32))
 	for m in g.monsters:
@@ -1774,3 +1751,333 @@ func _clear_stack() -> void:
 		n.queue_free()
 	stack_nodes.clear()
 	stack_kinds.clear()
+
+
+## A hipped roof: slopes on all four sides, ridge along X. `a`, `b`: half length and half depth.
+func _hip_mesh(a: float, b: float, h: float) -> Mesh:
+	var key := "hip%.3f,%.3f,%.3f" % [a, b, h]
+	if meshes.has(key):
+		return meshes[key]
+	var r := maxf(a - b, 0.02)
+	var fl := Vector3(-a, 0, b)
+	var fr := Vector3(a, 0, b)
+	var bl := Vector3(-a, 0, -b)
+	var br := Vector3(a, 0, -b)
+	var rl := Vector3(-r, h, 0)
+	var rr := Vector3(r, h, 0)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)
+	for v in [fl, rl, rr, fl, rr, fr, br, rr, rl, br, rl, bl, fr, rr, br, bl, rl, fl]:
+		st.add_vertex(v)
+	st.generate_normals()
+	var m := st.commit()
+	meshes[key] = m
+	return m
+
+
+func _shuttered_window(h: Node3D, at: Vector3, sz: Vector2, shutters: bool = true) -> void:
+	add(h, box(sz.x + 0.06, sz.y + 0.06, 0.03), mat(Color("#f7f3ea")), at, Vector3.ZERO, Vector3.ONE, false)   # white frame
+	add(h, box(sz.x, sz.y, 0.03), mat(Color("#3d5a6e")), at + Vector3(0, 0, 0.01), Vector3.ZERO, Vector3.ONE, false)
+	add(h, box(0.02, sz.y, 0.03), mat(Color("#f7f3ea")), at + Vector3(0, 0, 0.02), Vector3.ZERO, Vector3.ONE, false)  # glazing bar
+	if shutters:
+		for sx in [-1.0, 1.0]:
+			add(h, box(sz.x * 0.45, sz.y + 0.04, 0.03), mat(Color("#2f6a4a")), at + Vector3(sx * (sz.x * 0.5 + sz.x * 0.25 + 0.04), 0, 0),
+				Vector3.ZERO, Vector3.ONE, false)
+
+
+## Whitewashed bungalow with a verandah on white posts under a terracotta hipped roof.
+func _bungalow(h: Node3D, i: int) -> void:
+	var wall := mat(C_WHITEWASH)
+	add(h, box(1.7, 0.14, 1.5), mat(C_STONE_DARK), Vector3(0, 0.07, 0.1))                          # plinth
+	add(h, box(1.5, 0.7, 1.0), wall, Vector3(0, 0.49, -0.1))
+	add(h, box(1.6, 0.04, 0.42), mat(C_WOOD), Vector3(0, 0.16, 0.6))                              # verandah boards
+	for k in 4:
+		add(h, cyl(0.035, 0.035, 0.7, 10), mat(Color("#f7f3ea")), Vector3(-0.72 + k * 0.48, 0.52, 0.76))
+	add(h, box(1.56, 0.06, 0.04), mat(Color("#f7f3ea")), Vector3(0, 0.36, 0.77))                    # rail
+	add(h, box(0.32, 0.5, 0.03), mat(Color("#2f6a4a")), Vector3(0, 0.4, 0.41))                       # green door
+	add(h, box(0.38, 0.06, 0.03), mat(Color("#f7f3ea")), Vector3(0, 0.68, 0.41), Vector3.ZERO, Vector3.ONE, false)
+	for wx in [-0.5, 0.5]:
+		_shuttered_window(h, Vector3(wx, 0.52, 0.41), Vector2(0.2, 0.28))
+	var roof_col: Color = [Color("#b8553a"), Color("#a84a34"), Color("#c26340")][i % 3]
+	add(h, _hip_mesh(0.92, 0.82, 0.62), mat(roof_col), Vector3(0, 0.86, 0.08))
+	add(h, box(1.86, 0.04, 1.66), mat(roof_col.darkened(0.25)), Vector3(0, 0.86, 0.08), Vector3.ZERO, Vector3.ONE, false)   # eaves
+	add(h, box(0.18, 0.4, 0.18), mat(C_WHITEWASH.darkened(0.08)), Vector3(0.45, 1.25, -0.3))          # chimney
+	add(h, box(0.22, 0.05, 0.22), mat(C_BRICK), Vector3(0.45, 1.46, -0.3))
+	if i % 3 == 0:  # a potted palm by the steps
+		add(h, cyl(0.08, 0.06, 0.14, 10), mat(C_BRICK), Vector3(0.95, 0.07, 0.75))
+		for k in 5:
+			add(h, box(0.04, 0.02, 0.28), mat(C_TREE_LIGHT), Vector3(0.95, 0.2, 0.75), Vector3(0.5, TAU * k / 5.0, 0))
+
+
+## Red-brick Georgian house: white sash windows in two rows, a white door case, slate roof, chimneys.
+func _brick_house(h: Node3D, i: int) -> void:
+	var brick := mat(C_BRICK)
+	add(h, box(1.3, 1.25, 1.0), brick, Vector3(0, 0.625, 0))
+	for k in 5:
+		add(h, box(1.31, 0.015, 1.01), mat(C_BRICK.darkened(0.15)), Vector3(0, 0.18 + k * 0.22, 0), Vector3.ZERO, Vector3.ONE, false)
+	add(h, box(1.36, 0.06, 1.06), mat(Color("#f7f3ea")), Vector3(0, 1.25, 0))                       # cornice
+	add(h, box(1.34, 0.05, 1.04), mat(Color("#f7f3ea")), Vector3(0, 0.66, 0), Vector3.ZERO, Vector3.ONE, false)   # string course
+	for wx in [-0.38, 0.38]:
+		_shuttered_window(h, Vector3(wx, 0.95, 0.5), Vector2(0.2, 0.3), false)
+	_shuttered_window(h, Vector3(-0.38, 0.4, 0.5), Vector2(0.2, 0.3), false)
+	_shuttered_window(h, Vector3(0.38, 0.4, 0.5), Vector2(0.2, 0.3), false)
+	add(h, box(0.26, 0.48, 0.04), mat(Color("#1f2a44")), Vector3(0, 0.24, 0.51))                    # navy door
+	add(h, prism(0.42, 0.14, 0.06), mat(Color("#f7f3ea")), Vector3(0, 0.56, 0.52))                   # pediment
+	add(h, box(0.5, 0.06, 0.2), mat(C_STONE), Vector3(0, 0.03, 0.6))                                 # step
+	add(h, prism(1.1, 0.55, 1.4), mat(Color("#4a5566")), Vector3(0, 1.55, 0), Vector3(0, PI * 0.5, 0))   # slate roof
+	for cx in [-0.55, 0.55]:
+		add(h, box(0.22, 0.55, 0.3), brick, Vector3(cx, 1.6, 0))
+		add(h, box(0.26, 0.05, 0.34), mat(Color("#f7f3ea")), Vector3(cx, 1.88, 0))
+		add(h, cyl(0.04, 0.04, 0.08, 8), mat(C_BRICK.darkened(0.3)), Vector3(cx, 1.94, 0))
+
+
+## A long whitewashed barracks with a verandah along its front and a red tiled roof.
+func _barracks_block(h: Node3D) -> void:
+	add(h, box(2.5, 0.12, 1.4), mat(C_STONE_DARK), Vector3(0, 0.06, 0.05))
+	add(h, box(2.3, 0.72, 0.9), mat(C_WHITEWASH), Vector3(0, 0.48, -0.1))
+	add(h, box(2.4, 0.04, 0.38), mat(C_WOOD), Vector3(0, 0.14, 0.55))
+	for k in 6:
+		add(h, cyl(0.032, 0.032, 0.7, 10), mat(Color("#f7f3ea")), Vector3(-1.1 + k * 0.44, 0.5, 0.7))
+	for k in 4:
+		_shuttered_window(h, Vector3(-0.85 + k * 0.57, 0.52, 0.36), Vector2(0.18, 0.26))
+	add(h, box(0.26, 0.48, 0.03), mat(Color("#2f6a4a")), Vector3(-0.28, 0.4, 0.36))
+	add(h, _hip_mesh(1.33, 0.78, 0.55), mat(Color("#b8553a")), Vector3(0, 0.84, 0.05))
+	add(h, box(2.68, 0.04, 1.58), mat(Color("#8a3a26")), Vector3(0, 0.84, 0.05), Vector3.ZERO, Vector3.ONE, false)
+	add(h, cyl(0.02, 0.02, 0.9, 6), mat(C_WOOD_DARK), Vector3(1.0, 1.5, -0.2))                        # small flag
+	add(h, box(0.3, 0.07, 0.02), mat(C_REDCOAT), Vector3(1.15, 1.88, -0.2), Vector3.ZERO, Vector3.ONE, false)
+	add(h, box(0.3, 0.07, 0.02), mat(Color("#25407a")), Vector3(1.15, 1.81, -0.2), Vector3.ZERO, Vector3.ONE, false)
+
+
+## The governor's house: ochre stucco, a white portico with columns and a pediment, slate hipped roof.
+func _governor(h: Node3D) -> void:
+	var stucco := mat(Color("#e2b86a"))
+	var white := mat(Color("#f7f3ea"))
+	add(h, box(1.9, 0.16, 1.4), mat(C_STONE), Vector3(0, 0.08, 0.05))
+	add(h, box(1.7, 1.0, 1.0), stucco, Vector3(0, 0.66, -0.1))
+	add(h, box(1.76, 0.07, 1.06), white, Vector3(0, 1.19, -0.1))
+	for wx in [-0.6, -0.32, 0.32, 0.6]:
+		_shuttered_window(h, Vector3(wx, 0.92, 0.41), Vector2(0.16, 0.26), false)
+		_shuttered_window(h, Vector3(wx, 0.48, 0.41), Vector2(0.16, 0.26), false)
+	for k in 4:  # portico
+		add(h, cyl(0.045, 0.05, 0.9, 12), white, Vector3(-0.27 + k * 0.18, 0.61, 0.62))
+	add(h, box(0.7, 0.08, 0.36), white, Vector3(0, 1.08, 0.55))
+	add(h, prism(0.74, 0.24, 0.36), white, Vector3(0, 1.24, 0.55))
+	add(h, box(0.24, 0.5, 0.03), mat(Color("#1f2a44")), Vector3(0, 0.41, 0.41))
+	add(h, _hip_mesh(0.95, 0.6, 0.45), mat(Color("#4a5566")), Vector3(0, 1.22, -0.1))
+	add(h, cyl(0.025, 0.025, 1.0, 8), mat(C_WOOD_DARK), Vector3(0, 2.0, -0.1))                         # flagstaff
+	add(h, box(0.42, 0.08, 0.02), mat(C_REDCOAT), Vector3(0.21, 2.38, -0.1), Vector3.ZERO, Vector3.ONE, false)
+	add(h, box(0.42, 0.07, 0.02), mat(Color("#f4f0e6")), Vector3(0.21, 2.31, -0.1), Vector3.ZERO, Vector3.ONE, false)
+	add(h, box(0.42, 0.08, 0.02), mat(Color("#25407a")), Vector3(0.21, 2.24, -0.1), Vector3.ZERO, Vector3.ONE, false)
+
+
+## The sergeant major who runs the training: bicorne, crimson sash, sword, white moustache.
+func _officer() -> Dictionary:
+	var parts := _worker(self, C_REDCOAT, Color.WHITE, false, false, true)
+	parts.root.scale = Vector3.ONE * PLAYER_SCALE * 1.05
+	parts.root.position = w(g.OFFICER_POS)
+	return parts
+
+
+## The sergeant major during the training: faces you, points the way, hops at each new order.
+func _update_officer(delta: float) -> void:
+	if officer3d.is_empty():
+		if not g.tutorial:
+			return
+		officer3d = _officer()
+		pop_in(officer3d.root)
+	var p: Dictionary = officer3d
+	p.root.visible = g.tutorial
+	if not g.tutorial:
+		return
+	var to_player: Vector2 = g.player.pos - g.OFFICER_POS
+	var target: Vector2 = g._tut_target()
+	var point := to_player.length() < 260.0 and target.distance_to(g.OFFICER_POS) > 120.0
+	var look: Vector2 = (target - g.OFFICER_POS) if point else to_player
+	p.yaw = lerp_angle(float(p.get("yaw", 0.0)), yaw_of(look), minf(1.0, delta * 6.0))
+	p.root.rotation.y = p.yaw
+	_animate_worker(p, Vector2.ZERO, delta, false)
+	p.armr.rotation.x = lerp_angle(p.armr.rotation.x, 1.6 if point else 0.15, 0.15)   # arm out at the objective
+	p.arml.rotation.x = lerp_angle(p.arml.rotation.x, -0.1, 0.15)
+	p.arml.rotation.z = lerp_angle(p.arml.rotation.z, -0.6, 0.15)                     # hand on hip
+	if g.tut_step != officer_step:  # a new order: a little hop
+		officer_step = g.tut_step
+		var tw := create_tween()
+		tw.tween_property(p.body, "position:y", 0.35, 0.15).set_ease(Tween.EASE_OUT)
+		tw.tween_property(p.body, "position:y", 0.0, 0.2).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+
+
+# ================================================================== asset gallery
+# `-- gallery=/dir` renders every asset on its own, from three-quarters above, one PNG each, and
+# writes /dir/assets.json (number, file, name, group). Used for the asset review page.
+
+func _gallery() -> void:
+	set_process(false)
+	g.visible = false
+	g.set_process(false)
+	ui.visible = false
+	vignette.visible = false
+	var out_dir := str(g.args.gallery)
+	DirAccess.make_dir_recursive_absolute(out_dir)
+	var env: Environment = (get_children().filter(func(c): return c is WorldEnvironment)[0] as WorldEnvironment).environment
+	env.background_color = Color("#e8e2d4")
+	env.fog_enabled = false
+	var list := []  # [name, group, size, ground colour, builder]
+	list.append(["Hero: redcoat with musket", "Characters", 1.35, C_SAND, func(h: Node3D) -> void:
+		_build_player()
+		player3d.reparent(h, false)
+		player3d.position = Vector3.ZERO
+		player3d.rotation.y = PI - 0.5])
+	list.append(["Hero carrying a load", "Characters", 1.55, C_SAND, func(h: Node3D) -> void:
+		var p := _worker(h, C_REDCOAT, Color.WHITE, false, true)
+		p.root.scale = Vector3.ONE * PLAYER_SCALE
+		p.root.rotation.y = PI - 0.5
+		for a in [p.arml, p.armr]:
+			a.rotation.x = 1.25
+		p.arml.rotation.z = -0.35
+		p.armr.rotation.z = 0.35
+		var st := node3(p.body, Vector3(0, 0.56, -0.36))
+		for k in 6:
+			var it := item_node(st, ["wood", "wood", "stone", "stone", "ammo", "ammo"][k])
+			it.position = Vector3(0, k * ITEM_H, 0)])
+	list.append(["Woodcutter: redcoat pioneer", "Characters", 1.35, C_GRASS, func(h: Node3D) -> void:
+		var p := _worker(h, C_REDCOAT, Color.WHITE, true)
+		p.root.scale = Vector3.ONE * 1.25 * 1.2
+		p.root.rotation.y = PI - 0.5
+		p.armr.rotation.x = 1.3])
+	list.append(["Sergeant major (training)", "Characters", 1.4, C_SAND, func(h: Node3D) -> void:
+		var p := _worker(h, C_REDCOAT, Color.WHITE, false, false, true)
+		p.root.scale = Vector3.ONE * PLAYER_SCALE
+		p.root.rotation.y = PI - 0.5
+		p.arml.rotation.z = -0.6])
+	for m in [["grunt", "Grunt"], ["runner", "Runner"], ["brute", "Brute"]]:
+		list.append(["Monster: " + m[1], "Monsters", 0.9 if m[0] != "brute" else 1.2, C_GRASS, func(h: Node3D) -> void:
+			var n := _monster(m[0], g.MONSTERS[m[0]].r)
+			n.reparent(h, false)
+			n.position = Vector3.ZERO
+			n.rotation.y = PI - 0.6])
+	list.append(["Wall section", "Fort", 1.8, C_GRASS, func(h: Node3D) -> void:
+		var root := node3(h)
+		add(root, box(3.6, 0.62, 0.26), wall_mat, Vector3(0, 0.31, 0))
+		add(root, box(3.6, 0.1, 0.24), mat(C_STONE_DARK), Vector3(0, 0.05, 0))
+		add(root, box(3.6, 0.06, 0.32), mat(C_REDCOAT_DARK), Vector3(0, 0.65, 0))
+		for k in 8:
+			add(root, box(0.22, 0.18, 0.26), wall_mat, Vector3(-1.58 + k * 0.45, 0.77, 0))
+			add(root, box(0.24, 0.03, 0.28), mat(C_REDCOAT_DARK), Vector3(-1.58 + k * 0.45, 0.875, 0))
+		add(root, box(0.16, 0.66, 0.34), mat(C_WHITEWASH.darkened(0.06)), Vector3(0.4, 0.33, 0))
+		root.rotation.y = 0.35])
+	list.append(["Tower: empty foundation", "Fort", 1.0, C_GRASS, func(h: Node3D) -> void:
+		var r := node3(h)
+		r.scale = Vector3.ONE * 1.2
+		var tm := _tower_model(r)
+		tm.tower.visible = false])
+	for v in [["Tower: brass swivel gun", 1, ""], ["Tower: level 2", 2, ""], ["Tower: Gatling (evolution)", 3, "gatling"],
+			["Tower: iron cannon (evolution)", 3, "cannon"], ["Tower: frost gun (evolution)", 3, "frost"]]:
+		list.append([v[0], "Fort", 1.3, C_GRASS, func(h: Node3D) -> void:
+			var r := node3(h)
+			r.scale = Vector3.ONE * 1.2
+			var tm := _tower_model(r)
+			tm.found.visible = false
+			_gun_model(tm.head, v[1], v[2])
+			tm.head.rotation.y = PI - 0.7])
+	list.append(["Powder works (ammo machine) and crate table", "Buildings you build", 1.6, C_SAND, func(h: Node3D) -> void:
+		machine3d.visible = true
+		var o: Node3D = machine3d.get_meta("out")
+		o.visible = true
+		machine3d.reparent(h, false)
+		machine3d.position = Vector3(0, 0, 0.9)
+		o.reparent(h, false)
+		o.position = Vector3(0, 0, -1.2)
+		for k in out_boxes.size():
+			out_boxes[k].visible = k < 10
+		for k in in_logs.size():
+			in_logs[k].visible = k < 6])
+	list.append(["Catapult (launcher)", "Buildings you build", 0.9, C_SAND, func(h: Node3D) -> void:
+		var l := _launcher(Vector2.ZERO)
+		l.reparent(h, false)
+		l.position = Vector3.ZERO
+		l.scale = Vector3.ONE
+		(l.get_meta("arm") as Node3D).rotation.x = -0.25])
+	list.append(["Build pad (with ghost preview)", "Buildings you build", 0.9, C_SAND, func(h: Node3D) -> void:
+		var pd: Dictionary = pads3d["machine"]
+		pd.root.visible = true
+		pd.root.reparent(h, false)
+		pd.root.position = Vector3.ZERO
+		pd.fill.scale = Vector3(0.5, 1, 0.5)])
+	list.append(["Upgrade pads: level 2, Gatling, cannon, frost", "Buildings you build", 1.4, C_SAND, func(h: Node3D) -> void:
+		var cols := [Color("#fff3dc"), (g.EVOLUTIONS.gatling.color as Color).lightened(0.25), (g.EVOLUTIONS.cannon.color as Color).lightened(0.25),
+			(g.EVOLUTIONS.frost.color as Color).lightened(0.25)]
+		for k in 4:
+			var n := node3(h, Vector3(-1.35 + k * 0.9, 0, 0))
+			add(n, cyl(0.5, 0.52, 0.08, 16), mat(cols[k]), Vector3(0, 0.05, 0))
+			add(n, cyl(0.38, 0.38, 0.02, 16), mat((cols[k] as Color).lightened(0.4)), Vector3(0, 0.1, 0), Vector3.ZERO, Vector3.ONE, false)
+			var icon := item_node(n, "coin")
+			icon.position = Vector3(0, 0.55, 0)
+			icon.rotation = Vector3(PI * 0.5 * 0.7, 0, 0)])
+	for b in [["House: verandah bungalow", 0], ["House: red-brick Georgian", 1], ["House: barracks", 2], ["House: governor's house", 4]]:
+		list.append([b[0], "Fort houses", 1.5 if b[1] != 2 else 1.7, C_SAND, func(h: Node3D) -> void:
+			var n := node3(h)
+			n.rotation.y = 0.4
+			if b[1] == 0:
+				_bungalow(n, 0)
+			elif b[1] == 1:
+				_brick_house(n, 1)
+			elif b[1] == 2:
+				_barracks_block(n)
+			else:
+				_governor(n)])
+	list.append(["Tree (wood source) and its stump", "Nature", 1.2, C_GRASS, func(h: Node3D) -> void:
+		var nd: Dictionary = nodes3d[0]
+		nd.full.reparent(h, false)
+		nd.full.position = Vector3(-0.5, 0, 0)
+		nd.full.visible = true
+		nd.empty.reparent(h, false)
+		nd.empty.position = Vector3(0.9, 0, 0.3)
+		nd.empty.visible = true])
+	list.append(["Rock (stone source) and its rubble", "Nature", 1.1, C_GRASS, func(h: Node3D) -> void:
+		var nd: Dictionary = nodes3d[1]
+		nd.full.reparent(h, false)
+		nd.full.position = Vector3(-0.4, 0, 0)
+		nd.full.visible = true
+		nd.empty.reparent(h, false)
+		nd.empty.position = Vector3(0.9, 0, 0.3)
+		nd.empty.visible = true])
+	list.append(["Decor: cone trees, boulder, grass and flowers", "Nature", 1.6, C_GRASS, func(h: Node3D) -> void:
+		_cone_tree(h, Vector3(-0.9, 0, -0.3), 1.0, 1)
+		_cone_tree(h, Vector3(-0.2, 0, -0.8), 0.8, 2)
+		add(h, faceted(ball(0.5, 6, 4), 0.2, 600), mat(C_ROCK), Vector3(0.9, 0.25, -0.2))
+		for k in 5:
+			var tuft := node3(h, Vector3(-0.6 + k * 0.4, 0, 0.7))
+			for j in 3:
+				add(tuft, prism(0.08, 0.3, 0.04), mat(C_GRASS_LIGHT), Vector3((j - 1) * 0.07, 0.14, 0), Vector3(0, j * 0.9, (j - 1) * 0.35))
+			add(tuft, ball(0.07, 6, 3), mat([Color("#ffd84a"), Color("#ff86a8"), Color("#f4f0ff")][k % 3]), Vector3(0.12, 0.1, 0.05))])
+	list.append(["Items: log, stone, cartridge box, coin", "Items", 1.1, C_SAND, func(h: Node3D) -> void:
+		for k in 4:
+			var it := item_node(h, ["wood", "stone", "ammo", "coin"][k])
+			it.position = Vector3(-1.05 + k * 0.7, 0.2, 0)
+			it.scale = Vector3.ONE * 1.5
+			if k == 3:
+				it.rotation = Vector3(PI * 0.35, 0, 0)])
+	var manifest := []
+	for i in list.size():
+		var e: Array = list[i]
+		var holder := node3(self, Vector3(i * 14.0, 0, 70.0))
+		add(holder, cyl(float(e[2]) * 1.9, float(e[2]) * 1.9, 0.04, 40), mat(e[3]), Vector3(0, 0.0, 0), Vector3.ZERO, Vector3.ONE, false)
+		(e[4] as Callable).call(holder)
+		var size: float = e[2]
+		cam.fov = 30.0
+		cam.rotation_degrees = Vector3(-34, 0, 0)
+		var look := holder.position + Vector3(0, size * 0.6, 0)
+		cam.position = look + Vector3(0, sin(deg_to_rad(34.0)), cos(deg_to_rad(34.0))) * size * 5.2
+		for f in 4:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		var file := "asset_%02d.png" % (i + 1)
+		get_viewport().get_texture().get_image().save_png(out_dir.path_join(file))
+		manifest.append({"n": i + 1, "file": file, "name": e[0], "group": e[1]})
+		holder.visible = false
+	var fa := FileAccess.open(out_dir.path_join("assets.json"), FileAccess.WRITE)
+	fa.store_string(JSON.stringify(manifest, "  "))
+	fa.close()
+	print("[gallery] ", manifest.size(), " assets")
+	get_tree().quit()

@@ -67,6 +67,18 @@ const SPRINT_TIME := 10.0
 const SPRINT_MULT := 1.6
 const FURY_TIME := 10.0
 const RESPAWN_TIME := 6.0      # down this long after losing your last heart, then back inside
+const OFFICER_POS := Vector2(400, 1330)   # the sergeant major who runs the training
+## The training, one order at a time. No monsters come until it is over (or skipped).
+const TUTORIAL := [
+	"Welcome to the fort, soldier! Drag anywhere on the screen to walk. Report to me.",
+	"We need wood for ammunition. Walk straight into the wall, away from the towers, and you'll climb over it.",
+	"Trees grow on the left flank. Stand beside one and you'll chop it. Bring me 8 logs.",
+	"Good man! Climb back in and stand on the AMMO pad. The logs go into it by themselves.",
+	"That's our powder works: it turns logs into cartridges. Fetch more logs and stand beside it to feed it.",
+	"Cartridges! Pick them up at the table, then stand beside the tower to load its gun.",
+	"Monsters drop coins, and coins charge the powers on the right. Here's some energy: tap HEAL.",
+	"Splendid! Monsters will march down those paths. Keep the guns fed, and never let them pile up at the wall. Tap to begin!",
+]
 const FREEZE_TIME := 8.0
 const FREEZE_MULT := 0.35
 const BOMB_DAMAGE := 6.0
@@ -153,6 +165,9 @@ var sprint_t := 0.0
 var fury_t := 0.0
 var down_t := 0.0              # knocked out: counts down to the respawn
 var power_flash := {}          # power id -> time since it was used (HUD feedback)
+var tutorial := false          # the training is running
+var tut_step := 0
+var tut_t := 0.0               # time since the current order was given
 var dwell_key := ""
 var dwell_t := 0.0
 var kills := 0
@@ -179,6 +194,7 @@ func _ready() -> void:
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 	autoplay = args.has("autoplay") or args.get("sim", "") == "bot"
 	idle = args.get("sim", "") == "idle"
+	tutorial = args.has("tutorial") or (not args.has("sim") and not autoplay and not args.has("warp") and not args.has("notut"))
 	reset()
 	if args.has("sim"):
 		_run_sim()
@@ -259,6 +275,10 @@ func reset() -> void:
 	kills = 0
 	built_count = 0
 	log_lines = []
+	tut_step = 0
+	tut_t = 0.0
+	if tutorial:
+		turrets[1].ammo = 0
 
 
 func _pad(id: String, label: String, pos: Vector2, cost: Dictionary) -> Dictionary:
@@ -307,7 +327,10 @@ func step(dt: float) -> void:
 	_update_machine(dt)
 	_update_launchers(dt)
 	_update_bots(dt)
-	_update_waves(dt)
+	if tutorial:
+		_update_tutorial(dt)
+	else:
+		_update_waves(dt)
 	_update_monsters(dt)
 	_update_turrets(dt)
 
@@ -639,6 +662,8 @@ func _update_player_gun(dt: float) -> void:
 ## Upgrade pads under each built turret: level 2, then a choice of three evolutions.
 func _upgrade_pads() -> Array:
 	var out := []
+	if tutorial:
+		return out
 	for i in turrets.size():
 		var t: Dictionary = turrets[i]
 		if not t.built:
@@ -939,6 +964,68 @@ func _spread_waiting() -> void:
 				b.pos.x = clampf(b.pos.x + push, 20.0, W - 20.0)
 
 
+## The training: check whether the current order is done, and give the next one.
+func _update_tutorial(dt: float) -> void:
+	tut_t += dt
+	var done := false
+	match tut_step:
+		0:
+			done = _near(player.pos, OFFICER_POS, 90.0)
+		1:
+			done = not _inside(player.pos) and not player.has("vault")
+		2:
+			done = _count("wood") >= 8 or machine.built
+		3:
+			done = machine.built
+		4:
+			done = int(machine.out) >= 2
+		5:
+			done = int(turrets[1].ammo) > 0
+		6:
+			done = power_flash.has("heal")
+	if autoplay and tut_step == 6 and tut_t > 1.0:  # the bot taps what it is told to
+		activate_power("heal")
+	if autoplay and tut_step == TUTORIAL.size() - 1 and tut_t > 2.0:
+		_log("tutorial finished at %ds" % int(time))
+		_end_tutorial()
+		return
+	if done and tut_t > 0.8:
+		tut_step += 1
+		tut_t = 0.0
+		if tut_step == 6:
+			power = maxi(power, 6)
+		_log("tutorial step %d at %ds" % [tut_step, int(time)])
+
+
+## Where the guide arrow points during the training.
+func _tut_target() -> Vector2:
+	var p: Vector2 = player.pos
+	match tut_step:
+		0:
+			return OFFICER_POS + Vector2(0, 40)
+		1:
+			return Vector2(260, FENCE_Y - 120.0)
+		2:
+			var n := _nearest_node_index(p, "wood")
+			return (nodes[n].pos as Vector2) + Vector2(34, 0) if n >= 0 else p
+		3:
+			return pads[0].pos
+		4:
+			if _count("wood") > 0:
+				return MACHINE_POS + Vector2(0, 40)
+			var n2 := _nearest_node_index(p, "wood")
+			return (nodes[n2].pos as Vector2) + Vector2(34, 0) if n2 >= 0 else p
+		5:
+			return turrets[1].pos + Vector2(0, 46) if _count("ammo") > 0 else OUTPUT_POS + Vector2(0, 26)
+	return p
+
+
+## Training over (or skipped): start the real defence.
+func _end_tutorial() -> void:
+	tutorial = false
+	reset()
+
+
 ## Your last heart is gone: you drop what you carry and are out for a few seconds.
 func _knock_out() -> void:
 	hearts = 0
@@ -1185,6 +1272,8 @@ func _ammo_short() -> bool:
 
 ## The most useful place to go next. Drives the guide arrow and the bot.
 func _advice() -> Vector2:
+	if tutorial:
+		return _tut_target()
 	var p: Vector2 = player.pos
 	var space := capacity - stack.size()
 	# outside and in trouble: get back over the fence
@@ -1294,6 +1383,9 @@ func _input(event: InputEvent) -> void:
 			if state != "play":
 				reset()
 				return
+			if tutorial and (p.x < 230 and p.y < 90 or tut_step == TUTORIAL.size() - 1 and tut_t > 0.6):
+				_end_tutorial()  # skip, or the last order's "tap to begin"
+				return
 			for k in POWERS.size():
 				if p.distance_to(_power_button(k)) <= POWER_R + 6.0:
 					activate_power(POWERS[k].id)
@@ -1346,8 +1438,46 @@ func _draw_overlay() -> void:
 	if joy_active:
 		draw_circle(joy_origin, 70.0, Color(1, 1, 1, 0.12))
 		draw_circle(joy_origin + joy_vec * 70.0, 28.0, Color(1, 1, 1, 0.35))
+	if tutorial:
+		_draw_orders()
 	if state != "play":
 		_draw_end()
+
+
+## The sergeant major's orders: a dialogue panel under the top bar with his portrait.
+func _draw_orders() -> void:
+	var r := Rect2(16, 96, SW - 120, 190)
+	var k := minf(tut_t / 0.25, 1.0)  # slides in with each new order
+	r.position.y -= (1.0 - k) * 30.0
+	_panel(Rect2(r.position + Vector2(0, 6), r.size), Color("#241d2c"))
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color("#f6efe0")
+	sb.set_corner_radius_all(20)
+	sb.border_color = Color("#9a2522")
+	sb.set_border_width_all(4)
+	draw_style_box(sb, r)
+	# portrait: red coat, white moustache, black bicorne
+	var pc := r.position + Vector2(62, 78)
+	draw_circle(pc, 44.0, Color("#9a2522"))
+	draw_circle(pc + Vector2(0, 30), 30.0, Color("#c8322f"))
+	draw_circle(pc + Vector2(0, -2), 26.0, Color("#ffd3a8"))
+	draw_circle(pc + Vector2(-9, -6), 3.5, Color("#1d1a24"))
+	draw_circle(pc + Vector2(9, -6), 3.5, Color("#1d1a24"))
+	draw_colored_polygon(PackedVector2Array([pc + Vector2(-18, 7), pc + Vector2(0, 3), pc + Vector2(18, 7), pc + Vector2(12, 13),
+		pc + Vector2(0, 9), pc + Vector2(-12, 13)]), Color("#f4f0e6"))
+	draw_colored_polygon(PackedVector2Array([pc + Vector2(-40, -18), pc + Vector2(0, -48), pc + Vector2(40, -18), pc + Vector2(0, -24)]),
+		Color("#1d1a24"))
+	draw_line(pc + Vector2(-38, -19), pc + Vector2(38, -19), Color("#d9a441"), 3.0)
+	draw_circle(pc + Vector2(0, -30), 5.0, Color("#c8322f"))
+	var f: Font = hud_font if hud_font else font
+	draw_string(f, r.position + Vector2(124, 34), "SERGEANT MAJOR", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("#9a2522"))
+	var text: String = TUTORIAL[tut_step]
+	var shown := text.substr(0, int(tut_t * 70.0))  # typed out
+	draw_multiline_string(f, r.position + Vector2(124, 64), shown, HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 140, 23, 4,
+		Color("#241d2c"))
+	if tut_step == 6 and fmod(time, 0.8) < 0.5:  # point at the heal button
+		var b := _power_button(0)
+		draw_arc(b, POWER_R + 10.0, 0, TAU, 32, Color("#6cf08a"), 4.0)
 
 
 
@@ -1364,6 +1494,12 @@ func _draw_overlay() -> void:
 
 func _draw_hud() -> void:
 	var dark := Color(0.09, 0.07, 0.14, 0.62)
+	if tutorial:
+		_panel(Rect2(16, 16, 196, 62), dark)
+		_otext("TRAINING %d/%d" % [tut_step + 1, TUTORIAL.size()], Vector2(114, 38), 24, Color.WHITE)
+		_otext("TAP HERE TO SKIP", Vector2(114, 64), 15, Color("#d6d0e6"))
+		_draw_power()
+		return
 	# wave
 	_panel(Rect2(16, 16, 196, 62), dark)
 	_otext("WAVE %d/%d" % [wave, WAVES], Vector2(114, 38), 26, Color.WHITE)
