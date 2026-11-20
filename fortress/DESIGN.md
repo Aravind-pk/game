@@ -11,7 +11,8 @@ a thin whitewashed wall with red coping; round red-banded bastions with pennants
 (brass swivel gun, brass Gatling, iron cannon); a brick powder works; colonial buildings in the sand
 yard (verandah bungalows with terracotta hipped roofs, red-brick Georgian houses, a long barracks,
 the governor's house with a portico).
-You are a chibi redcoat (white pith helmet, cross-belts, musket) who carries his load in his arms;
+You are a cute, simple chibi redcoat (big round head, shiny eyes, white pith helmet, one white strap,
+musket) who carries his load in his arms;
 the woodcutter is a redcoat pioneer (forage cap, leather apron, axe).
 
 ## Training

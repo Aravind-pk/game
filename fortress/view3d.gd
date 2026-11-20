@@ -776,74 +776,64 @@ func _launcher(pos: Vector2) -> Node3D:
 	return root
 
 
-## A chibi redcoat: big head, small body, red coat with white cross-belts and brass buttons.
-## `soldier` is the hero (white pith helmet, musket); otherwise a pioneer (forage cap, leather apron,
-## axe), the woodcutter.
+## A cute chibi redcoat: a big round head, a small round body, stubby limbs and ball feet, big
+## shiny eyes. Only what tells them apart: the hero's white helmet and strap (`soldier`), the
+## sergeant's bicorne and sash (`officer`), and the pioneer's navy cap, apron and axe (otherwise).
 func _worker(parent: Node, suit: Color, hat: Color, axe: bool = false, soldier: bool = false, officer: bool = false) -> Dictionary:
 	var root := node3(parent)
 	var body := node3(root)
 	var parts := {"root": root, "body": body}
 	var coat := mat(C_REDCOAT)
-	var white := mat(Color("#f4f0e6"))
-	for sx in [-0.1, 0.1]:
-		var hip := node3(body, Vector3(sx, 0.3, 0))
-		add(hip, cyl(0.075, 0.068, 0.24, 12), mat(C_NAVY), Vector3(0, -0.12, 0))
-		add(hip, box(0.02, 0.22, 0.02), mat(C_REDCOAT), Vector3(sx * 0.7, -0.12, 0), Vector3.ZERO, Vector3.ONE, false)  # trouser stripe
-		add(hip, box(0.14, 0.11, 0.21), mat(Color("#1f1c22")), Vector3(0, -0.26, -0.03))
+	var white := mat(Color("#f7f3ea"))
+	var dark := mat(Color("#2a2433"))
+	for sx in [-0.1, 0.1]:  # stubby legs with round feet
+		var hip := node3(body, Vector3(sx, 0.22, 0))
+		add(hip, cyl(0.07, 0.07, 0.14, 12), mat(C_NAVY), Vector3(0, -0.07, 0))
+		add(hip, ball(0.085, 12, 6), dark, Vector3(0, -0.15, -0.02), Vector3.ZERO, Vector3(1, 0.75, 1.2))
 		parts["leg%s" % ("l" if sx < 0 else "r")] = hip
-	add(body, cyl(0.17, 0.22, 0.4, 16), coat, Vector3(0, 0.48, 0))
-	add(body, cyl(0.23, 0.25, 0.1, 16), coat, Vector3(0, 0.3, 0))                                      # coat skirt
-	add(body, cyl(0.218, 0.218, 0.05, 16), white, Vector3(0, 0.36, 0))                                 # white belt
-	for sgn in [-1.0, 1.0]:  # cross-belts
-		add(body, box(0.05, 0.42, 0.02), white, Vector3(0, 0.5, -0.2), Vector3(0.1, 0, sgn * 0.62), Vector3.ONE, false)
-		add(body, box(0.05, 0.42, 0.02), white, Vector3(0, 0.5, 0.2), Vector3(-0.1, 0, sgn * 0.62), Vector3.ONE, false)
-	for k in 3:  # brass buttons
-		add(body, ball(0.02, 6, 3), mat(C_BRASS), Vector3(0.08, 0.42 + k * 0.08, -0.205), Vector3.ZERO, Vector3.ONE, false)
-	add(body, box(0.24, 0.07, 0.16), mat(C_NAVY), Vector3(0, 0.66, 0))                                  # collar
-	if officer:  # crimson sash and a sword
-		add(body, box(0.06, 0.5, 0.02), mat(Color("#8a1a2e")), Vector3(0, 0.5, -0.215), Vector3(0, 0, 0.7), Vector3.ONE, false)
-		add(body, box(0.06, 0.5, 0.02), mat(Color("#8a1a2e")), Vector3(0, 0.5, 0.215), Vector3(0, 0, -0.7), Vector3.ONE, false)
-		add(body, cyl(0.012, 0.012, 0.5, 6), mat(Color("#d9dde4")), Vector3(-0.24, 0.2, 0.05), Vector3(0.3, 0, 0.25))
-		add(body, box(0.08, 0.03, 0.05), mat(C_GOLD), Vector3(-0.2, 0.4, 0.0))
-	elif not soldier:  # pioneer's leather apron
-		add(body, box(0.3, 0.34, 0.03), mat(Color("#9a6a3e")), Vector3(0, 0.4, -0.22), Vector3(0.1, 0, 0))
-	for sx in [-0.24, 0.24]:
-		var sh := node3(body, Vector3(sx, 0.6, 0))
-		add(sh, ball(0.075, 10, 5), mat(C_GOLD if officer else (C_BRASS if soldier else C_REDCOAT)), Vector3(0, 0.02, 0), Vector3.ZERO, Vector3(1.2, 0.6, 1.2))  # epaulette
-		add(sh, cyl(0.06, 0.055, 0.24, 12), coat, Vector3(0, -0.11, 0))
-		add(sh, cyl(0.062, 0.062, 0.05, 12), white, Vector3(0, -0.21, 0))                              # cuff
-		add(sh, ball(0.06, 10, 5), mat(C_SKIN), Vector3(0, -0.26, 0))
+	add(body, ball(0.23, 18, 9), coat, Vector3(0, 0.4, 0), Vector3.ZERO, Vector3(1.0, 1.05, 0.95))  # round body
+	add(body, cyl(0.225, 0.225, 0.04, 18), white, Vector3(0, 0.3, 0), Vector3.ZERO, Vector3(1, 1, 0.95))  # belt
+	if soldier:  # one white strap across the chest
+		add(body, box(0.06, 0.42, 0.03), white, Vector3(0, 0.44, -0.2), Vector3(0.25, 0, 0.6), Vector3.ONE, false)
+	elif officer:  # crimson sash and a little sword
+		add(body, box(0.07, 0.44, 0.03), mat(Color("#8a1a2e")), Vector3(0, 0.44, -0.2), Vector3(0.25, 0, -0.6), Vector3.ONE, false)
+		add(body, cyl(0.014, 0.014, 0.36, 6), mat(Color("#d9dde4")), Vector3(-0.22, 0.2, 0.05), Vector3(0.3, 0, 0.3))
+		add(body, ball(0.03, 8, 4), mat(C_GOLD), Vector3(-0.17, 0.35, 0.0))
+	else:  # pioneer's apron
+		add(body, box(0.24, 0.24, 0.03), mat(Color("#a8743f")), Vector3(0, 0.34, -0.21), Vector3(0.15, 0, 0))
+	for sx in [-0.21, 0.21]:  # stubby arms with round hands
+		var sh := node3(body, Vector3(sx, 0.5, 0))
+		add(sh, cyl(0.055, 0.05, 0.16, 12), coat, Vector3(0, -0.08, 0))
+		add(sh, ball(0.06, 12, 6), mat(C_SKIN), Vector3(0, -0.18, 0))
 		parts["arm%s" % ("l" if sx < 0 else "r")] = sh
-	var head := node3(body, Vector3(0, 0.92, 0))
+	var head := node3(body, Vector3(0, 0.86, 0))
 	parts["head"] = head
-	add(head, ball(0.27, 20, 10), mat(C_SKIN))
-	for sx in [-0.1, 0.1]:
-		add(head, ball(0.05, 10, 5), mat(Color("#1d1a24")), Vector3(sx, 0.0, -0.245), Vector3.ZERO, Vector3(1, 1.3, 0.6), false)
-		add(head, ball(0.016, 6, 3), mat(Color.WHITE, false, 1.0, true), Vector3(sx + 0.015, 0.025, -0.275), Vector3.ZERO, Vector3.ONE, false)
-		add(head, ball(0.045, 8, 4), mat(Color("#ff9e9e")), Vector3(sx * 1.6, -0.08, -0.215), Vector3.ZERO, Vector3(1, 0.6, 0.4), false)
-		add(head, box(0.1, 0.025, 0.03), mat(Color("#5a3a24")), Vector3(sx, 0.085, -0.25), Vector3(0, 0, -sx * 2.5), Vector3.ONE, false)
-		add(head, box(0.09, 0.035, 0.04), mat(Color("#6a4428")), Vector3(sx * 0.6, -0.09, -0.255), Vector3(0, 0, sx * 2.0), Vector3.ONE, false)  # moustache
-	if officer:  # black bicorne worn side to side, gold trim and a red cockade; white whiskers
-		add(head, prism(0.72, 0.3, 0.2), mat(Color("#1d1a24")), Vector3(0, 0.3, 0.0))
-		add(head, box(0.7, 0.03, 0.21), mat(C_GOLD), Vector3(0, 0.16, 0.0), Vector3.ZERO, Vector3.ONE, false)
-		add(head, cyl(0.05, 0.05, 0.02, 12), mat(C_REDCOAT), Vector3(0.12, 0.26, -0.11), Vector3(PI * 0.5, 0, 0), Vector3.ONE, false)
-		add(head, ball(0.255, 18, 9, true), mat(Color("#cfc8c0")), Vector3(0, 0.0, 0.04), Vector3.ZERO, Vector3(1, 0.5, 1))
-		for sx in [-0.1, 0.1]:
-			add(head, box(0.14, 0.05, 0.05), mat(Color("#f4f0e6")), Vector3(sx * 0.8, -0.09, -0.26), Vector3(0, 0, sx * 3.0), Vector3.ONE, false)
-	elif soldier:  # white pith helmet with a brass spike
-		add(head, ball(0.25, 20, 10, true), white, Vector3(0, 0.1, 0.01), Vector3.ZERO, Vector3(1.0, 1.15, 1.08))
-		add(head, cyl(0.29, 0.29, 0.025, 24), white, Vector3(0, 0.11, 0.01), Vector3.ZERO, Vector3(1.0, 1.0, 1.12))
-		add(head, cyl(0.26, 0.26, 0.05, 20), mat(Color("#d9cfb5")), Vector3(0, 0.15, 0.01), Vector3.ZERO, Vector3(1.0, 1.0, 1.08))  # puggaree band
-		add(head, cyl(0.0, 0.035, 0.1, 8), mat(C_BRASS), Vector3(0, 0.42, 0.01))
-		add(head, ball(0.255, 18, 9, true), mat(Color("#5a3a24")), Vector3(0, 0.0, 0.04), Vector3.ZERO, Vector3(1, 0.45, 1))  # hair under it
-	elif not officer:  # navy forage cap with a red band
-		add(head, cyl(0.24, 0.24, 0.14, 18), mat(C_NAVY), Vector3(0, 0.27, 0.0), Vector3(-0.15, 0, 0.2))
-		add(head, cyl(0.245, 0.245, 0.04, 18), mat(C_REDCOAT), Vector3(0, 0.22, 0.0), Vector3(-0.15, 0, 0.2))
-		add(head, ball(0.255, 18, 9, true), mat(Color("#5a3a24")), Vector3(0, 0.04, 0.03), Vector3.ZERO, Vector3(1, 0.5, 1))  # hair
+	add(head, ball(0.32, 24, 12), mat(C_SKIN))
+	add(head, ball(0.31, 20, 10, true), mat(Color("#6b4428") if not officer else Color("#d8d2ca")), Vector3(0, 0.02, 0.05),
+		Vector3(PI, 0, 0), Vector3(1.0, 0.45, 1.0))  # hair at the back, under the hat
+	for sx in [-0.115, 0.115]:  # big shiny eyes and rosy cheeks
+		add(head, ball(0.068, 14, 7), mat(Color("#1d1a24")), Vector3(sx, -0.02, -0.285), Vector3.ZERO, Vector3(1, 1.25, 0.55), false)
+		add(head, ball(0.024, 8, 4), mat(Color.WHITE, false, 1.0, true), Vector3(sx + 0.022, 0.015, -0.318), Vector3.ZERO, Vector3.ONE, false)
+		add(head, ball(0.011, 6, 3), mat(Color.WHITE, false, 1.0, true), Vector3(sx - 0.018, -0.045, -0.318), Vector3.ZERO, Vector3.ONE, false)
+		add(head, ball(0.05, 10, 5), mat(Color("#ff9aa2")), Vector3(sx * 1.75, -0.11, -0.25), Vector3.ZERO, Vector3(1, 0.55, 0.35), false)
+	add(head, box(0.07, 0.022, 0.02), mat(Color("#7a3a3a")), Vector3(0, -0.13, -0.305), Vector3.ZERO, Vector3.ONE, false)  # small smile
+	if officer:  # bicorne and a tiny white moustache
+		add(head, prism(0.66, 0.26, 0.2), mat(Color("#1d1a24")), Vector3(0, 0.36, 0.02))
+		add(head, box(0.64, 0.03, 0.21), mat(C_GOLD), Vector3(0, 0.24, 0.02), Vector3.ZERO, Vector3.ONE, false)
+		add(head, ball(0.04, 8, 4), mat(C_REDCOAT), Vector3(0, 0.33, -0.09), Vector3.ZERO, Vector3.ONE, false)
+		for sx in [-1.0, 1.0]:
+			add(head, ball(0.045, 10, 5), white, Vector3(sx * 0.045, -0.09, -0.3), Vector3.ZERO, Vector3(1.4, 0.7, 0.6), false)
+	elif soldier:  # white pith helmet
+		add(head, ball(0.29, 20, 10, true), white, Vector3(0, 0.13, 0), Vector3.ZERO, Vector3(1.0, 1.0, 1.05))
+		add(head, cyl(0.34, 0.34, 0.03, 24), white, Vector3(0, 0.14, 0), Vector3.ZERO, Vector3(1.0, 1.0, 1.08))
+		add(head, ball(0.04, 8, 4), mat(C_BRASS), Vector3(0, 0.43, 0))
+	else:  # navy forage cap with a red band
+		add(head, cyl(0.25, 0.27, 0.14, 20), mat(C_NAVY), Vector3(0, 0.3, 0.02))
+		add(head, cyl(0.272, 0.272, 0.04, 20), mat(C_REDCOAT), Vector3(0, 0.25, 0.02))
 	if axe:
-		var handle := node3(parts.armr, Vector3(0, -0.24, -0.05))
-		add(handle, cyl(0.025, 0.025, 0.5, 8), mat(C_WOOD_DARK), Vector3(0, 0.12, -0.1), Vector3(-0.6, 0, 0))
-		add(handle, box(0.05, 0.16, 0.16), mat(Color("#c9d2e0")), Vector3(0, 0.3, -0.24))
+		var handle := node3(parts.armr, Vector3(0, -0.18, -0.04))
+		add(handle, cyl(0.022, 0.022, 0.4, 8), mat(C_WOOD_DARK), Vector3(0, 0.1, -0.08), Vector3(-0.6, 0, 0))
+		add(handle, box(0.05, 0.14, 0.14), mat(Color("#c9d2e0")), Vector3(0, 0.25, -0.2))
 		parts["axe"] = handle
 	return parts
 
@@ -854,16 +844,14 @@ func _build_player() -> void:
 	player3d = player_parts.root
 	player3d.scale = Vector3.ONE * PLAYER_SCALE
 	# the musket: held ready when his hands are free, slung on the back while carrying
-	var rifle := node3(player_parts.body, Vector3(0.1, 0.42, -0.24))
-	add(rifle, box(0.06, 0.08, 0.5), mat(C_WOOD), Vector3(0, 0, 0.05))                                 # stock
-	add(rifle, cyl(0.022, 0.022, 0.5, 8), mat(Color("#4a4d58")), Vector3(0, 0.04, -0.3), Vector3(PI * 0.5, 0, 0))
-	add(rifle, cyl(0.006, 0.014, 0.18, 6), mat(Color("#d9dde4")), Vector3(0, 0.04, -0.63), Vector3(PI * 0.5, 0, 0))  # bayonet
-	add(rifle, box(0.065, 0.03, 0.08), mat(C_BRASS), Vector3(0, -0.03, 0.22), Vector3.ZERO, Vector3.ONE, false)
-	var fl := add(rifle, ball(0.08, 8, 4), mat(Color("#fff2b0"), false, 1.0, true), Vector3(0, 0.04, -0.58), Vector3.ZERO, Vector3.ONE, false)
+	var rifle := node3(player_parts.body, Vector3(0.08, 0.38, -0.24))
+	add(rifle, box(0.07, 0.08, 0.36), mat(C_WOOD), Vector3(0, 0, 0.04))                                 # stock
+	add(rifle, cyl(0.025, 0.025, 0.34, 10), mat(Color("#4a4d58")), Vector3(0, 0.04, -0.28), Vector3(PI * 0.5, 0, 0))
+	var fl := add(rifle, ball(0.08, 8, 4), mat(Color("#fff2b0"), false, 1.0, true), Vector3(0, 0.04, -0.48), Vector3.ZERO, Vector3.ONE, false)
 	fl.visible = false
 	player_parts["flash"] = fl
 	player_parts["rifle"] = rifle
-	stack_root = node3(player_parts.body, Vector3(0, 0.56, -0.36))  # the carried stack rises from his arms
+	stack_root = node3(player_parts.body, Vector3(0, 0.46, -0.34))  # the carried stack rises from his arms
 	var aura := add(player3d, cyl(0.62, 0.62, 0.02, 28), mat(Color.WHITE, false, 0.4, true), Vector3(0, 0.03, 0), Vector3.ZERO,
 		Vector3.ONE, false)
 	aura.visible = false
@@ -1146,7 +1134,7 @@ func _update_bots(delta: float) -> void:
 		var logs: Array = p.logs
 		while logs.size() < int(b.carry):
 			var it := item_node(p.body, "wood")
-			it.position = Vector3(0, 0.56 + logs.size() * ITEM_H, -0.36)
+			it.position = Vector3(0, 0.46 + logs.size() * ITEM_H, -0.34)
 			logs.append(it)
 			pop_in(it)
 		while logs.size() > int(b.carry):
@@ -1241,10 +1229,10 @@ func _update_player(delta: float) -> void:
 	player_parts.flash.visible = shooting
 	var rifle: Node3D = player_parts.rifle
 	if carrying:
-		rifle.position = rifle.position.lerp(Vector3(0.0, 0.6, 0.24), 0.3)
+		rifle.position = rifle.position.lerp(Vector3(0.0, 0.5, 0.24), 0.3)
 		rifle.rotation = Vector3(0, 0, 0.9)
 	else:
-		rifle.position = rifle.position.lerp(Vector3(0.1, 0.42, -0.24), 0.3)
+		rifle.position = rifle.position.lerp(Vector3(0.08, 0.38, -0.24), 0.3)
 		rifle.rotation = Vector3(-0.05 if not shooting else -0.12, 0, 0)
 		if shooting:
 			player_parts.body.position.z = 0.03  # recoil
@@ -1687,7 +1675,7 @@ func _draw_ui() -> void:
 	_pill(pc + Vector2(0, 18), Vector2(52, 12), Color(0.1, 0.08, 0.15, 0.6))
 	if bf > 0.0:
 		ui.draw_rect(Rect2(pc + Vector2(-24, 15), Vector2(48.0 * bf, 6)), Color("#7af1eb"))
-	var head_h: float = maxf(1.35, 0.56 + g.stack.size() * ITEM_H) * PLAYER_SCALE
+	var head_h: float = maxf(1.3, 0.46 + g.stack.size() * ITEM_H) * PLAYER_SCALE
 	if g.down_t <= 0.0 and (not g._inside(g.player.pos) or g.hearts < g.HEARTS):  # your health, over your head
 		var hc := sp(w(g.player.pos, head_h + 0.35))
 		var seg := 11.0
@@ -1927,7 +1915,9 @@ func _gallery() -> void:
 		_build_player()
 		player3d.reparent(h, false)
 		player3d.position = Vector3.ZERO
-		player3d.rotation.y = PI - 0.5])
+		player3d.rotation.y = PI - 0.5
+		player_parts.arml.rotation = Vector3(1.05, 0, -0.55)
+		player_parts.armr.rotation = Vector3(0.85, 0, 0.1)])
 	list.append(["Hero carrying a load", "Characters", 1.55, C_SAND, func(h: Node3D) -> void:
 		var p := _worker(h, C_REDCOAT, Color.WHITE, false, true)
 		p.root.scale = Vector3.ONE * PLAYER_SCALE
@@ -1936,7 +1926,7 @@ func _gallery() -> void:
 			a.rotation.x = 1.25
 		p.arml.rotation.z = -0.35
 		p.armr.rotation.z = 0.35
-		var st := node3(p.body, Vector3(0, 0.56, -0.36))
+		var st := node3(p.body, Vector3(0, 0.46, -0.34))
 		for k in 6:
 			var it := item_node(st, ["wood", "wood", "stone", "stone", "ammo", "ammo"][k])
 			it.position = Vector3(0, k * ITEM_H, 0)])
